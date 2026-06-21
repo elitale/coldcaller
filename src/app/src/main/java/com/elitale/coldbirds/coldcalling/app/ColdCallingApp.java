@@ -146,13 +146,19 @@ public final class ColdCallingApp extends Application {
                     try {
                         remote = new PhoneNumber(rawNumber);
                     } catch (IllegalArgumentException e) {
-                        LOG.warn("Cannot dial — invalid number '{}': {}", rawNumber, e.getMessage());
+                        String msg = "Cannot dial '" + rawNumber + "' — invalid number.";
+                        LOG.warn("{} {}", msg, e.getMessage());
+                        notifyError(msg);
                         return;
                     }
                     phoneNumberService.getDefault().ifPresentOrElse(
                             owned -> callService.dial(remote, owned.number()),
-                            () -> LOG.warn("Cannot dial {} — no default number configured. "
-                                    + "Set a default number in Settings.", rawNumber)
+                            () -> {
+                                String msg = "Cannot dial " + rawNumber + " — no default number "
+                                        + "configured. Set a default number in Settings.";
+                                LOG.warn(msg);
+                                notifyError(msg);
+                            }
                     );
                 });
 
@@ -183,6 +189,13 @@ public final class ColdCallingApp extends Application {
         });
 
         mainWindow.show();
+    }
+
+    /** Surface an error to the user as a toast (no-op if the window isn't up yet). */
+    private void notifyError(String message) {
+        if (mainWindow != null) {
+            mainWindow.showError(message);
+        }
     }
 
     @Override

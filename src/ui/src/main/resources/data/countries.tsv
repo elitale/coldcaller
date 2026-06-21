@@ -1,0 +1,247 @@
+# iso	name	dialCode	zoneId  (zoneId: "Z" = UTC, otherwise ISO offset)
+AF	Afghanistan	+93	+04:30
+AX	Åland Islands	+358	+02:00
+AL	Albania	+355	+01:00
+DZ	Algeria	+213	+01:00
+AS	American Samoa	+1684	-11:00
+AD	Andorra	+376	+01:00
+AO	Angola	+244	+01:00
+AI	Anguilla	+1264	-04:00
+AQ	Antarctica	+672	Z
+AG	Antigua and Barbuda	+1268	-04:00
+AR	Argentina	+54	-03:00
+AM	Armenia	+374	+04:00
+AW	Aruba	+297	-04:00
+AU	Australia	+61	+10:00
+AT	Austria	+43	+01:00
+AZ	Azerbaijan	+994	+04:00
+BS	Bahamas	+1242	-05:00
+BH	Bahrain	+973	+03:00
+BD	Bangladesh	+880	+06:00
+BB	Barbados	+1246	-04:00
+BY	Belarus	+375	+03:00
+BE	Belgium	+32	+01:00
+BZ	Belize	+501	-06:00
+BJ	Benin	+229	+01:00
+BM	Bermuda	+1441	-04:00
+BT	Bhutan	+975	+06:00
+BO	Bolivia	+591	-04:00
+BQ	Caribbean Netherlands	+5997	-04:00
+BA	Bosnia and Herzegovina	+387	+01:00
+BW	Botswana	+267	+02:00
+BR	Brazil	+55	-03:00
+IO	British Indian Ocean Territory	+246	+06:00
+VG	British Virgin Islands	+1284	-04:00
+VI	U.S. Virgin Islands	+1340	-04:00
+BN	Brunei	+673	+08:00
+BG	Bulgaria	+359	+02:00
+BF	Burkina Faso	+226	Z
+BI	Burundi	+257	+02:00
+KH	Cambodia	+855	+07:00
+CM	Cameroon	+237	+01:00
+CA	Canada	+1	-05:00
+CV	Cape Verde	+238	-01:00
+KY	Cayman Islands	+1345	-05:00
+CF	Central African Republic	+236	+01:00
+TD	Chad	+235	+01:00
+CL	Chile	+56	-04:00
+CN	China	+86	+08:00
+CX	Christmas Island	+61	+07:00
+CC	Cocos (Keeling) Islands	+61	+06:30
+CO	Colombia	+57	-05:00
+KM	Comoros	+269	+03:00
+CG	Congo	+242	+01:00
+CD	DR Congo	+243	+01:00
+CK	Cook Islands	+682	-10:00
+CR	Costa Rica	+506	-06:00
+HR	Croatia	+385	+01:00
+CU	Cuba	+53	-05:00
+CW	Curaçao	+599	-04:00
+CY	Cyprus	+357	+02:00
+CZ	Czechia	+420	+01:00
+DK	Denmark	+45	+01:00
+DJ	Djibouti	+253	+03:00
+DM	Dominica	+1767	-04:00
+DO	Dominican Republic	+1809	-04:00
+EC	Ecuador	+593	-05:00
+EG	Egypt	+20	+02:00
+SV	El Salvador	+503	-06:00
+GQ	Equatorial Guinea	+240	+01:00
+ER	Eritrea	+291	+03:00
+EE	Estonia	+372	+02:00
+ET	Ethiopia	+251	+03:00
+FK	Falkland Islands	+500	-03:00
+FO	Faroe Islands	+298	Z
+FJ	Fiji	+679	+12:00
+FI	Finland	+358	+02:00
+FR	France	+33	+01:00
+GF	French Guiana	+594	-03:00
+PF	French Polynesia	+689	-10:00
+GA	Gabon	+241	+01:00
+GM	Gambia	+220	Z
+GE	Georgia	+995	+04:00
+DE	Germany	+49	+01:00
+GH	Ghana	+233	Z
+GI	Gibraltar	+350	+01:00
+GR	Greece	+30	+02:00
+GL	Greenland	+299	-03:00
+GD	Grenada	+1473	-04:00
+GP	Guadeloupe	+590	-04:00
+GU	Guam	+1671	+10:00
+GT	Guatemala	+502	-06:00
+GG	Guernsey	+44	Z
+GN	Guinea	+224	Z
+GW	Guinea-Bissau	+245	Z
+GY	Guyana	+592	-04:00
+HT	Haiti	+509	-05:00
+VA	Vatican City	+379	+01:00
+HN	Honduras	+504	-06:00
+HK	Hong Kong	+852	+08:00
+HU	Hungary	+36	+01:00
+IS	Iceland	+354	Z
+IN	India	+91	+05:30
+ID	Indonesia	+62	+07:00
+CI	Côte d'Ivoire	+225	Z
+IR	Iran	+98	+03:30
+IQ	Iraq	+964	+03:00
+IE	Ireland	+353	Z
+IM	Isle of Man	+44	Z
+IL	Israel	+972	+02:00
+IT	Italy	+39	+01:00
+JM	Jamaica	+1876	-05:00
+JP	Japan	+81	+09:00
+JE	Jersey	+44	Z
+JO	Jordan	+962	+03:00
+KZ	Kazakhstan	+7	+06:00
+KE	Kenya	+254	+03:00
+KI	Kiribati	+686	+12:00
+KW	Kuwait	+965	+03:00
+KG	Kyrgyzstan	+996	+06:00
+LA	Laos	+856	+07:00
+LV	Latvia	+371	+02:00
+LB	Lebanon	+961	+02:00
+LS	Lesotho	+266	+02:00
+LR	Liberia	+231	Z
+LY	Libya	+218	+02:00
+LI	Liechtenstein	+423	+01:00
+LT	Lithuania	+370	+02:00
+LU	Luxembourg	+352	+01:00
+MO	Macau	+853	+08:00
+MK	North Macedonia	+389	+01:00
+MG	Madagascar	+261	+03:00
+MW	Malawi	+265	+02:00
+MY	Malaysia	+60	+08:00
+MV	Maldives	+960	+05:00
+ML	Mali	+223	Z
+MT	Malta	+356	+01:00
+MH	Marshall Islands	+692	+12:00
+MQ	Martinique	+596	-04:00
+MR	Mauritania	+222	Z
+MU	Mauritius	+230	+04:00
+YT	Mayotte	+262	+03:00
+MX	Mexico	+52	-06:00
+FM	Micronesia	+691	+11:00
+MD	Moldova	+373	+02:00
+MC	Monaco	+377	+01:00
+MN	Mongolia	+976	+08:00
+ME	Montenegro	+382	+01:00
+MS	Montserrat	+1664	-04:00
+MA	Morocco	+212	+01:00
+MZ	Mozambique	+258	+02:00
+MM	Myanmar	+95	+06:30
+NA	Namibia	+264	+02:00
+NR	Nauru	+674	+12:00
+NP	Nepal	+977	+05:45
+NL	Netherlands	+31	+01:00
+NC	New Caledonia	+687	+11:00
+NZ	New Zealand	+64	+12:00
+NI	Nicaragua	+505	-06:00
+NE	Niger	+227	+01:00
+NG	Nigeria	+234	+01:00
+NU	Niue	+683	-11:00
+NF	Norfolk Island	+672	+11:00
+KP	North Korea	+850	+09:00
+MP	Northern Mariana Islands	+1670	+10:00
+NO	Norway	+47	+01:00
+OM	Oman	+968	+04:00
+PK	Pakistan	+92	+05:00
+PW	Palau	+680	+09:00
+PS	Palestine	+970	+02:00
+PA	Panama	+507	-05:00
+PG	Papua New Guinea	+675	+10:00
+PY	Paraguay	+595	-04:00
+PE	Peru	+51	-05:00
+PH	Philippines	+63	+08:00
+PN	Pitcairn Islands	+64	-08:00
+PL	Poland	+48	+01:00
+PT	Portugal	+351	Z
+PR	Puerto Rico	+1787	-04:00
+QA	Qatar	+974	+03:00
+XK	Kosovo	+383	+01:00
+RE	Réunion	+262	+04:00
+RO	Romania	+40	+02:00
+RU	Russia	+7	+03:00
+RW	Rwanda	+250	+02:00
+BL	Saint Barthélemy	+590	-04:00
+SH	Saint Helena	+290	Z
+KN	Saint Kitts and Nevis	+1869	-04:00
+LC	Saint Lucia	+1758	-04:00
+MF	Saint Martin	+590	-04:00
+PM	Saint Pierre and Miquelon	+508	-03:00
+VC	Saint Vincent and the Grenadines	+1784	-04:00
+WS	Samoa	+685	+13:00
+SM	San Marino	+378	+01:00
+ST	São Tomé and Príncipe	+239	Z
+SA	Saudi Arabia	+966	+03:00
+SN	Senegal	+221	Z
+RS	Serbia	+381	+01:00
+SC	Seychelles	+248	+04:00
+SL	Sierra Leone	+232	Z
+SG	Singapore	+65	+08:00
+SX	Sint Maarten	+1721	-04:00
+SK	Slovakia	+421	+01:00
+SI	Slovenia	+386	+01:00
+SB	Solomon Islands	+677	+11:00
+SO	Somalia	+252	+03:00
+ZA	South Africa	+27	+02:00
+GS	South Georgia	+500	-02:00
+KR	South Korea	+82	+09:00
+SS	South Sudan	+211	+03:00
+ES	Spain	+34	+01:00
+LK	Sri Lanka	+94	+05:30
+SD	Sudan	+249	+02:00
+SR	Suriname	+597	-03:00
+SJ	Svalbard and Jan Mayen	+4779	+01:00
+SZ	Eswatini	+268	+02:00
+SE	Sweden	+46	+01:00
+CH	Switzerland	+41	+01:00
+SY	Syria	+963	+03:00
+TW	Taiwan	+886	+08:00
+TJ	Tajikistan	+992	+05:00
+TZ	Tanzania	+255	+03:00
+TH	Thailand	+66	+07:00
+TL	Timor-Leste	+670	+09:00
+TG	Togo	+228	Z
+TK	Tokelau	+690	+13:00
+TO	Tonga	+676	+13:00
+TT	Trinidad and Tobago	+1868	-04:00
+TN	Tunisia	+216	+01:00
+TR	Turkey	+90	+03:00
+TM	Turkmenistan	+993	+05:00
+TC	Turks and Caicos Islands	+1649	-04:00
+TV	Tuvalu	+688	+12:00
+UG	Uganda	+256	+03:00
+UA	Ukraine	+380	+02:00
+AE	United Arab Emirates	+971	+04:00
+GB	United Kingdom	+44	Z
+US	United States	+1	-05:00
+UY	Uruguay	+598	-03:00
+UZ	Uzbekistan	+998	+05:00
+VU	Vanuatu	+678	+11:00
+VE	Venezuela	+58	-04:00
+VN	Vietnam	+84	+07:00
+WF	Wallis and Futuna	+681	+12:00
+EH	Western Sahara	+212	Z
+YE	Yemen	+967	+03:00
+ZM	Zambia	+260	+02:00
+ZW	Zimbabwe	+263	+02:00

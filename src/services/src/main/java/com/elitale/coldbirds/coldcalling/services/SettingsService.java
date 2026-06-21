@@ -29,6 +29,7 @@ public final class SettingsService {
     public static final String KEY_DIALER_NO_ANSWER_TIMEOUT  = "dialer.no_answer_timeout_sec";
     public static final String KEY_DIALER_AUTO_ADVANCE_DELAY = "dialer.auto_advance_delay_sec";
     public static final String KEY_DIALER_VOICEMAIL_DROP     = "dialer.voicemail_drop_enabled";
+    public static final String KEY_DIALER_DEFAULT_COUNTRY    = "dialer.default_country";
 
     // ── Defaults ──────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ public final class SettingsService {
     private static final int    DEFAULT_NO_ANSWER_SEC   = 30;
     private static final int    DEFAULT_ADVANCE_SEC     = 1;
     private static final String DEFAULT_THEME           = "system";
+    private static final String DEFAULT_COUNTRY_ISO     = "US";
 
     private final SettingsRepository repo;
 
@@ -134,6 +136,14 @@ public final class SettingsService {
     }
     public void setVoicemailDropEnabled(boolean enabled) {
         repo.set(KEY_DIALER_VOICEMAIL_DROP, String.valueOf(enabled));
+    }
+
+    /** ISO 3166-1 alpha-2 code of the user's default dialing country. */
+    public String getDefaultCountryIso() {
+        return get(KEY_DIALER_DEFAULT_COUNTRY, DEFAULT_COUNTRY_ISO);
+    }
+    public void setDefaultCountryIso(String isoCode) {
+        repo.set(KEY_DIALER_DEFAULT_COUNTRY, Objects.requireNonNull(isoCode));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

@@ -8,6 +8,7 @@
   Controller: DialerController (set via FXMLLoader.setController before load).
 -->
 <VBox xmlns:fx="http://javafx.com/fxml/1"
+      fx:id="dialerRoot"
       spacing="20"
       alignment="TOP_LEFT"
       maxWidth="Infinity"
@@ -21,13 +22,20 @@
 
         <!-- Dial pad — fixed width, does not stretch -->
         <VBox spacing="16" styleClass="dialer-panel" prefWidth="380" minWidth="380" maxWidth="380">
+            <Label text="Country" styleClass="dialer-section-title"/>
+            <ComboBox fx:id="countrySelector" maxWidth="Infinity" styleClass="dialer-country"/>
+            <Label fx:id="localTimeLabel" text="" styleClass="dialer-localtime"/>
+
             <Label text="Enter Number" styleClass="dialer-section-title"/>
 
-            <Label fx:id="numberDisplay"
-                   text=""
-                   maxWidth="Infinity"
-                   alignment="CENTER_RIGHT"
-                   styleClass="dialer-number-display"/>
+            <HBox fx:id="numberDisplayBox"
+                  maxWidth="Infinity"
+                  alignment="CENTER_RIGHT"
+                  spacing="2"
+                  styleClass="dialer-number-display">
+                <Label fx:id="numberDisplay" text="" styleClass="dialer-number-text"/>
+                <Region fx:id="inputCaret" styleClass="dialer-caret"/>
+            </HBox>
 
             <GridPane hgap="12" vgap="12" alignment="CENTER" maxWidth="Infinity">
                 <columnConstraints>

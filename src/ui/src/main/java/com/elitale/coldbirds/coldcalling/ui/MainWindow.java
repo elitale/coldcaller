@@ -14,11 +14,17 @@ import com.elitale.coldbirds.coldcalling.ui.controller.IncomingCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
+import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import javafx.animation.FadeTransition;
+import javafx.animation.PauseTransition;
+import javafx.animation.SequentialTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -26,6 +32,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -86,6 +93,9 @@ public final class MainWindow {
     // Root layout
     private BorderPane root;
 
+    /** Top-right stack that holds transient toast notifications. */
+    private VBox toastLayer;
+
     public MainWindow(Stage stage, Dependencies deps) {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
         Objects.requireNonNull(deps, "deps must not be null");
@@ -123,6 +133,12 @@ public final class MainWindow {
     /** Return to the dialer view. Safe to call from any thread. */
     public void showDialer() {
         Platform.runLater(() -> root.setCenter(dialerView));
+    }
+
+    /** Show a transient error toast (alert icon + message). Safe to call from any thread. */
+    public void showError(String message) {
+        Objects.requireNonNull(message, "message must not be null");
+        Platform.runLater(() -> addToast(message));
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -165,6 +181,10 @@ public final class MainWindow {
         dialerView = loadFxml("/fxml/dialer-view.fxml", dialerController);
         dialerController.setRecentCalls(FXCollections.observableArrayList());
         dialerController.setOnDial(onDial);
+        dialerController.setCountries(CountryCatalog.ALL);
+        dialerController.selectCountryByIso(settingsService.getDefaultCountryIso());
+        dialerController.setOnCountrySelected(country ->
+                settingsService.setDefaultCountryIso(country.isoCode()));
 
         // ── Incoming call overlay
         incomingCallController = new IncomingCallController();
@@ -178,7 +198,14 @@ public final class MainWindow {
         root.setLeft(buildSidebar());
         root.setCenter(dialerView);
 
-        Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+        // Overlay layer for toasts; lets clicks pass through empty areas.
+        toastLayer = new VBox(10);
+        toastLayer.setAlignment(Pos.TOP_RIGHT);
+        toastLayer.setPadding(new Insets(20));
+        toastLayer.setPickOnBounds(false);
+        StackPane rootStack = new StackPane(root, toastLayer);
+
+        Scene scene = new Scene(rootStack, DEFAULT_WIDTH, DEFAULT_HEIGHT);
         scene.getStylesheets().add(
                 Objects.requireNonNull(
                         MainWindow.class.getResource("/css/cupertino-light.css"),
@@ -199,6 +226,47 @@ public final class MainWindow {
         stage.setMinWidth(MIN_WINDOW_W);
         stage.setMinHeight(MIN_WINDOW_H);
         stage.show();
+    }
+
+    // ── Toasts ────────────────────────────────────────────────────────────────
+
+    /** Build, show, and auto-dismiss an error toast in the overlay layer. */
+    private void addToast(String message) {
+        Node toast = buildToast(message);
+        toast.setOpacity(0);
+        toastLayer.getChildren().add(toast);
+
+        FadeTransition in = new FadeTransition(Duration.millis(180), toast);
+        in.setFromValue(0);
+        in.setToValue(1);
+        PauseTransition hold = new PauseTransition(Duration.seconds(6));
+        FadeTransition out = new FadeTransition(Duration.millis(260), toast);
+        out.setFromValue(1);
+        out.setToValue(0);
+
+        SequentialTransition sequence = new SequentialTransition(in, hold, out);
+        sequence.setOnFinished(e -> toastLayer.getChildren().remove(toast));
+        // Click to dismiss early.
+        toast.setOnMouseClicked(e -> {
+            sequence.stop();
+            toastLayer.getChildren().remove(toast);
+        });
+        sequence.play();
+    }
+
+    private Node buildToast(String message) {
+        Label icon = new Label("!");
+        icon.getStyleClass().add("toast-icon");
+
+        Label text = new Label(message);
+        text.setWrapText(true);
+        text.setMaxWidth(320);
+        text.getStyleClass().add("toast-message");
+
+        HBox box = new HBox(12, icon, text);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.getStyleClass().addAll("toast", "toast-error");
+        return box;
     }
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
