@@ -7,7 +7,7 @@
   Settings view — grouped sections with per-section Save buttons.
   Controller: SettingsController (set via FXMLLoader.setController before load).
 -->
-<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+<BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
     <!-- ToggleGroup defined at root scope so RadioButtons in the Appearance
          section can reference it via $themeGroup -->
@@ -15,11 +15,10 @@
         <ToggleGroup fx:id="themeGroup"/>
     </fx:define>
 
-    <!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
+    <!-- ── Toolbar ───────────────────────────────────────────────── -->
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT">
-            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
-            <Label text="Settings" styleClass="title-1"/>
+        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
+            <Label text="Settings" styleClass="view-title"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statusLabel" styleClass="caption"/>
         </HBox>

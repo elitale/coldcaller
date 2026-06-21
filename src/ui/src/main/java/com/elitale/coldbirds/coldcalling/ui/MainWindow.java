@@ -25,7 +25,6 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.layout.*;
-import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -54,8 +53,6 @@ public final class MainWindow {
     private static final double MIN_WINDOW_H   = 640;
     private static final double DEFAULT_WIDTH  = 1280;
     private static final double DEFAULT_HEIGHT = 820;
-    private static final double DIALER_POPOUT_WIDTH = 860;
-    private static final double DIALER_POPOUT_HEIGHT = 620;
 
     private final Stage              stage;
     private final ContactService     contactService;
@@ -88,8 +85,6 @@ public final class MainWindow {
 
     // Root layout
     private BorderPane root;
-    private Stage dialerPopoutStage;
-    private boolean dialerDetached;
 
     public MainWindow(Stage stage, Dependencies deps) {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
@@ -127,7 +122,7 @@ public final class MainWindow {
 
     /** Return to the dialer view. Safe to call from any thread. */
     public void showDialer() {
-        Platform.runLater(this::showDialerInCurrentContext);
+        Platform.runLater(() -> root.setCenter(dialerView));
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -170,8 +165,6 @@ public final class MainWindow {
         dialerView = loadFxml("/fxml/dialer-view.fxml", dialerController);
         dialerController.setRecentCalls(FXCollections.observableArrayList());
         dialerController.setOnDial(onDial);
-        dialerController.setOnPopOut(this::toggleDialerPopOut);
-        dialerController.setDetached(false);
 
         // ── Incoming call overlay
         incomingCallController = new IncomingCallController();
@@ -220,7 +213,7 @@ public final class MainWindow {
         appName.getStyleClass().add("title-2");
         appName.setPadding(new Insets(0, 0, 12, 4));
 
-        Button dialerBtn      = navButton("Dialer",       this::showDialerInCurrentContext);
+        Button dialerBtn      = navButton("Dialer",       () -> root.setCenter(dialerView));
         Button contactsBtn    = navButton("Contacts",     () -> root.setCenter(contactsView));
         Button historyBtn     = navButton("Call History", () -> root.setCenter(callHistoryView));
         Button messagesBtn    = navButton("Messages",     () -> {
@@ -262,101 +255,6 @@ public final class MainWindow {
         Region r = new Region();
         r.setPrefHeight(height);
         return r;
-    }
-
-    private void showDialerInCurrentContext() {
-        if (dialerDetached) {
-            root.setCenter(buildDetachedDialerPlaceholder());
-            if (dialerPopoutStage != null) {
-                dialerPopoutStage.show();
-                dialerPopoutStage.toFront();
-                dialerPopoutStage.requestFocus();
-            }
-            return;
-        }
-        root.setCenter(dialerView);
-    }
-
-    private void toggleDialerPopOut() {
-        if (dialerDetached) {
-            dockDialer();
-        } else {
-            detachDialer();
-        }
-    }
-
-    private void detachDialer() {
-        if (dialerDetached) {
-            return;
-        }
-
-        dialerPopoutStage = new Stage();
-        dialerPopoutStage.initOwner(stage);
-        dialerPopoutStage.initModality(Modality.NONE);
-        dialerPopoutStage.setTitle("Dialer");
-        dialerPopoutStage.setMinWidth(680);
-        dialerPopoutStage.setMinHeight(520);
-
-        BorderPane popoutRoot = new BorderPane(dialerView);
-        Scene popoutScene = new Scene(popoutRoot, DIALER_POPOUT_WIDTH, DIALER_POPOUT_HEIGHT);
-        popoutScene.getStylesheets().add(
-                Objects.requireNonNull(
-                        MainWindow.class.getResource("/css/cupertino-light.css"),
-                        "cupertino-light.css not found in UI resources"
-                ).toExternalForm()
-        );
-        dialerPopoutStage.setScene(popoutScene);
-        dialerPopoutStage.setOnCloseRequest(event -> dockDialer());
-
-        dialerDetached = true;
-        dialerController.setDetached(true);
-        root.setCenter(buildDetachedDialerPlaceholder());
-
-        dialerPopoutStage.show();
-        dialerPopoutStage.toFront();
-    }
-
-    private void dockDialer() {
-        if (!dialerDetached) {
-            return;
-        }
-
-        if (dialerPopoutStage != null) {
-            dialerPopoutStage.setOnCloseRequest(null);
-            dialerPopoutStage.close();
-            dialerPopoutStage = null;
-        }
-
-        dialerDetached = false;
-        dialerController.setDetached(false);
-        root.setCenter(dialerView);
-    }
-
-    private VBox buildDetachedDialerPlaceholder() {
-        Label title = new Label("Dialer is open in a separate window");
-        title.getStyleClass().add("title-2");
-
-        Button bringToFront = new Button("Bring To Front");
-        bringToFront.getStyleClass().add("flat");
-        bringToFront.setOnAction(event -> {
-            if (dialerPopoutStage != null) {
-                dialerPopoutStage.show();
-                dialerPopoutStage.toFront();
-                dialerPopoutStage.requestFocus();
-            }
-        });
-
-        Button dockNow = new Button("Dock Dialer");
-        dockNow.getStyleClass().add("accent");
-        dockNow.setOnAction(event -> dockDialer());
-
-        HBox actions = new HBox(12, bringToFront, dockNow);
-        actions.setAlignment(javafx.geometry.Pos.CENTER);
-
-        VBox placeholder = new VBox(16, title, actions);
-        placeholder.setAlignment(javafx.geometry.Pos.CENTER);
-        placeholder.setPadding(new Insets(24));
-        return placeholder;
     }
 
     // ── FXML loading ──────────────────────────────────────────────────────────

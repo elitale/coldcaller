@@ -7,13 +7,12 @@
   Messages view — two-pane SMS inbox: conversation list (left) + thread + compose (right).
   Controller: MessagesController (set via FXMLLoader.setController before load).
 -->
-<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+<BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
     <!-- ── Page header ─────────────────────────────────────────────────────── -->
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT">
-            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
-            <Label text="Messages" styleClass="title-1"/>
+        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
+            <Label text="Messages" styleClass="view-title"/>
         </HBox>
     </top>
 
@@ -22,19 +21,16 @@
         <HBox spacing="0">
 
             <!-- ── Left: conversation list ────────────────────────────────── -->
-            <VBox prefWidth="240" minWidth="180" styleClass="bg-subtle" spacing="0">
+            <VBox prefWidth="260" minWidth="200" styleClass="sidebar" spacing="0">
                 <HBox spacing="8" alignment="CENTER_LEFT">
-                    <padding><Insets top="12" bottom="8" left="12" right="12"/></padding>
-                    <Label text="Conversations" styleClass="label"/>
+                    <padding><Insets top="14" bottom="10" left="16" right="12"/></padding>
+                    <Label text="Conversations" styleClass="section-title"/>
                     <Region HBox.hgrow="ALWAYS"/>
                     <Button fx:id="newMessageBtn" text="New"
                             styleClass="accent" onAction="#onNewMessage"/>
                 </HBox>
-                <Separator/>
-                <ListView fx:id="conversationList" VBox.vgrow="ALWAYS"/>
+                <ListView fx:id="conversationList" VBox.vgrow="ALWAYS" styleClass="card-list"/>
             </VBox>
-
-            <Separator orientation="VERTICAL"/>
 
             <!-- ── Right: thread + compose ────────────────────────────────── -->
             <BorderPane HBox.hgrow="ALWAYS">
@@ -42,36 +38,39 @@
                 <!-- Thread header -->
                 <top>
                     <VBox spacing="4">
-                        <padding><Insets top="16" bottom="0" left="24" right="24"/></padding>
+                        <padding><Insets top="18" bottom="0" left="28" right="28"/></padding>
                         <Label fx:id="threadHeader" text="Select a conversation"
                                styleClass="title-2"/>
                         <Label fx:id="threadSubtitle" text="" styleClass="caption"/>
                         <Separator>
-                            <VBox.margin><Insets top="8"/></VBox.margin>
+                            <VBox.margin><Insets top="10"/></VBox.margin>
                         </Separator>
                     </VBox>
                 </top>
 
                 <!-- Thread messages -->
                 <center>
-                    <ListView fx:id="threadList"/>
+                    <ListView fx:id="threadList" styleClass="card-list">
+                        <BorderPane.margin><Insets left="16" right="16"/></BorderPane.margin>
+                    </ListView>
                 </center>
 
                 <!-- Compose bar -->
                 <bottom>
-                    <VBox spacing="8">
-                        <padding><Insets top="0" bottom="16" left="16" right="16"/></padding>
+                    <VBox spacing="10">
+                        <padding><Insets top="0" bottom="20" left="28" right="28"/></padding>
                         <Separator/>
                         <HBox spacing="8" alignment="CENTER_LEFT">
-                            <padding><Insets top="4" bottom="0"/></padding>
+                            <padding><Insets top="6" bottom="0"/></padding>
                             <Label text="From:" styleClass="caption"/>
                             <ComboBox fx:id="fromNumberCombo" promptText="Select number"
-                                      prefWidth="180"/>
+                                      prefWidth="200"/>
                         </HBox>
-                        <HBox spacing="8" alignment="CENTER">
+                        <HBox spacing="10" alignment="CENTER">
                             <TextField fx:id="composeField"
                                        promptText="Type a message…"
                                        HBox.hgrow="ALWAYS"
+                                       styleClass="search-field"
                                        onAction="#onSend"/>
                             <Button fx:id="sendBtn" text="Send"
                                     styleClass="accent" onAction="#onSend"/>

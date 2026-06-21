@@ -26,14 +26,12 @@ public final class DialerController {
     @FXML private Label           numberDisplay;
     @FXML private Button          callButton;
     @FXML private Button          backspaceButton;
-    @FXML private Button          popOutButton;
     @FXML private ListView<String> recentCallsList;
 
     private final StringProperty dialedNumber = new SimpleStringProperty("");
 
     /** Callback invoked with the raw digit string when the user presses Call. */
     private Consumer<String> onDial = ignored -> {};
-    private Runnable onPopOut = () -> {};
 
     /** Default no-arg constructor — required by FXMLLoader. */
     public DialerController() {}
@@ -41,18 +39,6 @@ public final class DialerController {
     /** Register a callback for when the user initiates a call. */
     public void setOnDial(Consumer<String> callback) {
         this.onDial = Objects.requireNonNull(callback, "callback must not be null");
-    }
-
-    /** Register a callback for toggling pop out / dock of the dialer view. */
-    public void setOnPopOut(Runnable callback) {
-        this.onPopOut = Objects.requireNonNull(callback, "callback must not be null");
-    }
-
-    /** Update pop out button text to reflect current dialer attachment mode. */
-    public void setDetached(boolean detached) {
-        if (popOutButton != null) {
-            popOutButton.setText(detached ? "Dock" : "Pop Out");
-        }
     }
 
     /**
@@ -111,10 +97,5 @@ public final class DialerController {
         if (!number.isBlank()) {
             onDial.accept(number);
         }
-    }
-
-    @FXML
-    private void onPopOut() {
-        onPopOut.run();
     }
 }

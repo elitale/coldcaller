@@ -7,13 +7,12 @@
   Power Dialer view — call list selector (left) + session panel (right).
   Controller: PowerDialerController (set via FXMLLoader.setController before load).
 -->
-<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+<BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
     <!-- ── TOP: Title + live stats ──────────────────────────────────────────── -->
     <top>
-        <HBox spacing="16" alignment="CENTER_LEFT">
-            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
-            <Label text="Power Dialer" styleClass="title-1"/>
+        <HBox spacing="16" alignment="CENTER_LEFT" styleClass="view-header">
+            <Label text="Power Dialer" styleClass="view-title"/>
             <Region HBox.hgrow="ALWAYS"/>
             <Label fx:id="statsLabel" text="Select a list to begin" styleClass="caption"/>
         </HBox>
@@ -21,12 +20,11 @@
 
     <!-- ── LEFT: Call list selector ─────────────────────────────────────────── -->
     <left>
-        <VBox spacing="8" prefWidth="240">
-            <padding><Insets top="0" bottom="16" left="16" right="8"/></padding>
-            <style>-fx-border-color: -color-border; -fx-border-width: 0 1 0 0;</style>
-            <Label text="Call Lists" styleClass="title-2"/>
+        <VBox spacing="10" prefWidth="260" styleClass="sidebar">
+            <padding><Insets top="16" bottom="16" left="16" right="16"/></padding>
+            <Label text="Call Lists" styleClass="section-title"/>
             <ListView fx:id="callListView" VBox.vgrow="ALWAYS"
-                      prefHeight="400" styleClass="bg-default"/>
+                      prefHeight="400" styleClass="card-list"/>
             <HBox spacing="8">
                 <Button fx:id="newListBtn"    text="+ New"   styleClass="accent"
                         onAction="#onNewList" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
@@ -38,14 +36,11 @@
 
     <!-- ── CENTER: Session panel ─────────────────────────────────────────────── -->
     <center>
-        <VBox spacing="24" alignment="TOP_LEFT">
-            <padding><Insets top="16" bottom="24" left="24" right="32"/></padding>
+        <VBox spacing="20" alignment="TOP_LEFT">
+            <padding><Insets top="20" bottom="24" left="28" right="32"/></padding>
 
             <!-- Current contact card -->
-            <VBox fx:id="contactCard" spacing="6">
-                <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
-                       -fx-border-color: -color-border; -fx-border-radius: 8;
-                       -fx-border-width: 1; -fx-padding: 16;</style>
+            <VBox fx:id="contactCard" spacing="6" styleClass="section-card">
                 <Label fx:id="noActiveLabel"    text="No active call"
                        styleClass="body" visible="true" managed="true"/>
                 <VBox fx:id="contactDetails" spacing="4" visible="false" managed="false">
@@ -57,23 +52,17 @@
 
             <!-- Stats row -->
             <HBox spacing="16">
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
-                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
-                           -fx-padding: 12 20;</style>
-                    <Label fx:id="dialedCountLabel"    text="0" styleClass="title-1"/>
-                    <Label text="Dialed"    styleClass="caption"/>
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                    <Label fx:id="dialedCountLabel"    text="0" styleClass="stat-value"/>
+                    <Label text="Dialed"    styleClass="stat-label"/>
                 </VBox>
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
-                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
-                           -fx-padding: 12 20;</style>
-                    <Label fx:id="connectedCountLabel" text="0" styleClass="title-1"/>
-                    <Label text="Connected" styleClass="caption"/>
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                    <Label fx:id="connectedCountLabel" text="0" styleClass="stat-value"/>
+                    <Label text="Connected" styleClass="stat-label"/>
                 </VBox>
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
-                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
-                           -fx-padding: 12 20;</style>
-                    <Label fx:id="remainingCountLabel" text="—" styleClass="title-1"/>
-                    <Label text="Remaining" styleClass="caption"/>
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                    <Label fx:id="remainingCountLabel" text="—" styleClass="stat-value"/>
+                    <Label text="Remaining" styleClass="stat-label"/>
                 </VBox>
             </HBox>
 
