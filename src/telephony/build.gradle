@@ -1,0 +1,12 @@
+dependencies {
+    implementation(project(':domain'))
+    implementation(libs.jain.sip.api)
+    implementation(libs.jain.sip.ri)
+    implementation(libs.jlibrtp)
+    implementation(libs.slf4j.api)
+
+    testImplementation(project(':domain'))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testRuntimeOnly(libs.logback.classic)
+}

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Call History view — recent calls table with direction filter and call-back.
+  Controller: CallHistoryController (set via FXMLLoader.setController before load).
+-->
+<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+
+    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+    <top>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
+
+            <Label text="Call History" styleClass="title-1"/>
+
+            <Region HBox.hgrow="ALWAYS"/>
+
+            <!-- Direction filter -->
+            <HBox spacing="4" alignment="CENTER">
+                <ToggleButton fx:id="allBtn"      text="All"      styleClass="flat"/>
+                <ToggleButton fx:id="inboundBtn"  text="Inbound"  styleClass="flat"/>
+                <ToggleButton fx:id="outboundBtn" text="Outbound" styleClass="flat"/>
+            </HBox>
+
+            <Button text="Refresh" onAction="#onRefresh" styleClass="flat"/>
+        </HBox>
+    </top>
+
+    <!-- ── Call table ──────────────────────────────────────────────────────── -->
+    <center>
+        <TableView fx:id="table">
+            <BorderPane.margin><Insets left="32" right="32" bottom="0"/></BorderPane.margin>
+            <columns>
+                <TableColumn fx:id="directionCol"   text=""            prefWidth="72"/>
+                <TableColumn fx:id="numberCol"      text="Number"      prefWidth="180"/>
+                <TableColumn fx:id="durationCol"    text="Duration"    prefWidth="90"/>
+                <TableColumn fx:id="dispositionCol" text="Disposition" prefWidth="140"/>
+                <TableColumn fx:id="dateCol"        text="Date"        prefWidth="210"/>
+            </columns>
+        </TableView>
+    </center>
+
+    <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+    <bottom>
+        <HBox spacing="8" alignment="CENTER_RIGHT">
+            <padding><Insets top="12" bottom="20" left="32" right="32"/></padding>
+            <Button fx:id="callBackBtn"
+                    text="Call Back"
+                    styleClass="accent"
+                    onAction="#onCallBack"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>

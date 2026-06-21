@@ -1,0 +1,10 @@
+dependencies {
+    implementation(project(':domain'))
+    implementation(libs.sqlite.jdbc)
+    implementation(libs.flyway.core)
+    implementation(libs.jackson.databind)
+    implementation(libs.slf4j.api)
+
+    testImplementation(project(':domain'))
+    testRuntimeOnly(libs.logback.classic)
+}

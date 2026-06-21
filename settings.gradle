@@ -1,0 +1,38 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    // Auto-provision Java 21 if not found locally
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+
+rootProject.name = 'coldcalling'
+
+// All Java modules live under src/
+include(':domain')
+include(':storage')
+include(':telephony')
+include(':providers')
+include(':services')
+include(':ui')
+include(':app')
+
+project(':domain').projectDir    = file('src/domain')
+project(':storage').projectDir   = file('src/storage')
+project(':telephony').projectDir = file('src/telephony')
+project(':providers').projectDir = file('src/providers')
+project(':services').projectDir  = file('src/services')
+project(':ui').projectDir        = file('src/ui')
+project(':app').projectDir       = file('src/app')

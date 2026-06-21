@@ -1,0 +1,28 @@
+plugins {
+    id 'org.openjfx.javafxplugin'
+    id 'application'
+}
+
+javafx {
+    version = libs.versions.javafx.get()
+    modules = ['javafx.controls', 'javafx.fxml']
+}
+
+application {
+    mainClass = 'com.elitale.coldbirds.coldcalling.app.ColdCallingApp'
+}
+
+dependencies {
+    implementation(project(':domain'))
+    implementation(project(':storage'))
+    implementation(project(':telephony'))
+    implementation(project(':providers'))
+    implementation(project(':services'))
+    implementation(project(':ui'))
+    implementation(libs.slf4j.api)
+    runtimeOnly(libs.logback.classic)
+
+    // Required at compile time to resolve TelephonyService's SipListener type hierarchy.
+    // Provided at runtime transitively by the telephony module.
+    compileOnly(libs.jain.sip.api)
+}

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Contacts view — searchable contact list with add / call / delete actions.
+  Controller: ContactsController (set via FXMLLoader.setController before load).
+-->
+<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+
+    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+    <top>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
+
+            <Label text="Contacts" styleClass="title-1"/>
+
+            <Region HBox.hgrow="ALWAYS"/>
+
+            <TextField fx:id="searchField"
+                       promptText="Search by name, company, or phone"
+                       prefWidth="260"/>
+
+            <Button text="Add Contact" onAction="#onAdd" styleClass="accent"/>
+        </HBox>
+    </top>
+
+    <!-- ── Contact table ───────────────────────────────────────────────────── -->
+    <center>
+        <TableView fx:id="table">
+            <BorderPane.margin><Insets left="32" right="32" bottom="0"/></BorderPane.margin>
+            <columns>
+                <TableColumn fx:id="nameCol"    text="Name"    prefWidth="220"/>
+                <TableColumn fx:id="phoneCol"   text="Phone"   prefWidth="160"/>
+                <TableColumn fx:id="companyCol" text="Company" prefWidth="200"/>
+                <TableColumn fx:id="dncCol"     text="DNC"     prefWidth="56"/>
+            </columns>
+        </TableView>
+    </center>
+
+    <!-- ── Action bar ──────────────────────────────────────────────────────── -->
+    <bottom>
+        <HBox spacing="8" alignment="CENTER_RIGHT">
+            <padding><Insets top="12" bottom="20" left="32" right="32"/></padding>
+
+            <Button fx:id="callBtn"
+                    text="Call"
+                    styleClass="accent"
+                    onAction="#onCall"/>
+
+            <Button fx:id="deleteBtn"
+                    text="Delete"
+                    styleClass="danger"
+                    onAction="#onDelete"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>

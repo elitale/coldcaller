@@ -1,0 +1,616 @@
+/* ==========================================================================
+   coldCalling — Cupertino Light theme
+   Apple HIG inspired, layered over JavaFX Modena base.
+   Defines AtlantaFX utility classes used in the app.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Root — color + typography tokens
+   -------------------------------------------------------------------------- */
+.root {
+    /* Backgrounds */
+    -cc-bg-primary:        #FFFFFF;
+    -cc-bg-secondary:      #F5F5F7;
+    -cc-bg-elevated:       #FFFFFF;
+    -cc-bg-overlay:        rgba(0, 0, 0, 0.04);
+
+    /* Text */
+    -cc-text-primary:      #1D1D1F;
+    -cc-text-secondary:    #6E6E73;
+    -cc-text-tertiary:     #AEAEB2;
+    -cc-text-on-accent:    #FFFFFF;
+
+    /* Accent */
+    -cc-accent:            #0071E3;
+    -cc-accent-hover:      #0077ED;
+    -cc-accent-pressed:    #005BBE;
+
+    /* Status */
+    -cc-success:           #34C759;
+    -cc-warning:           #FF9F0A;
+    -cc-error:             #FF3B30;
+
+    /* Borders */
+    -cc-border:            rgba(0, 0, 0, 0.12);
+    -cc-separator:         rgba(0, 0, 0, 0.08);
+
+    /* Radius */
+    -cc-radius-sm:         4px;
+    -cc-radius:            6px;
+    -cc-radius-lg:         8px;
+    -cc-radius-xl:         12px;
+
+    /* JavaFX-native overrides */
+    -fx-base:                        #F5F5F7;
+    -fx-background:                  #FFFFFF;
+    -fx-control-inner-background:    #FFFFFF;
+    -fx-alternate-control-inner-background: #FAFAFA;
+    -fx-accent:                      #0071E3;
+    -fx-focus-color:                 #0071E3;
+    -fx-faint-focus-color:           rgba(0, 113, 227, 0.2);
+    -fx-selection-bar:               #0071E3;
+    -fx-selection-bar-non-focused:   rgba(0, 113, 227, 0.35);
+    -fx-selection-bar-text:          white;
+    -fx-outer-border:                rgba(0, 0, 0, 0.12);
+    -fx-inner-border:                rgba(0, 0, 0, 0.06);
+    -fx-body-color:                  #FFFFFF;
+    -fx-font-family:                 "Inter", ".AppleSystemUIFont", "Helvetica Neue", "Segoe UI", sans-serif;
+    -fx-font-size:                   15px;
+    -fx-text-fill:                   #1D1D1F;
+    -fx-text-base-color:             #1D1D1F;
+    -fx-text-background-color:       #1D1D1F;
+    -fx-text-inner-color:            #1D1D1F;
+    -fx-mid-text-color:              #6E6E73;
+    -fx-light-text-color:            #FFFFFF;
+    -fx-mark-color:                  #6E6E73;
+    -fx-mark-highlight-color:        #FFFFFF;
+    -fx-dark-text-color:             #1D1D1F;
+    -fx-color:                       #FFFFFF;
+    -fx-box-border:                  rgba(0, 0, 0, 0.12);
+    -fx-cell-hover-color:            rgba(0, 113, 227, 0.08);
+}
+
+/* --------------------------------------------------------------------------
+   Scene / root pane background
+   -------------------------------------------------------------------------- */
+.root,
+.border-pane,
+.stack-pane,
+.h-box,
+.v-box,
+.pane {
+    -fx-background-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Labels
+   -------------------------------------------------------------------------- */
+.label {
+    -fx-text-fill: #1D1D1F;
+}
+
+/* --------------------------------------------------------------------------
+   AtlantaFX typography utility classes
+   -------------------------------------------------------------------------- */
+.display {
+    -fx-font-size:   28px;
+    -fx-font-weight: bold;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.title-1 {
+    -fx-font-size:   22px;
+    -fx-font-weight: 600;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.title-2 {
+    -fx-font-size:   17px;
+    -fx-font-weight: 600;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.title-3 {
+    -fx-font-size:   15px;
+    -fx-font-weight: 600;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.body {
+    -fx-font-size:   15px;
+    -fx-font-weight: 400;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.label-sm,
+.body-sm {
+    -fx-font-size:   13px;
+    -fx-font-weight: 400;
+    -fx-text-fill:   #1D1D1F;
+}
+
+.caption {
+    -fx-font-size:   12px;
+    -fx-font-weight: 400;
+    -fx-text-fill:   #6E6E73;
+}
+
+.mono {
+    -fx-font-family: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+    -fx-font-size:   13px;
+}
+
+/* --------------------------------------------------------------------------
+   AtlantaFX background utility classes
+   -------------------------------------------------------------------------- */
+.bg-default {
+    -fx-background-color: #FFFFFF;
+}
+
+.bg-subtle {
+    -fx-background-color: #F5F5F7;
+}
+
+.bg-inset {
+    -fx-background-color: rgba(0, 0, 0, 0.04);
+}
+
+.bg-elevated {
+    -fx-background-color: #FFFFFF;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.12), 12, 0, 0, 2);
+}
+
+/* --------------------------------------------------------------------------
+   Separator
+   -------------------------------------------------------------------------- */
+.separator .line {
+    -fx-border-color: rgba(0, 0, 0, 0.08);
+    -fx-border-width: 1px;
+}
+
+/* --------------------------------------------------------------------------
+   Button — base
+   -------------------------------------------------------------------------- */
+.button {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.7), rgba(255,255,255,0)),
+        white,
+        rgba(0,0,0,0.12);
+    -fx-background-insets: -1.4, 0, 1;
+    -fx-background-radius: 6px, 6px, 5px;
+    -fx-padding:            7px 16px 7px 16px;
+    -fx-text-fill:          #1D1D1F;
+    -fx-font-size:          15px;
+    -fx-cursor:             hand;
+    -fx-border-color:       transparent;
+}
+
+.button:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,0)),
+        white,
+        rgba(0,0,0,0.16);
+}
+
+.button:pressed {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(0,0,0,0.04), rgba(0,0,0,0)),
+        white,
+        rgba(0,0,0,0.12);
+}
+
+.button:focused {
+    -fx-background-color:
+        #0071E3,
+        white,
+        rgba(0,0,0,0.12);
+    -fx-background-insets: -3, 0, 1;
+    -fx-background-radius: 9px, 6px, 5px;
+}
+
+/* AtlantaFX .flat — ghost / nav button style */
+.button.flat {
+    -fx-background-color:  transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6px;
+    -fx-border-color:      transparent;
+    -fx-padding:           8px 12px 8px 12px;
+    -fx-text-fill:         #1D1D1F;
+    -fx-font-size:         15px;
+    -fx-alignment:         center-left;
+}
+
+.button.flat:hover {
+    -fx-background-color: rgba(0, 0, 0, 0.06);
+}
+
+.button.flat:pressed {
+    -fx-background-color: rgba(0, 0, 0, 0.10);
+}
+
+.button.flat:focused {
+    -fx-background-color: rgba(0, 113, 227, 0.12);
+}
+
+/* AtlantaFX .accent — filled accent button */
+.button.accent {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0)),
+        #0071E3;
+    -fx-background-insets: 0, 0;
+    -fx-background-radius: 6px;
+    -fx-text-fill:         white;
+    -fx-padding:           7px 16px 7px 16px;
+}
+
+.button.accent:hover {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.2), rgba(255,255,255,0)),
+        #0077ED;
+}
+
+.button.accent:pressed {
+    -fx-background-color: #005BBE;
+}
+
+/* AtlantaFX .danger — destructive action */
+.button.danger {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0)),
+        #FF3B30;
+    -fx-background-radius: 6px;
+    -fx-text-fill:         white;
+    -fx-padding:           7px 16px 7px 16px;
+}
+
+/* AtlantaFX .success */
+.button.success {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0)),
+        #34C759;
+    -fx-background-radius: 6px;
+    -fx-text-fill:         white;
+    -fx-padding:           7px 16px 7px 16px;
+}
+
+/* --------------------------------------------------------------------------
+   TextField / PasswordField / TextArea
+   -------------------------------------------------------------------------- */
+.text-field,
+.password-field,
+.text-area {
+    -fx-background-color:  white, rgba(0,0,0,0.12), white;
+    -fx-background-insets: -0.5, 0, 1;
+    -fx-background-radius: 6px, 6px, 5px;
+    -fx-padding:           7px 10px 7px 10px;
+    -fx-text-fill:         #1D1D1F;
+    -fx-prompt-text-fill:  #AEAEB2;
+    -fx-font-size:         15px;
+    -fx-highlight-fill:    rgba(0, 113, 227, 0.35);
+    -fx-highlight-text-fill: white;
+}
+
+.text-field:focused,
+.password-field:focused,
+.text-area:focused {
+    -fx-background-color:  rgba(0,113,227,0.25), rgba(0,113,227,0.8), white;
+    -fx-background-insets: -2, 0, 1;
+    -fx-background-radius: 8px, 6px, 5px;
+}
+
+.text-area .content {
+    -fx-background-color:  transparent;
+}
+
+/* --------------------------------------------------------------------------
+   CheckBox
+   -------------------------------------------------------------------------- */
+.check-box .box {
+    -fx-background-color: white, rgba(0,0,0,0.12), white;
+    -fx-background-insets: -0.5, 0, 1;
+    -fx-background-radius: 4px, 4px, 3px;
+    -fx-padding: 3px;
+}
+
+.check-box:selected .box {
+    -fx-background-color: #0071E3, #0071E3, #0071E3;
+}
+
+.check-box:selected .mark {
+    -fx-background-color: white;
+}
+
+/* --------------------------------------------------------------------------
+   Radio Button
+   -------------------------------------------------------------------------- */
+.radio-button .radio {
+    -fx-background-color: white, rgba(0,0,0,0.12), white;
+    -fx-background-insets: -0.5, 0, 1;
+    -fx-background-radius: 100%;
+    -fx-padding: 3px;
+}
+
+.radio-button:selected .radio {
+    -fx-background-color: #0071E3, #0071E3, #0071E3;
+}
+
+.radio-button:selected .dot {
+    -fx-background-color: white;
+    -fx-background-radius: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   ComboBox / ChoiceBox
+   -------------------------------------------------------------------------- */
+.combo-box .list-cell,
+.combo-box-base .arrow-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #1D1D1F;
+}
+
+.combo-box-base {
+    -fx-background-color: white, rgba(0,0,0,0.12), white;
+    -fx-background-insets: -0.5, 0, 1;
+    -fx-background-radius: 6px, 6px, 5px;
+}
+
+.combo-box-base:focused {
+    -fx-background-color: rgba(0,113,227,0.25), rgba(0,113,227,0.8), white;
+    -fx-background-insets: -2, 0, 1;
+}
+
+/* --------------------------------------------------------------------------
+   ListView / TableView
+   -------------------------------------------------------------------------- */
+.list-view,
+.table-view,
+.tree-view,
+.tree-table-view {
+    -fx-background-color: white;
+    -fx-border-color: rgba(0,0,0,0.12);
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+}
+
+.list-view .list-cell,
+.table-view .table-row-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 8px 12px;
+    -fx-text-fill: #1D1D1F;
+}
+
+.list-view .list-cell:odd,
+.table-view .table-row-cell:odd {
+    -fx-background-color: rgba(0,0,0,0.02);
+}
+
+.list-view .list-cell:hover,
+.table-view .table-row-cell:hover {
+    -fx-background-color: rgba(0,113,227,0.06);
+}
+
+.list-view .list-cell:selected,
+.table-view .table-row-cell:selected {
+    -fx-background-color: rgba(0,113,227,0.12);
+    -fx-text-fill: #1D1D1F;
+}
+
+.table-view .column-header {
+    -fx-background-color: #F5F5F7;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-width: 0 0 1px 0;
+    -fx-padding: 8px 12px;
+}
+
+.table-view .column-header .label {
+    -fx-text-fill: #6E6E73;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   ScrollBar
+   -------------------------------------------------------------------------- */
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: rgba(0,0,0,0.25);
+    -fx-background-radius: 4px;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(0,0,0,0.40);
+}
+
+.scroll-bar .track,
+.scroll-bar .track-background {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button,
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-padding: 0;
+    -fx-shape: "";
+}
+
+/* --------------------------------------------------------------------------
+   TabPane
+   -------------------------------------------------------------------------- */
+.tab-pane {
+    -fx-tab-min-height: 36px;
+}
+
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: #F5F5F7;
+    -fx-border-color: rgba(0,0,0,0.08);
+    -fx-border-width: 0 0 1px 0;
+}
+
+.tab-pane .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 8px 16px;
+}
+
+.tab-pane .tab:selected {
+    -fx-background-color: transparent;
+    -fx-border-color: #0071E3;
+    -fx-border-width: 0 0 2px 0;
+}
+
+.tab-pane .tab .tab-label {
+    -fx-text-fill: #6E6E73;
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+}
+
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: #0071E3;
+}
+
+/* --------------------------------------------------------------------------
+   Menu / ContextMenu
+   -------------------------------------------------------------------------- */
+.context-menu,
+.menu-button,
+.popup-control {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: rgba(0,0,0,0.12);
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 16, 0, 0, 4);
+    -fx-padding: 4px 0;
+}
+
+.menu-item {
+    -fx-background-color: transparent;
+    -fx-padding: 6px 16px;
+}
+
+.menu-item:hover,
+.menu-item:focused {
+    -fx-background-color: rgba(0,113,227,0.08);
+}
+
+.menu-item .label {
+    -fx-text-fill: #1D1D1F;
+    -fx-font-size: 15px;
+}
+
+/* --------------------------------------------------------------------------
+   ProgressBar / ProgressIndicator
+   -------------------------------------------------------------------------- */
+.progress-bar .track {
+    -fx-background-color: rgba(0,0,0,0.10);
+    -fx-background-radius: 4px;
+    -fx-pref-height: 4px;
+}
+
+.progress-bar .bar {
+    -fx-background-color: #0071E3;
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+    -fx-pref-height: 4px;
+    -fx-padding: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Tooltip
+   -------------------------------------------------------------------------- */
+.tooltip {
+    -fx-background-color: rgba(29,29,31,0.85);
+    -fx-background-radius: 6px;
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-padding: 5px 9px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 8, 0, 0, 2);
+}
+
+/* --------------------------------------------------------------------------
+   Slider
+   -------------------------------------------------------------------------- */
+.slider .track {
+    -fx-background-color: rgba(0,0,0,0.12), rgba(0,0,0,0.10);
+    -fx-background-insets: 0.5, 1;
+    -fx-background-radius: 4px;
+    -fx-pref-height: 4px;
+}
+
+.slider .thumb {
+    -fx-background-color:
+        linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,0.6)),
+        white,
+        rgba(0,0,0,0.18);
+    -fx-background-insets: -2, 0, 1;
+    -fx-background-radius: 100%;
+    -fx-pref-width: 20px;
+    -fx-pref-height: 20px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 4, 0, 0, 1);
+}
+
+.slider .thumb:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 6, 0, 0, 2);
+}
+
+/* --------------------------------------------------------------------------
+   AtlantaFX — additional utility classes
+   -------------------------------------------------------------------------- */
+
+/* Text color utilities */
+.text-default  { -fx-text-fill: #1D1D1F; }
+.text-subtle   { -fx-text-fill: #6E6E73; }
+.text-muted    { -fx-text-fill: #AEAEB2; }
+.text-accent   { -fx-text-fill: #0071E3; }
+.text-success  { -fx-text-fill: #34C759; }
+.text-warning  { -fx-text-fill: #FF9F0A; }
+.text-danger   { -fx-text-fill: #FF3B30; }
+
+/* Status badges */
+.badge {
+    -fx-background-radius: 100px;
+    -fx-padding: 2px 8px;
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+}
+
+.badge.success {
+    -fx-background-color: rgba(52, 199, 89, 0.15);
+    -fx-text-fill: #1F7A35;
+}
+
+.badge.warning {
+    -fx-background-color: rgba(255, 159, 10, 0.15);
+    -fx-text-fill: #B36000;
+}
+
+.badge.danger {
+    -fx-background-color: rgba(255, 59, 48, 0.15);
+    -fx-text-fill: #C0392B;
+}
+
+/* Card */
+.card {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 16px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);
+}
+
+/* Rounded border box */
+.border-subtle {
+    -fx-border-color: rgba(0,0,0,0.10);
+    -fx-border-radius: 6px;
+    -fx-border-width: 1px;
+}
+
+/* Dividers */
+.border-top    { -fx-border-color: rgba(0,0,0,0.08) transparent transparent transparent; -fx-border-width: 1px; }
+.border-bottom { -fx-border-color: transparent transparent rgba(0,0,0,0.08) transparent; -fx-border-width: 1px; }

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Power Dialer view — call list selector (left) + session panel (right).
+  Controller: PowerDialerController (set via FXMLLoader.setController before load).
+-->
+<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+
+    <!-- ── TOP: Title + live stats ──────────────────────────────────────────── -->
+    <top>
+        <HBox spacing="16" alignment="CENTER_LEFT">
+            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
+            <Label text="Power Dialer" styleClass="title-1"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statsLabel" text="Select a list to begin" styleClass="caption"/>
+        </HBox>
+    </top>
+
+    <!-- ── LEFT: Call list selector ─────────────────────────────────────────── -->
+    <left>
+        <VBox spacing="8" prefWidth="240">
+            <padding><Insets top="0" bottom="16" left="16" right="8"/></padding>
+            <style>-fx-border-color: -color-border; -fx-border-width: 0 1 0 0;</style>
+            <Label text="Call Lists" styleClass="title-2"/>
+            <ListView fx:id="callListView" VBox.vgrow="ALWAYS"
+                      prefHeight="400" styleClass="bg-default"/>
+            <HBox spacing="8">
+                <Button fx:id="newListBtn"    text="+ New"   styleClass="accent"
+                        onAction="#onNewList" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                <Button fx:id="deleteListBtn" text="Delete"  styleClass="danger"
+                        onAction="#onDeleteList" disable="true"/>
+            </HBox>
+        </VBox>
+    </left>
+
+    <!-- ── CENTER: Session panel ─────────────────────────────────────────────── -->
+    <center>
+        <VBox spacing="24" alignment="TOP_LEFT">
+            <padding><Insets top="16" bottom="24" left="24" right="32"/></padding>
+
+            <!-- Current contact card -->
+            <VBox fx:id="contactCard" spacing="6">
+                <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
+                       -fx-border-color: -color-border; -fx-border-radius: 8;
+                       -fx-border-width: 1; -fx-padding: 16;</style>
+                <Label fx:id="noActiveLabel"    text="No active call"
+                       styleClass="body" visible="true" managed="true"/>
+                <VBox fx:id="contactDetails" spacing="4" visible="false" managed="false">
+                    <Label fx:id="contactNameLabel"    text="—" styleClass="title-2"/>
+                    <Label fx:id="contactPhoneLabel"   text="—" styleClass="mono"/>
+                    <Label fx:id="contactCompanyLabel" text="—" styleClass="caption"/>
+                </VBox>
+            </VBox>
+
+            <!-- Stats row -->
+            <HBox spacing="16">
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
+                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
+                           -fx-padding: 12 20;</style>
+                    <Label fx:id="dialedCountLabel"    text="0" styleClass="title-1"/>
+                    <Label text="Dialed"    styleClass="caption"/>
+                </VBox>
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
+                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
+                           -fx-padding: 12 20;</style>
+                    <Label fx:id="connectedCountLabel" text="0" styleClass="title-1"/>
+                    <Label text="Connected" styleClass="caption"/>
+                </VBox>
+                <VBox alignment="CENTER" HBox.hgrow="ALWAYS">
+                    <style>-fx-background-color: -color-bg-subtle; -fx-background-radius: 8;
+                           -fx-padding: 12 20;</style>
+                    <Label fx:id="remainingCountLabel" text="—" styleClass="title-1"/>
+                    <Label text="Remaining" styleClass="caption"/>
+                </VBox>
+            </HBox>
+
+            <!-- Control buttons -->
+            <HBox spacing="12" alignment="CENTER_LEFT">
+                <Button fx:id="startBtn"   text="Start"   styleClass="accent"
+                        onAction="#onStart"/>
+                <Button fx:id="pauseBtn"   text="Pause"   styleClass="flat"
+                        onAction="#onPause"   disable="true"/>
+                <Button fx:id="stopBtn"    text="Stop"    styleClass="danger"
+                        onAction="#onStop"    disable="true"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Button fx:id="advanceBtn" text="Next Contact" styleClass="flat"
+                        onAction="#onAdvance" disable="true"/>
+            </HBox>
+
+        </VBox>
+    </center>
+
+</BorderPane>

@@ -1,0 +1,18 @@
+dependencies {
+    implementation(project(':domain'))
+    implementation(project(':storage'))
+    implementation(project(':telephony'))
+    implementation(project(':providers'))
+    implementation(libs.slf4j.api)
+
+    // jain-sip-api is needed at compile time to resolve TelephonyService's type
+    // hierarchy (TelephonyService implements SipListener). At runtime it arrives
+    // transitively via the telephony module.
+    compileOnly(libs.jain.sip.api)
+    testCompileOnly(libs.jain.sip.api)
+
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.assertj.core)
+    testRuntimeOnly(libs.logback.classic)
+}

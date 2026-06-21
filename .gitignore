@@ -1,0 +1,35 @@
+# Gradle
+.gradle/
+build/
+out/
+*/build/
+*/out/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# macOS
+**/.DS_Store
+*.swp
+
+# jpackage output
+dist/
+installer/
+
+# Logs
+*.log
+logs/
+
+# Node / infra
+src/infra/node_modules/
+src/infra/cdk.out/
+
+# Secrets — never commit
+*.env
+*.pem
+*.p12
+*.keystore

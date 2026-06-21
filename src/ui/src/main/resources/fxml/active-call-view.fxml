@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Active call view — duration timer, controls, notes, disposition.
+  Controller: ActiveCallController (set via FXMLLoader.setController before load).
+  Keyboard shortcut (handled at scene level in MainWindow):
+    Escape → Hang Up
+-->
+<VBox xmlns:fx="http://javafx.com/fxml/1"
+      spacing="16" alignment="TOP_CENTER" maxWidth="560">
+    <padding><Insets top="32" bottom="32" left="48" right="48"/></padding>
+
+    <!-- Remote party -->
+    <Label fx:id="remotePartyLabel" text="Connecting..." styleClass="title-1"
+           alignment="CENTER" maxWidth="Infinity"/>
+
+    <!-- Live duration counter -->
+    <Label fx:id="durationLabel" text="0:00"
+           style="-fx-font-size: 17; -fx-font-family: monospace; -fx-text-fill: -color-success-fg;"
+           alignment="CENTER" maxWidth="Infinity"/>
+
+    <!-- Call control buttons -->
+    <HBox spacing="12" alignment="CENTER">
+        <Button fx:id="muteButton"   text="Mute"   onAction="#onMuteToggle"
+                prefWidth="108" prefHeight="44" styleClass="flat"/>
+        <Button fx:id="holdButton"   text="Hold"   onAction="#onHoldToggle"
+                prefWidth="108" prefHeight="44" styleClass="flat"/>
+        <Button fx:id="keypadButton" text="Keypad" onAction="#onKeypadToggle"
+                prefWidth="108" prefHeight="44" styleClass="flat"/>
+    </HBox>
+
+    <!-- Disposition selector -->
+    <HBox spacing="8" alignment="CENTER_LEFT">
+        <Label text="Disposition:" style="-fx-font-size: 13;"/>
+        <ComboBox fx:id="dispositionBox" prefWidth="200"
+                  promptText="Select outcome..."/>
+    </HBox>
+
+    <!-- Notes -->
+    <Label text="Notes" styleClass="title-2"/>
+    <TextArea fx:id="notesArea" promptText="Add call notes..."
+              prefHeight="100" wrapText="true">
+        <VBox.vgrow>ALWAYS</VBox.vgrow>
+    </TextArea>
+
+    <!-- Hang up -->
+    <Region prefHeight="8"/>
+    <Button fx:id="hangUpButton" text="Hang Up" onAction="#onHangUp"
+            prefWidth="180" prefHeight="52" styleClass="danger"/>
+    <Label text="Esc to hang up"
+           style="-fx-font-size: 12; -fx-text-fill: -color-fg-muted;"
+           alignment="CENTER" maxWidth="Infinity"/>
+
+</VBox>

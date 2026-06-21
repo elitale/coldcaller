@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Incoming call ring overlay.
+  Controller: IncomingCallController (set via FXMLLoader.setController before load).
+  Keyboard shortcuts (handled at scene level in MainWindow):
+    Space  → Answer
+    Escape → Reject
+-->
+<StackPane xmlns:fx="http://javafx.com/fxml/1" alignment="CENTER">
+
+    <VBox alignment="CENTER" spacing="16" maxWidth="400">
+        <padding><Insets top="48" bottom="48" left="48" right="48"/></padding>
+
+        <Label text="Incoming Call"
+               style="-fx-font-size: 14; -fx-text-fill: -color-fg-muted;"/>
+
+        <Label fx:id="callerNameLabel" text="Unknown Caller" styleClass="title-1"
+               alignment="CENTER" maxWidth="Infinity"/>
+
+        <Label fx:id="callerNumberLabel" text=""
+               style="-fx-font-size: 17; -fx-font-family: monospace;"
+               alignment="CENTER" maxWidth="Infinity"/>
+
+        <Region prefHeight="32"/>
+
+        <HBox spacing="16" alignment="CENTER">
+            <Button fx:id="answerButton" text="Answer" onAction="#onAnswer"
+                    prefWidth="140" prefHeight="52" styleClass="accent"/>
+            <Button fx:id="rejectButton" text="Reject"  onAction="#onReject"
+                    prefWidth="140" prefHeight="52" styleClass="danger"/>
+        </HBox>
+
+        <Label text="Space to answer  ·  Esc to reject"
+               style="-fx-font-size: 12; -fx-text-fill: -color-fg-muted;"
+               alignment="CENTER" maxWidth="Infinity"/>
+    </VBox>
+
+</StackPane>

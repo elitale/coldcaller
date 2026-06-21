@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  Settings view — grouped sections with per-section Save buttons.
+  Controller: SettingsController (set via FXMLLoader.setController before load).
+-->
+<BorderPane xmlns:fx="http://javafx.com/fxml/1">
+
+    <!-- ToggleGroup defined at root scope so RadioButtons in the Appearance
+         section can reference it via $themeGroup -->
+    <fx:define>
+        <ToggleGroup fx:id="themeGroup"/>
+    </fx:define>
+
+    <!-- ── Toolbar ──────────────────────────────────────────────────────────── -->
+    <top>
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <padding><Insets top="24" bottom="16" left="32" right="32"/></padding>
+            <Label text="Settings" styleClass="title-1"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusLabel" styleClass="caption"/>
+        </HBox>
+    </top>
+
+    <!-- ── Scrollable content ────────────────────────────────────────────────── -->
+    <center>
+        <ScrollPane fitToWidth="true" hbarPolicy="NEVER">
+            <BorderPane.margin><Insets left="32" right="32" bottom="24"/></BorderPane.margin>
+            <content>
+                <VBox spacing="20">
+                    <padding><Insets top="8" bottom="32"/></padding>
+
+                    <!-- ── General ─────────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="General" styleClass="title-2"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Default number" prefWidth="180"/>
+                            <ComboBox fx:id="defaultNumberCombo" prefWidth="240"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveGeneral"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── Telnyx ──────────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Telnyx" styleClass="title-2"/>
+                        <Label text="Restart required for changes to take effect" styleClass="caption"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="API Key" prefWidth="180"/>
+                            <PasswordField fx:id="telnyxApiKeyField" prefWidth="320"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveTelnyx"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── SIP ─────────────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="SIP" styleClass="title-2"/>
+                        <Label text="Restart required for changes to take effect" styleClass="caption"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Username" prefWidth="180"/>
+                            <TextField fx:id="sipUsernameField" prefWidth="240"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Password" prefWidth="180"/>
+                            <PasswordField fx:id="sipPasswordField" prefWidth="240"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Domain" prefWidth="180"/>
+                            <TextField fx:id="sipDomainField" prefWidth="240"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Proxy" prefWidth="180"/>
+                            <TextField fx:id="sipProxyField" prefWidth="240"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Proxy Port" prefWidth="180"/>
+                            <Spinner fx:id="sipProxyPortSpinner" prefWidth="100" editable="true"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveSip"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── SMS Relay ────────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="SMS Relay" styleClass="title-2"/>
+                        <Label text="Restart required for changes to take effect" styleClass="caption"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="WebSocket URL" prefWidth="180"/>
+                            <TextField fx:id="smsRelayUrlField" prefWidth="320"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="API Key" prefWidth="180"/>
+                            <PasswordField fx:id="smsRelayKeyField" prefWidth="240"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveSmsRelay"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── Audio ───────────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Audio" styleClass="title-2"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Input Device" prefWidth="180"/>
+                            <ComboBox fx:id="audioInputCombo" prefWidth="280"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Output Device" prefWidth="180"/>
+                            <ComboBox fx:id="audioOutputCombo" prefWidth="280"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Jitter Buffer (ms)" prefWidth="180"/>
+                            <Spinner fx:id="jitterBufferSpinner" prefWidth="100" editable="true"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveAudio"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── Power Dialer ─────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Power Dialer" styleClass="title-2"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="No-answer timeout (s)" prefWidth="200"/>
+                            <Spinner fx:id="noAnswerTimeoutSpinner" prefWidth="100" editable="true"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Auto-advance delay (s)" prefWidth="200"/>
+                            <Spinner fx:id="autoAdvanceDelaySpinner" prefWidth="100" editable="true"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Voicemail drop" prefWidth="200"/>
+                            <CheckBox fx:id="voicemailDropCheckBox"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSavePowerDialer"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- ── Appearance ───────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Appearance" styleClass="title-2"/>
+
+                        <HBox spacing="16" alignment="CENTER_LEFT">
+                            <Label text="Theme" prefWidth="180"/>
+                            <RadioButton text="Light"  toggleGroup="$themeGroup" userData="light"/>
+                            <RadioButton text="Dark"   toggleGroup="$themeGroup" userData="dark"/>
+                            <RadioButton text="System" toggleGroup="$themeGroup" userData="system"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveAppearance"/>
+                        </HBox>
+                    </VBox>
+
+                </VBox>
+            </content>
+        </ScrollPane>
+    </center>
+
+</BorderPane>

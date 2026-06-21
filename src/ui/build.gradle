@@ -1,0 +1,22 @@
+plugins {
+    id 'org.openjfx.javafxplugin'
+}
+
+javafx {
+    version = libs.versions.javafx.get()
+    modules = ['javafx.controls', 'javafx.fxml']
+}
+
+dependencies {
+    implementation(project(':domain'))
+    implementation(project(':services'))
+    // compileOnly: needed because CallService implements TelephonyService.TelephonyListener —
+    // the compiler must see TelephonyService even though ui never instantiates it.
+    // telephony is already on the runtime classpath transitively via services -> telephony.
+    compileOnly(project(':telephony'))
+    implementation(libs.atlantafx)
+    implementation(libs.slf4j.api)
+
+    testImplementation(project(':domain'))
+    testRuntimeOnly(libs.logback.classic)
+}
