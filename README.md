@@ -6,9 +6,18 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
 
 ---
 
+## Screenshots
+
+### Dialer
+
+![Dialer](screenshots/dialer.png)
+
+---
+
 ## Table of Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
