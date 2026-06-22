@@ -68,6 +68,7 @@ public final class ActiveCallController {
     @FXML private Button    holdButton;
     @FXML private Button    voicemailButton;
     @FXML private Button    hangUpButton;
+    @FXML private Button    redialButton;
     @FXML private VBox      keypadOverlay;
     @FXML private Label     dtmfReadout;
     @FXML private GridPane  keypadGrid;
@@ -90,6 +91,7 @@ public final class ActiveCallController {
 
     // Callbacks
     private Runnable          onHangUpCb = () -> {};
+    private Runnable          onRedialCb = () -> {};
     private Consumer<Boolean> onMuteCb   = ignored -> {};
     private Consumer<Boolean> onHoldCb   = ignored -> {};
     private Consumer<String>  onDtmfCb   = ignored -> {};
@@ -99,6 +101,7 @@ public final class ActiveCallController {
     public ActiveCallController() {}
 
     public void setOnHangUp(Runnable cb)        { this.onHangUpCb = Objects.requireNonNull(cb); }
+    public void setOnRedial(Runnable cb)        { this.onRedialCb = Objects.requireNonNull(cb); }
     public void setOnMute(Consumer<Boolean> cb) { this.onMuteCb   = Objects.requireNonNull(cb); }
     public void setOnHold(Consumer<Boolean> cb) { this.onHoldCb   = Objects.requireNonNull(cb); }
     public void setOnDtmf(Consumer<String> cb)  { this.onDtmfCb   = Objects.requireNonNull(cb); }
@@ -121,10 +124,13 @@ public final class ActiveCallController {
         applyIcon(holdButton,      "bi-pause-fill",       "Hold");
         applyIcon(voicemailButton, "bi-soundwave",        "Voicemail");
         applyIcon(hangUpButton,    "bi-telephone-x-fill", "Hang Up");
+        applyIcon(redialButton,    "bi-telephone-outbound-fill", "Redial");
         applyIcon(closeButton,     "bi-x",                null);
 
         voicemailButton.setDisable(true);
         voicemailButton.setTooltip(new Tooltip("Voicemail drop — coming soon"));
+        redialButton.setTooltip(new Tooltip("Call this number again"));
+        showRedial(false);
         closeButton.setTooltip(new Tooltip("Close"));
         closeButton.setOnAction(e -> onHangUp());
 
@@ -274,7 +280,8 @@ public final class ActiveCallController {
             disableCallControls();
             hangUpButton.setDisable(false);
             hangUpButton.setText("Save & Close");
-            ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-check-lg");
+            ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-check");
+            showRedial(true);
             notesArea.requestFocus();
         });
     }
@@ -295,7 +302,8 @@ public final class ActiveCallController {
             }
             statusLabel.setText(reason.isBlank() ? "Call failed" : reason);
             hangUpButton.setText("Close");
-            ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-x-lg");
+            ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-x");
+            showRedial(true);
         });
     }
 
@@ -408,6 +416,11 @@ public final class ActiveCallController {
         onHangUpCb.run();
     }
 
+    @FXML
+    private void onRedial() {
+        onRedialCb.run();
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     private void reset(CallParticipant party) {
@@ -439,6 +452,7 @@ public final class ActiveCallController {
         hangUpButton.setText("Hang Up");
         hangUpButton.setDisable(false);
         ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-telephone-x-fill");
+        showRedial(false);
         statusLabel.getStyleClass().remove("call-status--failed");
         statusLabel.setText("");
         setNotesStatus("");
@@ -530,6 +544,12 @@ public final class ActiveCallController {
         muteButton.setDisable(true);
         keypadButton.setDisable(true);
         holdButton.setDisable(true);
+    }
+
+    private void showRedial(boolean show) {
+        redialButton.setVisible(show);
+        redialButton.setManaged(show);
+        redialButton.setDisable(!show);
     }
 
     private void setRingStyle(String activeClass) {

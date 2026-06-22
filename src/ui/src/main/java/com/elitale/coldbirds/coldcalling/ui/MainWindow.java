@@ -109,6 +109,9 @@ public final class MainWindow {
     /** Auto-save sink registered before {@link #show()} builds the controller. */
     private BiConsumer<Optional<CallDisposition>, String> pendingLogAutoSave;
 
+    /** Most recent remote number shown on the calling screen — reused by Redial. */
+    private String lastDialedNumber;
+
     // Loaded FXML roots
     private Parent dialerView;
     private Parent incomingCallView;
@@ -167,6 +170,7 @@ public final class MainWindow {
     public void showCallStarting(String number, Runnable onHangUp) {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
+            lastDialedNumber = number;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startConnecting(party);
             root.setCenter(activeCallView);
@@ -196,6 +200,7 @@ public final class MainWindow {
     public void showActiveCall(String number, Instant connectedAt, Runnable onHangUp) {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
+            lastDialedNumber = number;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startActive(party, connectedAt);
             root.setCenter(activeCallView);
@@ -262,6 +267,7 @@ public final class MainWindow {
     public void showCallFailed(String number, String reason, Runnable onClose) {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
+            lastDialedNumber = number;
             activeCallController.setOnHangUp(onClose);
             activeCallController.showFailed(party, reason);
             root.setCenter(activeCallView);
@@ -421,6 +427,14 @@ public final class MainWindow {
         if (pendingLogAutoSave != null) {
             activeCallController.setOnLogChanged(pendingLogAutoSave);
         }
+        // Redial re-dials the last remote number through the same dial path the
+        // dialer uses; the button is shown only in the wrap-up / failed phases.
+        activeCallController.setOnRedial(() -> {
+            final String number = lastDialedNumber;
+            if (number != null && !number.isBlank()) {
+                onDial.accept(number);
+            }
+        });
 
         root = new BorderPane();
         root.setLeft(buildSidebar());

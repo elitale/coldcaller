@@ -6,8 +6,8 @@
 <!--
   In-window calling screen — header (•••), pulsing avatar + identity (name,
   number, country + local time), live status, primary controls (Mute · Keypad ·
-  Hold · Voicemail · Hang Up), a collapsible DTMF keypad overlay, disposition
-  chips, and notes. After a call ends it stays in a wrap-up state so the rep can
+  Hold · Voicemail · Hang Up — plus Redial in the wrap-up / failed phase), a
+  collapsible DTMF keypad overlay, disposition chips, and notes. After a call ends it stays in a wrap-up state so the rep can
   finish logging before "Save & Close".
   Controller: ActiveCallController (set via FXMLLoader.setController before load).
   Icons, keypad/chip grids, motion and tones are driven in the controller.
@@ -52,6 +52,8 @@
         <Button fx:id="keypadButton"    onAction="#onKeypadToggle" styleClass="call-control"/>
         <Button fx:id="holdButton"      onAction="#onHoldToggle"   styleClass="call-control"/>
         <Button fx:id="voicemailButton" styleClass="call-control"/>
+        <Button fx:id="redialButton"    onAction="#onRedial"
+                styleClass="call-control" visible="false" managed="false"/>
         <Button fx:id="hangUpButton"    onAction="#onHangUp"
                 styleClass="call-control, call-control--danger"/>
     </HBox>
