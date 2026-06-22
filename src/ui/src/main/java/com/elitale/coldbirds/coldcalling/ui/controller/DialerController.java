@@ -2,7 +2,7 @@ package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
-import com.elitale.coldbirds.coldcalling.ui.support.CountrySearch;
+import com.elitale.coldbirds.coldcalling.ui.support.DialNumberFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallCell;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
@@ -13,11 +13,8 @@ import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
-import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
-import javafx.collections.transformation.FilteredList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.geometry.Pos;
@@ -27,13 +24,12 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextFormatter;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
@@ -62,25 +58,21 @@ public final class DialerController {
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
 
-    /** Characters accepted from the physical keyboard for dialing. */
-    private static final String DIALPAD_KEYS = "0123456789*#+";
-
     @FXML private VBox               dialerRoot;
     @FXML private ComboBox<Country>  countrySelector;
     @FXML private Label              localTimeLabel;
-    @FXML private Label              numberDisplay;
-    @FXML private HBox               numberDisplayBox;
-    @FXML private Region             inputCaret;
+    @FXML private TextField          numberField;
     @FXML private Button             callButton;
     @FXML private Button             backspaceButton;
     @FXML private ListView<RecentCallRow> recentCallsList;
 
-    private final StringProperty          dialedNumber    = new SimpleStringProperty("");
     private final ObjectProperty<Country> selectedCountry = new SimpleObjectProperty<>(null);
 
-    /** Master, unfiltered country list; the combo shows a filtered view of this. */
+    /** Last committed country — persisted, and restored on Escape / focus-loss. */
+    private Country committedCountry;
+
+    /** All selectable countries shown in the dropdown. */
     private final ObservableList<Country> allCountries = FXCollections.observableArrayList();
-    private FilteredList<Country>         filteredCountries;
 
     /** Callback invoked with the full E.164 string when the user presses Call. */
     private Consumer<String> onDial = ignored -> {};
@@ -98,9 +90,6 @@ public final class DialerController {
     private Consumer<String> onRecentMessage = ignored -> {};
 
     private Timeline clock;
-
-    /** Blinking caret animation for the focused number input. */
-    private Timeline caretBlink;
 
     /** Reused flag image beside the local-time readout (avoids per-tick allocation). */
     private final ImageView localFlag = new ImageView();
@@ -124,19 +113,17 @@ public final class DialerController {
     public void setCountries(List<Country> countries) {
         Objects.requireNonNull(countries, "countries must not be null");
         allCountries.setAll(countries);
-        filteredCountries.setPredicate(c -> true);
     }
 
     /** Select the default country by ISO code. Falls back to the first entry. */
     public void selectCountryByIso(String isoCode) {
-        filteredCountries.setPredicate(c -> true);
         Country match = allCountries.stream()
                 .filter(c -> c.isoCode().equalsIgnoreCase(isoCode))
                 .findFirst()
                 .orElse(allCountries.isEmpty() ? null : allCountries.get(0));
         if (match != null) {
+            committedCountry = match;
             countrySelector.getSelectionModel().select(match);
-            setEditorText(match);
         }
     }
 
@@ -160,9 +147,11 @@ public final class DialerController {
         this.onRecentMessage = Objects.requireNonNull(callback, "callback must not be null");
     }
 
-    /** Pre-fill the number display — e.g. when clicking a number in Contacts. */
+    /** Pre-fill the number field — e.g. when clicking a number in Contacts. */
     public void prefillNumber(String number) {
-        dialedNumber.set(Objects.requireNonNull(number, "number must not be null"));
+        Objects.requireNonNull(number, "number must not be null");
+        numberField.setText(number);
+        numberField.positionCaret(numberField.getLength());
     }
 
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
@@ -170,27 +159,21 @@ public final class DialerController {
     @FXML
     private void initialize() {
         configureCountrySelector();
-        configureKeyboardEntry();
-        configureCaret();
+        configureNumberField();
         configureRecentCalls();
 
-        numberDisplay.textProperty().bind(Bindings.createStringBinding(
-                this::composeDisplay, dialedNumber, selectedCountry));
-
         callButton.disableProperty().bind(Bindings.createBooleanBinding(
-                () -> dialedNumber.get().isBlank(), dialedNumber));
+                () -> !DialNumberFormatter.isDialable(numberField.getText()),
+                numberField.textProperty()));
         backspaceButton.disableProperty().bind(Bindings.createBooleanBinding(
-                () -> dialedNumber.get().isEmpty(), dialedNumber));
+                () -> numberField.getText().isEmpty(),
+                numberField.textProperty()));
 
+        // A selection change updates the local-time readout and the dial prefix.
         selectedCountry.addListener((obs, old, now) -> {
             updateLocalTime();
             if (now != null) {
-                onCountrySelected.accept(now);
-                // Keep the closed editor in sync with the model even if the combo's
-                // own value diverged (it can be nulled during filtered searches).
-                if (!countrySelector.isShowing()) {
-                    setEditorText(now);
-                }
+                swapDialPrefix(old, now);
             }
         });
 
@@ -221,140 +204,97 @@ public final class DialerController {
     }
 
     private void configureCountrySelector() {
-        filteredCountries = new FilteredList<>(allCountries, c -> true);
-        countrySelector.setItems(filteredCountries);
-        countrySelector.setEditable(true);
+        countrySelector.setItems(allCountries);
+        countrySelector.setEditable(false);
         countrySelector.setVisibleRowCount(10);
         countrySelector.setConverter(COUNTRY_CONVERTER);
         countrySelector.setCellFactory(list -> new CountryCell());
+        // Closed-control display: plain converter text. CountryCell paints an
+        // opaque white background for popup rows, which would show as a white box
+        // inside the grey pill if reused as the button cell.
+        countrySelector.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(Country item, boolean empty) {
+                super.updateItem(item, empty);
+                setText((empty || item == null) ? null : COUNTRY_CONVERTER.toString(item));
+            }
+        });
 
-        // Track real selections only. While searching, the FilteredList may hide
-        // the selected row (selectedItem → null); we ignore those transient nulls
-        // so the chosen country — and the dial prefix — is never lost mid-typing.
+        // Pick-only dropdown — no text input. Selecting a country drives the dial
+        // prefix + local time via selectedCountry. Persist only once the popup is
+        // closed so arrowing through the open list doesn't write settings per step.
         countrySelector.getSelectionModel().selectedItemProperty().addListener((obs, old, now) -> {
             if (now != null) {
                 selectedCountry.set(now);
+                if (!countrySelector.isShowing()) {
+                    commitSelection();
+                }
             }
         });
-
-        TextField editor = countrySelector.getEditor();
-        // Filter only on real keystrokes. Listening to the editor's textProperty
-        // also fired during programmatic updates (selection, close restore),
-        // which re-ran the search mid-selection and made picking a country fail.
-        editor.addEventHandler(KeyEvent.KEY_RELEASED, event -> {
-            KeyCode code = event.getCode();
-            if (code == KeyCode.ENTER) {
-                commitFirstMatch();
-                return;
-            }
-            boolean editsText = code.isLetterKey() || code.isDigitKey()
-                    || code == KeyCode.BACK_SPACE || code == KeyCode.DELETE
-                    || code == KeyCode.SPACE;
-            if (!editsText) {
-                return; // navigation / modifier keys must not re-filter
-            }
-            String query = editor.getText();
-            filteredCountries.setPredicate(c -> CountrySearch.matches(c, query));
-            if (!countrySelector.isShowing() && countrySelector.getScene() != null) {
-                countrySelector.show();
-            }
-        });
-
-        // When the popup closes, restore the full list, re-assert the visual
-        // selection (filtering may have cleared it), and reset the editor text so
-        // a stale search query never lingers in the closed control.
         countrySelector.showingProperty().addListener((obs, was, showing) -> {
             if (!showing) {
-                filteredCountries.setPredicate(c -> true);
-                Country current = selectedCountry.get();
-                if (current != null && countrySelector.getSelectionModel().getSelectedItem() == null) {
-                    countrySelector.getSelectionModel().select(current);
-                }
-                setEditorText(current);
+                commitSelection();
             }
         });
     }
 
-    /** Commit the top filtered match (used when the user presses Enter on a search). */
-    private void commitFirstMatch() {
-        if (!filteredCountries.isEmpty()) {
-            countrySelector.getSelectionModel().select(filteredCountries.get(0));
-            countrySelector.hide();
-        }
-    }
-
-    private void setEditorText(Country country) {
-        countrySelector.getEditor().setText(COUNTRY_CONVERTER.toString(country));
-    }
-
-    /** Wire physical-keyboard dialing and grab focus so typing works immediately. */
-    private void configureKeyboardEntry() {
-        dialerRoot.setFocusTraversable(true);
-        dialerRoot.addEventFilter(KeyEvent.KEY_PRESSED, this::onKeyPressed);
-        dialerRoot.sceneProperty().addListener((obs, oldScene, scene) -> {
-            if (scene != null) {
-                Platform.runLater(dialerRoot::requestFocus);
-            }
-        });
-    }
-
-    /** Translate physical key presses into dial-pad input (digits, * # +, backspace, enter). */
-    private void onKeyPressed(KeyEvent event) {
-        // Never hijack keys while the user is searching in the country box.
-        if (countrySelector.isShowing() || countrySelector.getEditor().isFocused()) {
-            return;
-        }
-        KeyCode code = event.getCode();
-        if (code == KeyCode.BACK_SPACE || code == KeyCode.DELETE) {
-            onBackspace();
-            event.consume();
-            return;
-        }
-        if (code == KeyCode.ENTER) {
-            if (!callButton.isDisabled()) {
-                onCall();
-            }
-            event.consume();
-            return;
-        }
-        String text = event.getText();
-        if (text != null && text.length() == 1 && DIALPAD_KEYS.indexOf(text.charAt(0)) >= 0) {
-            dialedNumber.set(dialedNumber.get() + text);
-            focusDialpad();
-            event.consume();
-        }
-    }
-
-    /** Return key focus to the dialer root so keyboard entry keeps working. */
-    private void focusDialpad() {
-        if (dialerRoot != null) {
-            dialerRoot.requestFocus();
+    /** Persist the selected country once, when it differs from the committed one. */
+    private void commitSelection() {
+        Country current = selectedCountry.get();
+        if (current != null && !current.equals(committedCountry)) {
+            committedCountry = current;
+            onCountrySelected.accept(current);
         }
     }
 
     /**
-     * Show a blinking text caret and an accent focus ring on the number input
-     * whenever the dialer has key focus — mirroring an HTML text field.
+     * Wire the number field: a sanitising formatter, Enter-to-call, and initial
+     * focus so the user can type immediately. The native TextField owns the
+     * caret, selection, copy/cut/paste, and the context menu.
      */
-    private void configureCaret() {
-        caretBlink = new Timeline(
-                new KeyFrame(Duration.ZERO, e -> inputCaret.setOpacity(1)),
-                new KeyFrame(Duration.seconds(0.5), e -> inputCaret.setOpacity(0)),
-                new KeyFrame(Duration.seconds(1.0)));
-        caretBlink.setCycleCount(Animation.INDEFINITE);
-
-        dialerRoot.focusedProperty().addListener((obs, was, focused) -> {
-            if (focused) {
-                if (!numberDisplayBox.getStyleClass().contains("input-focused")) {
-                    numberDisplayBox.getStyleClass().add("input-focused");
-                }
-                caretBlink.playFromStart();
-            } else {
-                numberDisplayBox.getStyleClass().remove("input-focused");
-                caretBlink.stop();
-                inputCaret.setOpacity(0);
+    private void configureNumberField() {
+        numberField.setTextFormatter(new TextFormatter<>(this::sanitizeChange));
+        numberField.setOnAction(event -> onCall());
+        numberField.sceneProperty().addListener((obs, oldScene, scene) -> {
+            if (scene != null) {
+                Platform.runLater(numberField::requestFocus);
             }
         });
+    }
+
+    /**
+     * Restrict the field to E.164 characters via {@link DialNumberFormatter}.
+     * Non-conforming edits (including pastes) are rewritten to the sanitised
+     * text, with the caret collapsed to the end.
+     */
+    private TextFormatter.Change sanitizeChange(TextFormatter.Change change) {
+        if (!change.isContentChange()) {
+            return change; // caret / selection moves carry no text to clean
+        }
+        String proposed = change.getControlNewText();
+        String clean = DialNumberFormatter.sanitize(proposed);
+        if (clean.equals(proposed)) {
+            return change;
+        }
+        change.setRange(0, change.getControlText().length());
+        change.setText(clean);
+        change.setCaretPosition(clean.length());
+        change.setAnchor(clean.length());
+        return change;
+    }
+
+    /**
+     * On country change, swap the dial prefix only when the field is empty or
+     * still holds just the previous country's dial code — never clobber a number
+     * the user has actually typed.
+     */
+    private void swapDialPrefix(Country previous, Country now) {
+        String text = numberField.getText().strip();
+        String previousDial = (previous != null) ? previous.dialCode() : null;
+        if (text.isEmpty() || text.equals(previousDial)) {
+            numberField.setText(now.dialCode());
+            numberField.positionCaret(numberField.getLength());
+        }
     }
 
     private void startClock() {
@@ -391,54 +331,31 @@ public final class DialerController {
         }
     }
 
-    private String composeDisplay() {
-        String typed = dialedNumber.get();
-        if (typed.startsWith("+")) {
-            return typed;
-        }
-        Country country = selectedCountry.get();
-        String prefix = (country != null) ? country.dialCode() + " " : "";
-        return prefix + typed;
-    }
-
     // ── FXML event handlers ───────────────────────────────────────────────────
 
-    /** Handles every digit/star/hash button via {@code userData}. */
+    /** Handles every digit/star/hash button via {@code userData}; inserts at the caret. */
     @FXML
     private void onDigitPressed(ActionEvent event) {
         Button btn = (Button) event.getSource();
         Object ud = btn.getUserData();
         String digit = (ud != null) ? ud.toString() : btn.getText();
-        dialedNumber.set(dialedNumber.get() + digit);
-        focusDialpad();
+        numberField.replaceSelection(digit);
+        numberField.requestFocus();
     }
 
     @FXML
     private void onBackspace() {
-        String current = dialedNumber.get();
-        if (!current.isEmpty()) {
-            dialedNumber.set(current.substring(0, current.length() - 1));
-        }
-        // Keep focus on the dialer so keyboard entry continues after a backspace.
-        focusDialpad();
+        numberField.deletePreviousChar();
+        // Keep focus on the field so keyboard entry continues after a backspace.
+        numberField.requestFocus();
     }
 
     @FXML
     private void onCall() {
-        String typed = dialedNumber.get().strip();
-        if (!typed.isBlank()) {
-            onDial.accept(toE164(typed));
+        String visible = numberField.getText();
+        if (DialNumberFormatter.isDialable(visible)) {
+            onDial.accept(DialNumberFormatter.toE164(visible, selectedCountry.get()));
         }
-    }
-
-    private String toE164(String typed) {
-        if (typed.startsWith("+")) {
-            return typed;
-        }
-        Country country = selectedCountry.get();
-        String digits = typed.replaceAll("[^0-9]", "");
-        String prefix = (country != null) ? country.dialCode() : "";
-        return prefix + digits;
     }
 
     /** Editor string form: name + dial code, used for display and matching. */
