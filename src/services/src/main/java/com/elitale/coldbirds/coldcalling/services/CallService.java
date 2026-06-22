@@ -73,8 +73,10 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     // UI callbacks
     private IncomingCallListener          onIncomingCallCb   = (id, a, b) -> {};
+    private Consumer<String>              onCallRingingCb    = id -> {};
     private Consumer<String>              onCallAnsweredCb   = id -> {};
     private BiConsumer<String, String>    onCallEndedCb      = (id, r) -> {};
+    private BiConsumer<String, String>    onCallFailedCb     = (n, r) -> {};
     private Consumer<Boolean>             onRegistrationCb   = reg -> {};
 
     public CallService(
@@ -94,12 +96,32 @@ public final class CallService implements TelephonyService.TelephonyListener {
         this.onIncomingCallCb = Objects.requireNonNull(cb);
     }
 
+    /**
+     * Register a callback fired the instant an outbound call begins ringing
+     * (immediately after the INVITE is dispatched, before the remote party
+     * answers). The argument is the SIP Call-ID. Fired on the dialling thread;
+     * callers must dispatch UI work to the FX Application Thread.
+     */
+    public void setOnCallRinging(Consumer<String> cb) {
+        this.onCallRingingCb = Objects.requireNonNull(cb);
+    }
+
     public void setOnCallAnswered(Consumer<String> cb) {
         this.onCallAnsweredCb = Objects.requireNonNull(cb);
     }
 
     public void setOnCallEnded(BiConsumer<String, String> cb) {
         this.onCallEndedCb = Objects.requireNonNull(cb);
+    }
+
+    /**
+     * Register a callback fired when an outbound call cannot even start
+     * (DNC-blocked, no usable local number, or the SIP stack rejected the
+     * INVITE before a Call-ID existed). Arguments are the remote E.164 number
+     * and a human-readable reason. Fired on the dialling thread.
+     */
+    public void setOnCallFailed(BiConsumer<String, String> cb) {
+        this.onCallFailedCb = Objects.requireNonNull(cb);
     }
 
     public void setOnRegistrationChanged(Consumer<Boolean> cb) {
@@ -120,18 +142,23 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
         if (isDnc(remote)) {
             LOG.warn("Blocked outbound dial to DNC number {}", remote.value());
+            onCallFailedCb.accept(remote.value(), "This number is on your Do-Not-Call list.");
             return;
         }
 
         final Optional<OwnedNumber> owned = phoneNumberRepo.findByNumber(local);
         if (owned.isEmpty()) {
             LOG.error("Cannot dial: local number {} is not an owned number", local.value());
+            onCallFailedCb.accept(remote.value(),
+                    "Your calling number isn’t set up to place calls. Check Settings.");
             return;
         }
 
         final String sipCallId = telephony.dial(local, remote);
         if (sipCallId.isBlank()) {
             LOG.error("Telephony returned blank call-id for dial to {}", remote.value());
+            onCallFailedCb.accept(remote.value(),
+                    "Couldn’t start the call. Check your internet connection and SIP sign-in in Settings.");
             return;
         }
 
@@ -143,6 +170,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
                 CallDirection.OUTBOUND, Instant.now()
         ));
         LOG.info("Outbound call {} started → {}", sipCallId, remote.value());
+        onCallRingingCb.accept(sipCallId);
     }
 
     /**
@@ -265,6 +293,18 @@ public final class CallService implements TelephonyService.TelephonyListener {
     public Optional<String> getActiveCallRemote(String callId) {
         final ActiveCall call = activeCalls.get(callId);
         return call != null ? Optional.of(call.remoteNumber.value()) : Optional.empty();
+    }
+
+    /**
+     * Returns the direction of an in-flight call, or empty if no such call is active.
+     * Used by the UI to decide whether a freshly-answered call already has its
+     * calling screen on-screen (outbound) or needs it opened now (inbound).
+     *
+     * @param callId SIP Call-ID
+     */
+    public Optional<CallDirection> getActiveCallDirection(String callId) {
+        final ActiveCall call = activeCalls.get(callId);
+        return call != null ? Optional.of(call.direction) : Optional.empty();
     }
 
     // ── TelephonyService.TelephonyListener ───────────────────────────────────

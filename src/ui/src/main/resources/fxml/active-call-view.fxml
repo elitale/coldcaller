@@ -4,54 +4,64 @@
 <?import javafx.geometry.*?>
 
 <!--
-  Active call view — duration timer, controls, notes, disposition.
+  In-window calling screen — header (•••), avatar + identity, live status,
+  primary controls (Mute · Keypad · Hold · Voicemail · Hang Up), a collapsible
+  DTMF keypad overlay, disposition chips, and notes.
   Controller: ActiveCallController (set via FXMLLoader.setController before load).
-  Keyboard shortcut (handled at scene level in MainWindow):
-    Escape → Hang Up
+  Icons and the keypad/chip grids are built in the controller.
+  Keyboard shortcuts (handled at scene level in MainWindow):
+    Esc → Hang Up · M Mute · H Hold · K Keypad · 1–8 Disposition · digits DTMF
 -->
 <VBox xmlns:fx="http://javafx.com/fxml/1"
-      spacing="16" alignment="TOP_CENTER" maxWidth="560">
-    <padding><Insets top="32" bottom="32" left="48" right="48"/></padding>
+      spacing="16" alignment="TOP_CENTER" maxWidth="560" styleClass="calling-screen">
+    <padding><Insets top="20" bottom="28" left="40" right="40"/></padding>
 
-    <!-- Remote party -->
-    <Label fx:id="remotePartyLabel" text="Connecting..." styleClass="title-1"
-           alignment="CENTER" maxWidth="Infinity"/>
-
-    <!-- Live duration counter -->
-    <Label fx:id="durationLabel" text="0:00"
-           style="-fx-font-size: 17; -fx-font-family: monospace; -fx-text-fill: -color-success-fg;"
-           alignment="CENTER" maxWidth="Infinity"/>
-
-    <!-- Call control buttons -->
-    <HBox spacing="12" alignment="CENTER">
-        <Button fx:id="muteButton"   text="Mute"   onAction="#onMuteToggle"
-                prefWidth="108" prefHeight="44" styleClass="flat"/>
-        <Button fx:id="holdButton"   text="Hold"   onAction="#onHoldToggle"
-                prefWidth="108" prefHeight="44" styleClass="flat"/>
-        <Button fx:id="keypadButton" text="Keypad" onAction="#onKeypadToggle"
-                prefWidth="108" prefHeight="44" styleClass="flat"/>
+    <!-- Header: ••• menu, top-right (disabled until mid-call device switch ships) -->
+    <HBox alignment="CENTER_RIGHT" maxWidth="Infinity">
+        <Button fx:id="moreButton" styleClass="flat"/>
     </HBox>
 
-    <!-- Disposition selector -->
-    <HBox spacing="8" alignment="CENTER_LEFT">
-        <Label text="Disposition:" style="-fx-font-size: 13;"/>
-        <ComboBox fx:id="dispositionBox" prefWidth="200"
-                  promptText="Select outcome..."/>
+    <!-- Avatar with state ring -->
+    <StackPane fx:id="avatarRing" styleClass="call-ring" maxWidth="96" maxHeight="96"
+               prefWidth="96" prefHeight="96">
+        <Label fx:id="avatarLabel" text="?" styleClass="call-avatar"/>
+    </StackPane>
+
+    <!-- Identity -->
+    <Label fx:id="remotePartyLabel" text="Connecting…" styleClass="title-1"
+           alignment="CENTER" maxWidth="Infinity"/>
+    <Label fx:id="statusLabel" text="" styleClass="call-status"
+           alignment="CENTER" maxWidth="Infinity"/>
+
+    <!-- Primary controls -->
+    <HBox spacing="16" alignment="CENTER">
+        <Button fx:id="muteButton"      onAction="#onMuteToggle"   styleClass="call-control"/>
+        <Button fx:id="keypadButton"    onAction="#onKeypadToggle" styleClass="call-control"/>
+        <Button fx:id="holdButton"      onAction="#onHoldToggle"   styleClass="call-control"/>
+        <Button fx:id="voicemailButton" styleClass="call-control"/>
+        <Button fx:id="hangUpButton"    onAction="#onHangUp"
+                styleClass="call-control, call-control--danger"/>
     </HBox>
+
+    <!-- DTMF keypad overlay (collapsed by default) -->
+    <VBox fx:id="keypadOverlay" spacing="10" alignment="CENTER"
+          visible="false" managed="false" styleClass="keypad-overlay" focusTraversable="true">
+        <Label fx:id="dtmfReadout" text="" styleClass="dtmf-readout"
+               alignment="CENTER" maxWidth="Infinity"/>
+        <GridPane fx:id="keypadGrid" hgap="10" vgap="10" alignment="CENTER"/>
+    </VBox>
+
+    <!-- Disposition chips -->
+    <FlowPane fx:id="dispositionChips" hgap="8" vgap="8" alignment="CENTER"
+              maxWidth="Infinity"/>
 
     <!-- Notes -->
-    <Label text="Notes" styleClass="title-2"/>
-    <TextArea fx:id="notesArea" promptText="Add call notes..."
-              prefHeight="100" wrapText="true">
+    <TextArea fx:id="notesArea" promptText="Add call notes…"
+              prefHeight="96" wrapText="true">
         <VBox.vgrow>ALWAYS</VBox.vgrow>
     </TextArea>
 
-    <!-- Hang up -->
-    <Region prefHeight="8"/>
-    <Button fx:id="hangUpButton" text="Hang Up" onAction="#onHangUp"
-            prefWidth="180" prefHeight="52" styleClass="danger"/>
-    <Label text="Esc to hang up"
-           style="-fx-font-size: 12; -fx-text-fill: -color-fg-muted;"
-           alignment="CENTER" maxWidth="Infinity"/>
+    <Label text="Esc to hang up · M Mute · H Hold · K Keypad"
+           styleClass="call-hint" alignment="CENTER" maxWidth="Infinity"/>
 
 </VBox>

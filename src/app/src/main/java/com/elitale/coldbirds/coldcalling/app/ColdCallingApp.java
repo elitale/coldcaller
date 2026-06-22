@@ -1,6 +1,7 @@
 package com.elitale.coldbirds.coldcalling.app;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
@@ -225,21 +226,41 @@ public final class ColdCallingApp extends Application {
                 )
         );
 
+        // Outbound: show the calling screen the instant the call starts ringing.
+        callService.setOnCallRinging(callId ->
+                mainWindow.showCallRinging(caller(callId), hangUpAndDispose(callId)));
+
+        // Outbound that never started (not signed in, DNC, etc.): show the reason.
+        callService.setOnCallFailed((remote, reason) -> {
+            mainWindow.showCallFailed(remote, reason, mainWindow::showDialer);
+            notifyError("Call failed: " + reason);
+        });
+
         callService.setOnCallAnswered(callId -> {
-            mainWindow.showActiveCall(caller(callId), Instant.now(), () -> {
-                callService.hangUp();
-                mainWindow.showDialer();
-            });
+            final boolean inbound = callService.getActiveCallDirection(callId)
+                    .map(direction -> direction == CallDirection.INBOUND)
+                    .orElse(false);
+            if (inbound) {
+                // Inbound: the incoming overlay was showing — open the calling screen now.
+                mainWindow.showActiveCall(caller(callId), Instant.now(), hangUpAndDispose(callId));
+            } else {
+                // Outbound: the ringing screen is already up — just connect it.
+                mainWindow.markCallConnected(Instant.now());
+            }
             powerDialerService.notifyCallAnswered(callId);
         });
 
         callService.setOnCallEnded((callId, reason) -> {
-            mainWindow.showDialer();
-            mainWindow.refreshRecentCalls();
             powerDialerService.notifyCallEnded(callId, reason);
+            mainWindow.refreshRecentCalls();
             if (reason != null && reason.startsWith(TelephonyService.FAILURE_PREFIX)) {
-                notifyError("Call failed: "
-                        + reason.substring(TelephonyService.FAILURE_PREFIX.length()));
+                // Failed call: keep the calling screen up and show the reason there.
+                final String detail = reason.substring(TelephonyService.FAILURE_PREFIX.length());
+                mainWindow.markCallFailed(detail);
+                notifyError("Call failed: " + detail);
+            } else {
+                mainWindow.endActiveCall();
+                mainWindow.showDialer();
             }
         });
 
@@ -255,6 +276,20 @@ public final class ColdCallingApp extends Application {
         if (mainWindow != null) {
             mainWindow.showError(message);
         }
+    }
+
+    /**
+     * Build the hang-up action for a given call: persists the disposition and
+     * notes chosen on the calling screen, ends the call, and returns to the dialer.
+     */
+    private Runnable hangUpAndDispose(String callId) {
+        return () -> {
+            mainWindow.selectedDisposition()
+                    .ifPresent(disposition -> callService.setDisposition(callId, disposition));
+            callService.setNotes(callId, mainWindow.callNotes());
+            callService.hangUp();
+            mainWindow.showDialer();
+        };
     }
 
     /**

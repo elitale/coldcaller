@@ -19,6 +19,8 @@ dependencies {
     compileOnly(project(':providers'))
     implementation(libs.atlantafx)
     implementation(libs.slf4j.api)
+    implementation(libs.ikonli.javafx)
+    implementation(libs.ikonli.bootstrapicons)
 
     testImplementation(project(':domain'))
     testCompileOnly(project(':telephony'))

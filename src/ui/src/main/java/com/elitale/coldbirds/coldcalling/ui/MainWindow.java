@@ -7,6 +7,7 @@ import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
@@ -48,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -151,11 +153,70 @@ public final class MainWindow {
         });
     }
 
-    /** Show the active-call view. Safe to call from any thread. */
+    /**
+     * Show the calling screen in its Ringing phase (outbound dial). The screen
+     * appears the instant the call starts ringing, before the remote answers.
+     * Safe to call from any thread.
+     */
+    public void showCallRinging(String remoteDisplay, Runnable onHangUp) {
+        Platform.runLater(() -> {
+            activeCallController.setOnHangUp(onHangUp);
+            activeCallController.startRinging(remoteDisplay);
+            root.setCenter(activeCallView);
+        });
+    }
+
+    /**
+     * Transition the on-screen calling screen from Ringing to Active when the
+     * outbound call connects. Safe to call from any thread.
+     */
+    public void markCallConnected(Instant connectedAt) {
+        activeCallController.markConnected(connectedAt);
+    }
+
+    /**
+     * Open the calling screen directly in its Active phase (inbound answered).
+     * Safe to call from any thread.
+     */
     public void showActiveCall(String remoteDisplay, Instant connectedAt, Runnable onHangUp) {
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onHangUp);
-            activeCallController.startCall(remoteDisplay, connectedAt);
+            activeCallController.startActive(remoteDisplay, connectedAt);
+            root.setCenter(activeCallView);
+        });
+    }
+
+    /** @return the disposition chosen on the calling screen, if any. */
+    public Optional<CallDisposition> selectedDisposition() {
+        return activeCallController.getDisposition();
+    }
+
+    /** @return the notes typed on the calling screen. */
+    public String callNotes() {
+        return activeCallController.getNotes();
+    }
+
+    /** Stop the calling screen's live duration timer. Safe to call from any thread. */
+    public void endActiveCall() {
+        activeCallController.endCall();
+    }
+
+    /**
+     * Keep the calling screen up and show the failure reason after a failed call.
+     * Safe to call from any thread.
+     */
+    public void markCallFailed(String reason) {
+        activeCallController.markFailed(reason);
+    }
+
+    /**
+     * Show the calling screen directly in its failed state for a call that never
+     * started (e.g. not signed in). Safe to call from any thread.
+     */
+    public void showCallFailed(String remoteDisplay, String reason, Runnable onClose) {
+        Platform.runLater(() -> {
+            activeCallController.setOnHangUp(onClose);
+            activeCallController.showFailed(remoteDisplay, reason);
             root.setCenter(activeCallView);
         });
     }

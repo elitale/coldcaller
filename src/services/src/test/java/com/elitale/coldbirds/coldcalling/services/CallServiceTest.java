@@ -70,6 +70,81 @@ class CallServiceTest {
         verify(telephony, never()).dial(any(), any());
     }
 
+    @Test
+    void dial_firesRingingCallbackWithCallId() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-call-9");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+        AtomicReference<String> ringingId = new AtomicReference<>();
+        callService.setOnCallRinging(ringingId::set);
+
+        callService.dial(REMOTE, LOCAL);
+
+        assertThat(ringingId.get()).isEqualTo("sip-call-9");
+    }
+
+    @Test
+    void dial_marksCallDirectionOutbound() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-call-9");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+
+        callService.dial(REMOTE, LOCAL);
+
+        assertThat(callService.getActiveCallDirection("sip-call-9"))
+                .contains(CallDirection.OUTBOUND);
+    }
+
+    @Test
+    void getActiveCallDirection_inboundCall() {
+        callService.onIncomingCall("call-in", REMOTE, LOCAL);
+
+        assertThat(callService.getActiveCallDirection("call-in"))
+                .contains(CallDirection.INBOUND);
+    }
+
+    @Test
+    void getActiveCallDirection_unknownCall_isEmpty() {
+        assertThat(callService.getActiveCallDirection("nope")).isEmpty();
+    }
+
+    @Test
+    void dial_blankCallId_firesFailedCallback() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+        AtomicReference<String> failedRemote = new AtomicReference<>();
+        AtomicReference<String> failedReason = new AtomicReference<>();
+        callService.setOnCallFailed((remote, reason) -> {
+            failedRemote.set(remote);
+            failedReason.set(reason);
+        });
+
+        callService.dial(REMOTE, LOCAL);
+
+        assertThat(failedRemote.get()).isEqualTo(REMOTE.value());
+        assertThat(failedReason.get()).isNotBlank();
+    }
+
+    @Test
+    void dial_dnc_firesFailedCallback() {
+        stubContactDnc(REMOTE, true);
+        AtomicReference<String> failedReason = new AtomicReference<>();
+        callService.setOnCallFailed((remote, reason) -> failedReason.set(reason));
+
+        callService.dial(REMOTE, LOCAL);
+
+        assertThat(failedReason.get()).contains("Do-Not-Call");
+    }
+
+    @Test
+    void dial_unknownLocalNumber_firesFailedCallback() {
+        when(phoneNumberRepo.findByNumber(LOCAL)).thenReturn(Optional.empty());
+        AtomicReference<String> failedReason = new AtomicReference<>();
+        callService.setOnCallFailed((remote, reason) -> failedReason.set(reason));
+
+        callService.dial(REMOTE, LOCAL);
+
+        assertThat(failedReason.get()).isNotBlank();
+    }
+
     // ── onIncomingCall ────────────────────────────────────────────────────────
 
     @Test
