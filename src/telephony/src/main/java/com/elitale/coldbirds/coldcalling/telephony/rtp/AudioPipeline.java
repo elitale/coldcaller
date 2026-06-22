@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import javax.sound.sampled.*;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Audio I/O pipeline for a live call.
@@ -173,23 +174,73 @@ public final class AudioPipeline implements AutoCloseable {
 
     private void openMicrophone() throws LineUnavailableException {
         final DataLine.Info info = new DataLine.Info(TargetDataLine.class, FORMAT);
-        if (inputDevice != null) {
-            micLine = (TargetDataLine) AudioSystem.getMixer(inputDevice).getLine(info);
-        } else {
-            micLine = (TargetDataLine) AudioSystem.getLine(info);
-        }
-        micLine.open(FORMAT, BUFFER_BYTES * 4);
+        final LineFactory<TargetDataLine> configured =
+                inputDevice == null ? null : () -> openCapture(inputDevice, info);
+        micLine = openWithFallback(configured, () -> openCapture(null, info),
+                msg -> LOG.warn("Configured microphone unavailable ({}); using system default", msg));
     }
 
     private void openSpeaker() throws LineUnavailableException {
         final DataLine.Info info = new DataLine.Info(SourceDataLine.class, FORMAT);
-        if (outputDevice != null) {
-            speakerLine = (SourceDataLine) AudioSystem.getMixer(outputDevice).getLine(info);
-        } else {
-            speakerLine = (SourceDataLine) AudioSystem.getLine(info);
-        }
-        speakerLine.open(FORMAT, BUFFER_BYTES * 4);
+        final LineFactory<SourceDataLine> configured =
+                outputDevice == null ? null : () -> openPlayback(outputDevice, info);
+        speakerLine = openWithFallback(configured, () -> openPlayback(null, info),
+                msg -> LOG.warn("Configured speaker unavailable ({}); using system default", msg));
         speakerLine.start();
+    }
+
+    private static TargetDataLine openCapture(final Mixer.Info device, final DataLine.Info info)
+            throws LineUnavailableException {
+        final TargetDataLine line = device == null
+                ? (TargetDataLine) AudioSystem.getLine(info)
+                : (TargetDataLine) AudioSystem.getMixer(device).getLine(info);
+        line.open(FORMAT, BUFFER_BYTES * 4);
+        return line;
+    }
+
+    private static SourceDataLine openPlayback(final Mixer.Info device, final DataLine.Info info)
+            throws LineUnavailableException {
+        final SourceDataLine line = device == null
+                ? (SourceDataLine) AudioSystem.getLine(info)
+                : (SourceDataLine) AudioSystem.getMixer(device).getLine(info);
+        line.open(FORMAT, BUFFER_BYTES * 4);
+        return line;
+    }
+
+    /**
+     * Open the configured device, falling back to the system default when it is
+     * unavailable. macOS Continuity devices (e.g. an "iPhone Microphone") enumerate
+     * transiently, so a cached {@link Mixer.Info} can go stale and make
+     * {@link AudioSystem#getMixer} throw {@link IllegalArgumentException}; an unplugged
+     * or busy device throws {@link LineUnavailableException}. Either way the call stays
+     * audible on the default device instead of failing the whole media session.
+     *
+     * <p>Package-private and static so the fallback path is unit-tested without hardware.
+     *
+     * @param configured    factory for the configured device, or null to use the default directly
+     * @param systemDefault factory for the system-default device
+     * @param onFallback    receives the failure message when a fallback occurs
+     * @return the opened line
+     * @throws LineUnavailableException if the system-default device also cannot be opened
+     */
+    static <T> T openWithFallback(
+            final LineFactory<T> configured,
+            final LineFactory<T> systemDefault,
+            final Consumer<String> onFallback) throws LineUnavailableException {
+        if (configured != null) {
+            try {
+                return configured.open();
+            } catch (final IllegalArgumentException | LineUnavailableException e) {
+                onFallback.accept(e.getMessage());
+            }
+        }
+        return systemDefault.open();
+    }
+
+    /** Opens an audio line, propagating {@link LineUnavailableException}. */
+    @FunctionalInterface
+    interface LineFactory<T> {
+        T open() throws LineUnavailableException;
     }
 
     // ------------------------------------------------------------------
