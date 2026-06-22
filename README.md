@@ -324,20 +324,36 @@ Verbose output:
 
 ## Packaging (Native Installer)
 
-Requires a JDK with `jpackage` included (standard in JDK 14+).
+`jpackage` (bundled with JDK 21) builds a **native installer for the OS it runs on** — you
+cannot cross-build (e.g. no Windows `.msi` from macOS). Build on each target OS, or let CI
+build all three at once (see [All three platforms at once](#all-three-platforms-at-once-ci)).
 
 ```bash
-# macOS — produces a .dmg
-./gradlew :app:jpackage -Pplatform=mac
-
-# Windows — produces a .msi
-./gradlew :app:jpackage -Pplatform=win
-
-# Linux — produces a .deb
-./gradlew :app:jpackage -Pplatform=linux
+./gradlew :app:jpackage     # installer for the current OS → src/app/build/jpackage/
 ```
 
-> **macOS code signing:** For distribution outside the App Store, pass `--mac-sign` with an Apple Developer ID certificate. For local dev builds, omit signing or use `--type app-image` to skip the DMG step.
+| Host OS | Output | Extra tools required |
+|---|---|---|
+| macOS | `coldCalling-<version>.dmg` | — (Xcode CLT only for signing) |
+| Windows | `coldCalling-<version>.msi` | [WiX Toolset v3](https://wixtoolset.org/) |
+| Linux | `coldcalling_<version>_amd64.deb` | `fakeroot`, `binutils` |
+
+Handy overrides:
+
+```bash
+./gradlew :app:jpackage -PappVersion=1.4.0       # stamp the installer version
+./gradlew :app:jpackage -PpackageType=app-image  # unpacked app folder, no installer
+# other types: macOS → pkg · Windows → exe · Linux → rpm
+```
+
+### All three platforms at once (CI)
+
+Push a `v*` tag — or run the **Package** workflow manually — and the matrix in
+[`.github/workflows/release.yml`](.github/workflows/release.yml) builds the `.dmg`, `.msi`,
+and `.deb` on `macos-latest`, `windows-latest`, and `ubuntu-latest`, uploading each as a
+downloadable artifact.
+
+> **macOS code signing:** For distribution outside the App Store, pass `--mac-sign` with an Apple Developer ID certificate. For local dev builds, omit signing or use `-PpackageType=app-image` to skip the DMG step.
 
 ---
 

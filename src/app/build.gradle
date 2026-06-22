@@ -9,7 +9,10 @@ javafx {
 }
 
 application {
-    mainClass = 'com.elitale.coldbirds.coldcalling.app.ColdCallingApp'
+    applicationName = 'coldCalling'
+    // Launch through a plain class (not the Application subclass) so the jpackage
+    // classpath image doesn't abort with "JavaFX runtime components are missing".
+    mainClass = 'com.elitale.coldbirds.coldcalling.app.Launcher'
 }
 
 dependencies {
@@ -25,4 +28,66 @@ dependencies {
     // Required at compile time to resolve TelephonyService's SipListener type hierarchy.
     // Provided at runtime transitively by the telephony module.
     compileOnly(libs.jain.sip.api)
+}
+
+// jpackage puts only the --main-jar on the launcher classpath, so turn the app jar into a
+// self-contained launcher: list every runtime jar (all staged as siblings by installDist).
+// Resolved in doFirst to keep dependency resolution out of the configuration phase.
+tasks.named('jar') {
+    manifest {
+        attributes(
+            'Implementation-Title': 'coldCalling',
+            'Main-Class'          : application.mainClass.get()
+        )
+    }
+    doFirst {
+        manifest.attributes(
+            'Class-Path': configurations.runtimeClasspath.collect { it.name }.join(' ')
+        )
+    }
+}
+
+// ── Native packaging ───────────────────────────────────────────────────────
+// jpackage only builds an installer for the OS it runs on, so each platform is produced on
+// its own machine/runner (see .github/workflows/release.yml). `installDist` stages the app
+// jar plus every runtime jar into one lib dir, which becomes the jpackage --input.
+def currentOs = org.gradle.internal.os.OperatingSystem.current()
+def defaultPackageType = currentOs.windows ? 'msi' : (currentOs.macOsX ? 'dmg' : 'deb')
+
+tasks.register('jpackage', Exec) {
+    group = 'distribution'
+    description = 'Build a native installer for the current OS via jpackage.'
+    dependsOn tasks.named('installDist')
+
+    def appName     = application.applicationName
+    def packageType = (project.findProperty('packageType') ?: defaultPackageType).toString()
+    // jpackage requires a numeric MAJOR[.MINOR[.PATCH]] version: drop a leading 'v' and any suffix.
+    def cleaned     = (project.findProperty('appVersion') ?: '1.0.0').toString()
+                          .replaceFirst('^v', '').replaceAll('[^0-9.].*$', '')
+    def appVersion  = cleaned ?: '1.0.0'
+    def libDir      = layout.buildDirectory.dir("install/${appName}/lib")
+    def destDir     = layout.buildDirectory.dir('jpackage')
+    def jpackageBin = "${System.getProperty('java.home')}/bin/jpackage"
+
+    doFirst {
+        delete destDir
+        destDir.get().asFile.mkdirs()
+        commandLine(
+            jpackageBin,
+            '--type',        packageType,
+            '--name',        appName,
+            '--app-version', appVersion,
+            '--vendor',      'Elitale',
+            '--input',       libDir.get().asFile.absolutePath,
+            '--main-jar',    tasks.named('jar').get().archiveFileName.get(),
+            '--main-class',  application.mainClass.get(),
+            '--dest',        destDir.get().asFile.absolutePath,
+            // Shape the bundled runtime: JavaFX/audio (java.desktop), JDBC (java.sql),
+            // HTTPS (jdk.crypto.ec), HttpClient (java.net.http), plus Unsafe, zipfs, and
+            // locale data so international phone-number formatting works off the US locale.
+            '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.management,' +
+                             'java.net.http,java.logging,java.xml,jdk.crypto.ec,' +
+                             'jdk.unsupported,jdk.zipfs,jdk.localedata'
+        )
+    }
 }

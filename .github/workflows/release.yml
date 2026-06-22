@@ -1,0 +1,70 @@
+name: Package
+
+# Native installers are built per-OS because jpackage can only target the OS it runs on.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS (.dmg)
+            artifact: coldcalling-macos
+          - os: windows-latest
+            label: Windows (.msi)
+            artifact: coldcalling-windows
+          - os: ubuntu-latest
+            label: Linux (.deb)
+            artifact: coldcalling-linux
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # jpackage's .deb backend needs fakeroot, and binutils provides objcopy.
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot binutils
+
+      # jpackage's .msi backend needs WiX Toolset v3 (candle/light). Runners usually
+      # ship it, but install it explicitly so the job doesn't break when they don't.
+      - name: Ensure WiX Toolset (Windows)
+        if: runner.os == 'Windows'
+        run: choco install wixtoolset --no-progress -y
+        shell: pwsh
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # github.ref_name is the tag (e.g. v1.4.0) on tag pushes; the task strips the
+      # leading "v" and any pre-release suffix to satisfy jpackage's numeric --app-version.
+      - name: Build native installer
+        run: ./gradlew :app:jpackage -PappVersion=${{ github.ref_name }} --stacktrace
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: src/app/build/jpackage/*
+          if-no-files-found: error
+          retention-days: 14
