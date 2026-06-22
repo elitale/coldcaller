@@ -70,4 +70,25 @@ public final class DispositionCatalog {
             default               -> Optional.empty();
         };
     }
+
+    /**
+     * Reverse mapping: the chip {@link Option#label()} for a domain disposition,
+     * used to pre-select the matching chip when a prior call's outcome is loaded.
+     *
+     * @param disposition the persisted disposition
+     * @return the chip label that represents it
+     */
+    public static String labelOf(CallDisposition disposition) {
+        Objects.requireNonNull(disposition, "disposition must not be null");
+        return switch (disposition) {
+            case CallDisposition.Interested ignored    -> "Interested";
+            case CallDisposition.NotInterested ignored -> "Not Interested";
+            case CallDisposition.Callback ignored      -> "Callback";
+            case CallDisposition.Voicemail ignored     -> "Voicemail";
+            case CallDisposition.NoAnswer ignored      -> "No Answer";
+            case CallDisposition.Busy ignored          -> "Busy";
+            case CallDisposition.DNC ignored           -> "DNC";
+            case CallDisposition.Failed ignored        -> "Failed";
+        };
+    }
 }

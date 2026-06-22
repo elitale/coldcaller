@@ -1,9 +1,17 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
+import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.ui.support.CallDurationFormatter;
+import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
+import com.elitale.coldbirds.coldcalling.ui.support.CallTones;
 import com.elitale.coldbirds.coldcalling.ui.support.DispositionCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.LocalTimeFormatter;
+import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
@@ -11,6 +19,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -18,6 +27,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
@@ -26,28 +36,32 @@ import org.kordamp.ikonli.javafx.FontIcon;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
  * Controller for the in-window calling screen (active-call-view.fxml).
  * <p>
- * Drives four lifecycle phases — Ringing → Active → On Hold → Ended — and owns
- * a one-second {@link Timeline} that refreshes the live duration once connected.
- * Primary controls (Mute · Keypad · Hold · Voicemail · Hang Up) carry Bootstrap
- * glyphs; disposition chips and a DTMF keypad overlay are built in code.
+ * Drives five phases — Ringing → Active → On Hold → Wrap-up / Failed — with a
+ * pulsing avatar halo, a live duration + remote local-time clock, synthesised
+ * ringback/connect/hangup/DTMF tones, contact identity, disposition chips and
+ * notes. After a call ends naturally the screen stays in a Wrap-up phase so the
+ * rep can finish notes and a disposition before saving.
  * <p>
- * Threading: {@link #startRinging}, {@link #markConnected}, {@link #startActive}
- * and {@link #endCall} are safe to call from any thread; all other methods must
- * run on the FX Application Thread.
+ * Threading: all public mutators are safe to call from any thread.
  */
 public final class ActiveCallController {
 
-    private enum Phase { RINGING, ACTIVE, HOLD, ENDED }
+    private enum Phase { RINGING, ACTIVE, HOLD, WRAPUP, FAILED }
 
-    @FXML private Button    moreButton;
+    @FXML private VBox      callingScreen;
+    @FXML private Button    closeButton;
+    @FXML private Region    haloCircle;
     @FXML private StackPane avatarRing;
     @FXML private Label     avatarLabel;
     @FXML private Label     remotePartyLabel;
+    @FXML private Label     numberLabel;
+    @FXML private Label     locationLabel;
     @FXML private Label     statusLabel;
     @FXML private Button    muteButton;
     @FXML private Button    keypadButton;
@@ -59,28 +73,44 @@ public final class ActiveCallController {
     @FXML private GridPane  keypadGrid;
     @FXML private FlowPane  dispositionChips;
     @FXML private TextArea  notesArea;
+    @FXML private Label     notesStatus;
 
     private final ToggleGroup dispositionGroup = new ToggleGroup();
-    private Timeline durationTimer;
+    private final CallTones   tones = new CallTones();
+
+    private Timeline tickTimer;
+    private Timeline pulseTimer;
+    private PauseTransition notesDebounce;
+    private boolean  suppressAutoSave = false;
     private Instant  callStartedAt;
     private Phase    phase = Phase.RINGING;
     private boolean  muted = false;
+    private Optional<Country> country = Optional.empty();
+    private String   subtitle = "";
 
     // Callbacks
     private Runnable          onHangUpCb = () -> {};
     private Consumer<Boolean> onMuteCb   = ignored -> {};
     private Consumer<Boolean> onHoldCb   = ignored -> {};
-    private Consumer<String>  onNotesCb  = ignored -> {};
     private Consumer<String>  onDtmfCb   = ignored -> {};
+    private BiConsumer<Optional<CallDisposition>, String> onLogChangedCb = (d, n) -> {};
 
     /** Default no-arg constructor — required by FXMLLoader. */
     public ActiveCallController() {}
 
-    public void setOnHangUp(Runnable cb)             { this.onHangUpCb = Objects.requireNonNull(cb); }
-    public void setOnMute(Consumer<Boolean> cb)      { this.onMuteCb   = Objects.requireNonNull(cb); }
-    public void setOnHold(Consumer<Boolean> cb)      { this.onHoldCb   = Objects.requireNonNull(cb); }
-    public void setOnNotesSaved(Consumer<String> cb) { this.onNotesCb  = Objects.requireNonNull(cb); }
-    public void setOnDtmf(Consumer<String> cb)       { this.onDtmfCb   = Objects.requireNonNull(cb); }
+    public void setOnHangUp(Runnable cb)        { this.onHangUpCb = Objects.requireNonNull(cb); }
+    public void setOnMute(Consumer<Boolean> cb) { this.onMuteCb   = Objects.requireNonNull(cb); }
+    public void setOnHold(Consumer<Boolean> cb) { this.onHoldCb   = Objects.requireNonNull(cb); }
+    public void setOnDtmf(Consumer<String> cb)  { this.onDtmfCb   = Objects.requireNonNull(cb); }
+
+    /**
+     * Register the auto-save sink. Fired (debounced for notes, immediately for a
+     * disposition pick) with the current disposition + notes whenever the rep
+     * edits the call log, so a record is never lost if they forget to save.
+     */
+    public void setOnLogChanged(BiConsumer<Optional<CallDisposition>, String> cb) {
+        this.onLogChangedCb = Objects.requireNonNull(cb);
+    }
 
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
 
@@ -91,18 +121,33 @@ public final class ActiveCallController {
         applyIcon(holdButton,      "bi-pause-fill",       "Hold");
         applyIcon(voicemailButton, "bi-soundwave",        "Voicemail");
         applyIcon(hangUpButton,    "bi-telephone-x-fill", "Hang Up");
-        applyIcon(moreButton,      "bi-three-dots",       null);
+        applyIcon(closeButton,     "bi-x",                null);
 
         voicemailButton.setDisable(true);
         voicemailButton.setTooltip(new Tooltip("Voicemail drop — coming soon"));
-        moreButton.setDisable(true);
-        moreButton.setTooltip(new Tooltip("Switch mic / speaker — coming soon"));
+        closeButton.setTooltip(new Tooltip("Close"));
+        closeButton.setOnAction(e -> onHangUp());
 
         buildKeypad();
         buildDispositionChips();
 
-        durationTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> refreshDuration()));
-        durationTimer.setCycleCount(Timeline.INDEFINITE);
+        tickTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> onTick()));
+        tickTimer.setCycleCount(Timeline.INDEFINITE);
+        pulseTimer = buildPulse();
+
+        // Auto-save: debounce note typing, persist a disposition pick immediately.
+        notesDebounce = new PauseTransition(Duration.millis(500));
+        notesDebounce.setOnFinished(e -> fireLogChanged());
+        notesArea.textProperty().addListener((obs, old, val) -> {
+            if (suppressAutoSave) return;
+            setNotesStatus("Saving\u2026");
+            notesDebounce.playFromStart();
+        });
+        dispositionGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
+            if (suppressAutoSave) return;
+            notesDebounce.stop();
+            fireLogChanged();
+        });
     }
 
     private static void applyIcon(Button button, String iconLiteral, String text) {
@@ -110,6 +155,20 @@ public final class ActiveCallController {
         icon.setIconSize(20);
         button.setGraphic(icon);
         button.setContentDisplay(text == null ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.TOP);
+    }
+
+    private Timeline buildPulse() {
+        Timeline pulse = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                        new KeyValue(haloCircle.scaleXProperty(), 0.85),
+                        new KeyValue(haloCircle.scaleYProperty(), 0.85),
+                        new KeyValue(haloCircle.opacityProperty(), 0.55)),
+                new KeyFrame(Duration.millis(1400),
+                        new KeyValue(haloCircle.scaleXProperty(), 1.6, Interpolator.EASE_OUT),
+                        new KeyValue(haloCircle.scaleYProperty(), 1.6, Interpolator.EASE_OUT),
+                        new KeyValue(haloCircle.opacityProperty(), 0.0, Interpolator.EASE_OUT)));
+        pulse.setCycleCount(Timeline.INDEFINITE);
+        return pulse;
     }
 
     private void buildKeypad() {
@@ -138,72 +197,85 @@ public final class ActiveCallController {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /**
-     * Show the screen in its Ringing phase: identity set, controls disabled,
-     * notes focused, duration timer stopped. Resets prior notes/disposition.
-     * Safe to call from any thread.
-     */
-    public void startRinging(String remoteDisplay) {
-        Objects.requireNonNull(remoteDisplay, "remoteDisplay must not be null");
+    /** Show the screen in its Ringing phase with the resolved party. Any thread. */
+    public void startRinging(CallParticipant party) {
+        Objects.requireNonNull(party, "party must not be null");
         runOnFx(() -> {
-            reset(remoteDisplay);
+            reset(party);
             phase = Phase.RINGING;
             statusLabel.setText("Ringing\u2026");
             setRingStyle("call-ring--ringing");
             hangUpButton.setText("Cancel");
             setControlsDisabled(true);
-            notesArea.requestFocus();
+            startPulse();
+            tones.startRingback();
+            animateIn();
         });
     }
 
-    /**
-     * Transition the current Ringing screen to Active: start the timer and
-     * enable controls. Preserves any notes typed during ringing. Safe to call
-     * from any thread.
-     */
+    /** Transition the ringing screen to Active when the call connects. Any thread. */
     public void markConnected(Instant connectedAt) {
         Objects.requireNonNull(connectedAt, "connectedAt must not be null");
         runOnFx(() -> {
             callStartedAt = connectedAt;
             phase = Phase.ACTIVE;
+            stopPulse();
+            tones.stopRingback();
+            tones.connect();
             setRingStyle("call-ring--active");
             hangUpButton.setText("Hang Up");
             setControlsDisabled(false);
+            notesArea.requestFocus();
             refreshDuration();
-            durationTimer.playFromStart();
+            tickTimer.playFromStart();
         });
     }
 
-    /**
-     * Open the screen directly in its Active phase (inbound answered path):
-     * resets identity/notes then connects. Safe to call from any thread.
-     */
-    public void startActive(String remoteDisplay, Instant connectedAt) {
-        Objects.requireNonNull(remoteDisplay, "remoteDisplay must not be null");
-        Objects.requireNonNull(connectedAt,   "connectedAt must not be null");
+    /** Open the screen directly in its Active phase (inbound answered). Any thread. */
+    public void startActive(CallParticipant party, Instant connectedAt) {
+        Objects.requireNonNull(party, "party must not be null");
+        Objects.requireNonNull(connectedAt, "connectedAt must not be null");
         runOnFx(() -> {
-            reset(remoteDisplay);
+            reset(party);
+            animateIn();
             markConnected(connectedAt);
         });
     }
 
-    /** Stop the duration timer. Safe to call from any thread. */
-    public void endCall() {
-        runOnFx(() -> durationTimer.stop());
+    /**
+     * Move the screen to its Wrap-up phase after a call ends naturally: the line
+     * is down but notes and disposition stay editable so the rep can log the
+     * call, then "Save &amp; Close" persists and dismisses. Any thread.
+     */
+    public void markEnded(Instant endedAt) {
+        Objects.requireNonNull(endedAt, "endedAt must not be null");
+        runOnFx(() -> {
+            stopPulse();
+            tones.stopRingback();
+            tones.hangup();
+            phase = Phase.WRAPUP;
+            setRingStyle("call-ring--ended");
+            statusLabel.getStyleClass().remove("call-status--failed");
+            statusLabel.setText("Call ended" + durationSuffix());
+            disableCallControls();
+            hangUpButton.setDisable(false);
+            hangUpButton.setText("Save & Close");
+            ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-check-lg");
+            notesArea.requestFocus();
+        });
     }
 
-    /**
-     * Move the screen to its Ended phase after a failed call, showing the
-     * (already human-readable) failure reason in place of the duration and
-     * relabelling the primary button to "Close". Safe to call from any thread.
-     */
+    /** Move the screen to its Failed phase, showing the reason. Any thread. */
     public void markFailed(String reason) {
         Objects.requireNonNull(reason, "reason must not be null");
         runOnFx(() -> {
-            durationTimer.stop();
-            phase = Phase.ENDED;
+            stopPulse();
+            tones.stopRingback();
+            tones.hangup();
+            phase = Phase.FAILED;
             setRingStyle("call-ring--failed");
             setControlsDisabled(true);
+            hangUpButton.setDisable(false);
             if (!statusLabel.getStyleClass().contains("call-status--failed")) {
                 statusLabel.getStyleClass().add("call-status--failed");
             }
@@ -213,17 +285,24 @@ public final class ActiveCallController {
         });
     }
 
-    /**
-     * Open the calling screen directly in its failed Ended phase (a call that
-     * never started). Resets identity then shows the reason. Safe to call from
-     * any thread.
-     */
-    public void showFailed(String remoteDisplay, String reason) {
-        Objects.requireNonNull(remoteDisplay, "remoteDisplay must not be null");
+    /** Open the calling screen directly in its Failed phase (a call that never started). */
+    public void showFailed(CallParticipant party, String reason) {
+        Objects.requireNonNull(party, "party must not be null");
         Objects.requireNonNull(reason, "reason must not be null");
         runOnFx(() -> {
-            reset(remoteDisplay);
+            reset(party);
+            animateIn();
             markFailed(reason);
+        });
+    }
+
+    /** Stop timers and sounds (called when the screen is dismissed). Any thread. */
+    public void dispose() {
+        runOnFx(() -> {
+            tickTimer.stop();
+            if (notesDebounce != null) notesDebounce.stop();
+            stopPulse();
+            tones.stopRingback();
         });
     }
 
@@ -250,7 +329,7 @@ public final class ActiveCallController {
             onHangUp();
             return;
         }
-        if (phase == Phase.RINGING || phase == Phase.ENDED) return;
+        if (phase == Phase.RINGING || phase == Phase.WRAPUP || phase == Phase.FAILED) return;
         if (keypadOverlay.isVisible()) {
             String text = event.getText();
             if (text != null && text.matches("[0-9*#]")) {
@@ -281,6 +360,7 @@ public final class ActiveCallController {
         muted = !muted;
         ((FontIcon) muteButton.getGraphic()).setIconLiteral(muted ? "bi-mic-mute-fill" : "bi-mic");
         muteButton.setText(muted ? "Unmute" : "Mute");
+        toggleStyle(muteButton, "call-control--on", muted);
         onMuteCb.accept(muted);
     }
 
@@ -290,6 +370,7 @@ public final class ActiveCallController {
         phase = held ? Phase.HOLD : Phase.ACTIVE;
         ((FontIcon) holdButton.getGraphic()).setIconLiteral(held ? "bi-play-fill" : "bi-pause-fill");
         holdButton.setText(held ? "Resume" : "Hold");
+        toggleStyle(holdButton, "call-control--on", held);
         setRingStyle(held ? "call-ring--hold" : "call-ring--active");
         if (held) statusLabel.setText("On hold");
         onHoldCb.accept(held);
@@ -300,30 +381,36 @@ public final class ActiveCallController {
         boolean show = !keypadOverlay.isVisible();
         keypadOverlay.setVisible(show);
         keypadOverlay.setManaged(show);
+        toggleStyle(keypadButton, "call-control--on", show);
         if (show) {
-            if (!keypadButton.getStyleClass().contains("call-control--on")) {
-                keypadButton.getStyleClass().add("call-control--on");
-            }
             keypadOverlay.requestFocus();
         } else {
-            keypadButton.getStyleClass().remove("call-control--on");
             dtmfReadout.setText("");
         }
     }
 
     @FXML
     private void onHangUp() {
-        onNotesCb.accept(getNotes());
         onHangUpCb.run();
     }
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    private void reset(String remoteDisplay) {
-        remotePartyLabel.setText(remoteDisplay);
-        avatarLabel.setText(initials(remoteDisplay));
-        notesArea.clear();
-        dispositionGroup.selectToggle(null);
+    private void reset(CallParticipant party) {
+        suppressAutoSave = true;
+        if (notesDebounce != null) notesDebounce.stop();
+        remotePartyLabel.setText(party.headline());
+        avatarLabel.setText(party.initials());
+        boolean named = party.name().isPresent();
+        numberLabel.setText(named ? party.number() : "");
+        numberLabel.setVisible(named);
+        numberLabel.setManaged(named);
+        subtitle = party.subtitle().orElse("");
+        country = party.country();
+        refreshLocation();
+
+        notesArea.setText(party.priorNotes().orElse(""));
+        selectPriorDisposition(party.priorDisposition());
         dtmfReadout.setText("");
         keypadOverlay.setVisible(false);
         keypadOverlay.setManaged(false);
@@ -331,17 +418,79 @@ public final class ActiveCallController {
         muted = false;
         ((FontIcon) muteButton.getGraphic()).setIconLiteral("bi-mic");
         muteButton.setText("Mute");
+        muteButton.getStyleClass().remove("call-control--on");
         holdButton.setText("Hold");
+        holdButton.getStyleClass().remove("call-control--on");
         ((FontIcon) holdButton.getGraphic()).setIconLiteral("bi-pause-fill");
         hangUpButton.setText("Hang Up");
+        hangUpButton.setDisable(false);
         ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-telephone-x-fill");
         statusLabel.getStyleClass().remove("call-status--failed");
-        durationTimer.stop();
         statusLabel.setText("");
+        setNotesStatus("");
+        tickTimer.playFromStart();
+        suppressAutoSave = false;
+    }
+
+    private void fireLogChanged() {
+        if (suppressAutoSave) return;
+        onLogChangedCb.accept(getDisposition(), getNotes());
+        setNotesStatus("Saved \u2713");
+    }
+
+    /** Select the disposition chip that matches a prior call's outcome, if any. */
+    private void selectPriorDisposition(Optional<CallDisposition> disposition) {
+        if (disposition.isEmpty()) {
+            dispositionGroup.selectToggle(null);
+            return;
+        }
+        final String label = DispositionCatalog.labelOf(disposition.get());
+        for (Toggle toggle : dispositionGroup.getToggles()) {
+            if (label.equals(toggle.getUserData())) {
+                dispositionGroup.selectToggle(toggle);
+                return;
+            }
+        }
+        dispositionGroup.selectToggle(null);
+    }
+
+    private void setNotesStatus(String text) {
+        if (notesStatus == null) return;
+        notesStatus.setText(text);
+        boolean show = !text.isBlank();
+        notesStatus.setVisible(show);
+        notesStatus.setManaged(show);
+    }
+
+    private void onTick() {
+        if (phase == Phase.ACTIVE) refreshDuration();
+        refreshLocation();
+    }
+
+    private void refreshLocation() {
+        StringBuilder text = new StringBuilder();
+        if (!subtitle.isBlank()) {
+            text.append(subtitle);
+        }
+        country.ifPresent(c -> {
+            if (text.length() > 0) text.append("   ·   ");
+            text.append(LocalTimeFormatter.describe(c, Instant.now()));
+        });
+        boolean show = text.length() > 0;
+        locationLabel.setText(text.toString());
+        locationLabel.setVisible(show);
+        locationLabel.setManaged(show);
+    }
+
+    private String durationSuffix() {
+        if (callStartedAt == null) return "";
+        return " · " + CallDurationFormatter.format(
+                java.time.Duration.between(callStartedAt, Instant.now()));
     }
 
     private void pressDigit(String digit) {
         dtmfReadout.setText(dtmfReadout.getText() + digit);
+        tones.dtmf(digit);
         onDtmfCb.accept(digit);
     }
 
@@ -363,10 +512,25 @@ public final class ActiveCallController {
         holdButton.setDisable(disabled);
     }
 
+    private void disableCallControls() {
+        muteButton.setDisable(true);
+        keypadButton.setDisable(true);
+        holdButton.setDisable(true);
+    }
+
     private void setRingStyle(String activeClass) {
         avatarRing.getStyleClass().removeAll(
-                "call-ring--ringing", "call-ring--active", "call-ring--hold");
+                "call-ring--ringing", "call-ring--active", "call-ring--hold",
+                "call-ring--ended", "call-ring--failed");
         avatarRing.getStyleClass().add(activeClass);
+    }
+
+    private static void toggleStyle(Button button, String styleClass, boolean on) {
+        if (on) {
+            if (!button.getStyleClass().contains(styleClass)) button.getStyleClass().add(styleClass);
+        } else {
+            button.getStyleClass().remove(styleClass);
+        }
     }
 
     private void refreshDuration() {
@@ -375,15 +539,23 @@ public final class ActiveCallController {
                 java.time.Duration.between(callStartedAt, Instant.now())));
     }
 
-    private static String initials(String display) {
-        String trimmed = (display == null) ? "" : display.strip();
-        if (trimmed.isEmpty()) return "?";
-        String[] parts = trimmed.split("\\s+");
-        if (parts.length >= 2 && !parts[0].isEmpty() && !parts[1].isEmpty()) {
-            return ("" + parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
-        }
-        char first = trimmed.charAt(0);
-        return Character.isLetter(first) ? String.valueOf(Character.toUpperCase(first)) : "#";
+    private void startPulse() {
+        haloCircle.setVisible(true);
+        pulseTimer.playFromStart();
+    }
+
+    private void stopPulse() {
+        pulseTimer.stop();
+        haloCircle.setVisible(false);
+        haloCircle.setOpacity(0);
+    }
+
+    private void animateIn() {
+        callingScreen.setOpacity(0);
+        FadeTransition fade = new FadeTransition(Duration.millis(220), callingScreen);
+        fade.setFromValue(0);
+        fade.setToValue(1);
+        fade.play();
     }
 
     private static void runOnFx(Runnable action) {

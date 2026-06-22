@@ -7,7 +7,9 @@ import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
+import com.elitale.coldbirds.coldcalling.domain.model.Contact;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
+import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
@@ -20,6 +22,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.IncomingCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
+import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
 import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
@@ -103,6 +106,9 @@ public final class MainWindow {
     /** Non-blocking right-docked detail panel (built lazily on first open). */
     private NumberDetailPanel     numberDetailPanel;
 
+    /** Auto-save sink registered before {@link #show()} builds the controller. */
+    private BiConsumer<Optional<CallDisposition>, String> pendingLogAutoSave;
+
     // Loaded FXML roots
     private Parent dialerView;
     private Parent incomingCallView;
@@ -158,10 +164,11 @@ public final class MainWindow {
      * appears the instant the call starts ringing, before the remote answers.
      * Safe to call from any thread.
      */
-    public void showCallRinging(String remoteDisplay, Runnable onHangUp) {
+    public void showCallRinging(String number, Runnable onHangUp) {
+        final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onHangUp);
-            activeCallController.startRinging(remoteDisplay);
+            activeCallController.startRinging(party);
             root.setCenter(activeCallView);
         });
     }
@@ -178,10 +185,11 @@ public final class MainWindow {
      * Open the calling screen directly in its Active phase (inbound answered).
      * Safe to call from any thread.
      */
-    public void showActiveCall(String remoteDisplay, Instant connectedAt, Runnable onHangUp) {
+    public void showActiveCall(String number, Instant connectedAt, Runnable onHangUp) {
+        final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onHangUp);
-            activeCallController.startActive(remoteDisplay, connectedAt);
+            activeCallController.startActive(party, connectedAt);
             root.setCenter(activeCallView);
         });
     }
@@ -196,29 +204,76 @@ public final class MainWindow {
         return activeCallController.getNotes();
     }
 
-    /** Stop the calling screen's live duration timer. Safe to call from any thread. */
+    /**
+     * Register the calling screen's auto-save sink. Invoked (debounced for notes,
+     * immediately for a disposition pick) with the current disposition + notes so
+     * the call log is persisted continuously, not just on "Save &amp; Close".
+     * May be called before {@link #show()} builds the controller; the handler is
+     * then applied once the controller exists.
+     */
+    public void setOnCallLogAutoSave(BiConsumer<Optional<CallDisposition>, String> handler) {
+        this.pendingLogAutoSave = Objects.requireNonNull(handler);
+        if (activeCallController != null) {
+            activeCallController.setOnLogChanged(handler);
+        }
+    }
+
+    /** Stop the calling screen's timers and tones. Safe to call from any thread. */
     public void endActiveCall() {
-        activeCallController.endCall();
+        activeCallController.dispose();
     }
 
     /**
-     * Keep the calling screen up and show the failure reason after a failed call.
+     * Move the on-screen calling screen into its wrap-up phase after a call ends
+     * naturally, keeping notes and disposition editable until the rep saves.
+     * {@code onSaveClose} persists those edits and returns to the dialer.
      * Safe to call from any thread.
      */
-    public void markCallFailed(String reason) {
-        activeCallController.markFailed(reason);
+    public void showCallWrapUp(Instant endedAt, Runnable onSaveClose) {
+        Platform.runLater(() -> {
+            activeCallController.setOnHangUp(onSaveClose);
+            activeCallController.markEnded(endedAt);
+        });
+    }
+
+    /**
+     * Keep the calling screen up and show the failure reason after a mid-call
+     * failure. {@code onClose} dismisses the screen. Safe to call from any thread.
+     */
+    public void markCallFailed(String reason, Runnable onClose) {
+        Platform.runLater(() -> {
+            activeCallController.setOnHangUp(onClose);
+            activeCallController.markFailed(reason);
+        });
     }
 
     /**
      * Show the calling screen directly in its failed state for a call that never
      * started (e.g. not signed in). Safe to call from any thread.
      */
-    public void showCallFailed(String remoteDisplay, String reason, Runnable onClose) {
+    public void showCallFailed(String number, String reason, Runnable onClose) {
+        final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onClose);
-            activeCallController.showFailed(remoteDisplay, reason);
+            activeCallController.showFailed(party, reason);
             root.setCenter(activeCallView);
         });
+    }
+
+    /** Resolve a remote number to a display participant (contact + country). */
+    private CallParticipant participantFor(String number) {
+        Optional<Contact> contact = Optional.empty();
+        Optional<Call> priorCall = Optional.empty();
+        try {
+            final PhoneNumber remote = new PhoneNumber(number);
+            contact = contactService.findByPhone(remote);
+            final List<Call> history = callService.findByRemoteNumber(remote);
+            priorCall = history.isEmpty() ? Optional.empty() : Optional.of(history.get(0));
+        } catch (final IllegalArgumentException ignored) {
+            // Non-E.164 caller id — fall back to number-only display.
+        }
+        final Optional<Country> country = CountryLookup.byE164(CountryCatalog.ALL, number);
+        return CallParticipant.of(number, contact, country, priorCall);
     }
 
     /** Return to the dialer view. Safe to call from any thread. */
@@ -355,6 +410,9 @@ public final class MainWindow {
         // ── Active call view
         activeCallController = new ActiveCallController();
         activeCallView = loadFxml("/fxml/active-call-view.fxml", activeCallController);
+        if (pendingLogAutoSave != null) {
+            activeCallController.setOnLogChanged(pendingLogAutoSave);
+        }
 
         root = new BorderPane();
         root.setLeft(buildSidebar());

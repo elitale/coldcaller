@@ -15,6 +15,7 @@ import com.elitale.coldbirds.coldcalling.ui.support.ContactEditForm;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.RecordingPlayer;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -88,6 +89,7 @@ public final class NumberDetailPanel {
     private final ZoneId localZone = ZoneId.systemDefault();
     private final RecordingPlayer player = new RecordingPlayer();
     private final List<Button> playButtons = new ArrayList<>();
+    private final List<Button> dispositionButtons = new ArrayList<>();
 
     private final VBox root = new VBox();
     private final VBox body = new VBox(16);
@@ -326,6 +328,7 @@ public final class NumberDetailPanel {
     }
 
     private VBox dispositionZone() {
+        dispositionButtons.clear();
         final FlowPane chips = new FlowPane(8, 8);
         final Optional<CallDisposition> active = latestCall.flatMap(Call::disposition);
         for (final Chip chip : CHIPS) {
@@ -335,7 +338,8 @@ public final class NumberDetailPanel {
                 b.getStyleClass().add("detail-chip-active");
             }
             b.setDisable(latestCall.isEmpty());
-            b.setOnAction(e -> applyDisposition(chip.sample().get()));
+            b.setOnAction(e -> applyDisposition(chip.sample().get(), b));
+            dispositionButtons.add(b);
             chips.getChildren().add(b);
         }
         final VBox box = new VBox(6, sectionTitle("Disposition"), chips);
@@ -347,10 +351,35 @@ public final class NumberDetailPanel {
 
     private VBox noteZone() {
         final TextField note = new TextField(latestCall.flatMap(Call::notes).orElse(""));
-        note.setPromptText("Add a note, press Enter to save");
+        note.setPromptText("Add a note — saves automatically");
         note.setDisable(latestCall.isEmpty());
-        note.setOnAction(e -> applyNote(note.getText()));
-        return new VBox(6, sectionTitle("Note"), note);
+
+        final Label status = new Label();
+        status.getStyleClass().add("detail-save-status");
+        status.setVisible(false);
+        status.setManaged(false);
+
+        final String[] saved = { note.getText() };
+        final PauseTransition debounce = new PauseTransition(javafx.util.Duration.millis(600));
+        final Runnable persist = () -> {
+            final String text = note.getText();
+            if (text.equals(saved[0])) return;
+            saved[0] = text;
+            saveNote(text, status);
+        };
+        debounce.setOnFinished(e -> persist.run());
+
+        note.textProperty().addListener((obs, old, val) -> {
+            if (note.isDisabled()) return;
+            setStatus(status, "Saving…");
+            debounce.playFromStart();
+        });
+        note.setOnAction(e -> { debounce.stop(); persist.run(); });        // Enter saves now
+        note.focusedProperty().addListener((obs, was, has) -> {
+            if (!has) { debounce.stop(); persist.run(); }                  // blur saves too
+        });
+
+        return new VBox(6, sectionTitle("Note"), note, status);
     }
 
     private VBox statsStrip(final List<Call> calls) {
@@ -455,16 +484,33 @@ public final class NumberDetailPanel {
 
     // ── Actions ─────────────────────────────────────────────────────────────────
 
-    private void applyDisposition(final CallDisposition disposition) {
+    private void applyDisposition(final CallDisposition disposition, final Button clicked) {
+        // Restyle in place so a pending note edit isn't lost to a panel rebuild.
+        for (final Button b : dispositionButtons) b.getStyleClass().remove("detail-chip-active");
+        clicked.getStyleClass().add("detail-chip-active");
         latestCall.ifPresent(call -> CompletableFuture
                 .supplyAsync(() -> callService.updateDisposition(call.id(), disposition))
-                .thenAccept(r -> Platform.runLater(() -> { onChanged.run(); show(currentRaw); })));
+                .thenAccept(r -> Platform.runLater(onChanged)));
     }
 
-    private void applyNote(final String text) {
+    private void saveNote(final String text, final Label status) {
         latestCall.ifPresent(call -> CompletableFuture
                 .supplyAsync(() -> callService.updateNotes(call.id(), text))
-                .thenAccept(r -> Platform.runLater(() -> { onChanged.run(); show(currentRaw); })));
+                .thenAccept(r -> Platform.runLater(() -> {
+                    setStatus(status, "Saved ✓");
+                    onChanged.run();
+                }))
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> setStatus(status, "Save failed"));
+                    return null;
+                }));
+    }
+
+    private static void setStatus(final Label status, final String text) {
+        status.setText(text);
+        final boolean show = !text.isBlank();
+        status.setVisible(show);
+        status.setManaged(show);
     }
 
     private void openContactEditor() {
@@ -516,7 +562,9 @@ public final class NumberDetailPanel {
 
     private boolean applyHotkeyDisposition(final CallDisposition disposition) {
         if (latestCall.isEmpty()) return false;
-        applyDisposition(disposition);
+        latestCall.ifPresent(call -> CompletableFuture
+                .supplyAsync(() -> callService.updateDisposition(call.id(), disposition))
+                .thenAccept(r -> Platform.runLater(() -> { onChanged.run(); show(currentRaw); })));
         return true;
     }
 

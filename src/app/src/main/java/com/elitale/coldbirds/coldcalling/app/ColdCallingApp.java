@@ -60,6 +60,9 @@ public final class ColdCallingApp extends Application {
     private AudioDeviceManager audioDeviceManager;
     private AudioDeviceTester  audioDeviceTester;
 
+    /** SIP Call-ID of the call currently shown on the calling/wrap-up screen, if any. */
+    private volatile String activeCallId;
+
     // Repositories — built once in init(), reused by launchMainApp()
     private ContactRepository     contactRepo;
     private PhoneNumberRepository phoneNumberRepo;
@@ -218,21 +221,33 @@ public final class ColdCallingApp extends Application {
                 audioDeviceManager, audioDeviceTester, applyAudioDevices()));
 
         // Wire call events → MainWindow + PowerDialerService (composed lambdas)
-        callService.setOnIncomingCall((callId, caller, called) ->
-                mainWindow.showIncomingCall(
-                        caller.value(), caller.value(),
-                        () -> callService.answer(callId),
-                        () -> callService.hangUp()
-                )
-        );
+        callService.setOnIncomingCall((callId, caller, called) -> {
+            activeCallId = callId;
+            mainWindow.showIncomingCall(
+                    caller.value(), caller.value(),
+                    () -> callService.answer(callId),
+                    () -> callService.hangUp()
+            );
+        });
+
+        // Continuously persist notes + disposition the rep types on the calling/wrap-up
+        // screen so a call log is never lost if they forget to "Save & Close".
+        mainWindow.setOnCallLogAutoSave((disposition, notes) -> {
+            final String id = activeCallId;
+            if (id != null) {
+                CompletableFuture.runAsync(() -> callService.autoSaveWrapUp(id, disposition, notes));
+            }
+        });
 
         // Outbound: show the calling screen the instant the call starts ringing.
-        callService.setOnCallRinging(callId ->
-                mainWindow.showCallRinging(caller(callId), hangUpAndDispose(callId)));
+        callService.setOnCallRinging(callId -> {
+            activeCallId = callId;
+            mainWindow.showCallRinging(caller(callId), () -> callService.hangUp());
+        });
 
         // Outbound that never started (not signed in, DNC, etc.): show the reason.
         callService.setOnCallFailed((remote, reason) -> {
-            mainWindow.showCallFailed(remote, reason, mainWindow::showDialer);
+            mainWindow.showCallFailed(remote, reason, closeToDialer());
             notifyError("Call failed: " + reason);
         });
 
@@ -242,7 +257,7 @@ public final class ColdCallingApp extends Application {
                     .orElse(false);
             if (inbound) {
                 // Inbound: the incoming overlay was showing — open the calling screen now.
-                mainWindow.showActiveCall(caller(callId), Instant.now(), hangUpAndDispose(callId));
+                mainWindow.showActiveCall(caller(callId), Instant.now(), () -> callService.hangUp());
             } else {
                 // Outbound: the ringing screen is already up — just connect it.
                 mainWindow.markCallConnected(Instant.now());
@@ -256,11 +271,11 @@ public final class ColdCallingApp extends Application {
             if (reason != null && reason.startsWith(TelephonyService.FAILURE_PREFIX)) {
                 // Failed call: keep the calling screen up and show the reason there.
                 final String detail = reason.substring(TelephonyService.FAILURE_PREFIX.length());
-                mainWindow.markCallFailed(detail);
+                mainWindow.markCallFailed(detail, closeToDialer());
                 notifyError("Call failed: " + detail);
             } else {
-                mainWindow.endActiveCall();
-                mainWindow.showDialer();
+                // Natural end: stay on a wrap-up screen so the rep can finish logging.
+                mainWindow.showCallWrapUp(Instant.now(), () -> finalizeAndClose(callId));
             }
         });
 
@@ -279,17 +294,26 @@ public final class ColdCallingApp extends Application {
     }
 
     /**
-     * Build the hang-up action for a given call: persists the disposition and
-     * notes chosen on the calling screen, ends the call, and returns to the dialer.
+     * Build the dismiss action for the failed/cancelled calling screen:
+     * stop timers/tones and return to the dialer.
      */
-    private Runnable hangUpAndDispose(String callId) {
+    private Runnable closeToDialer() {
         return () -> {
-            mainWindow.selectedDisposition()
-                    .ifPresent(disposition -> callService.setDisposition(callId, disposition));
-            callService.setNotes(callId, mainWindow.callNotes());
-            callService.hangUp();
+            activeCallId = null;
+            mainWindow.endActiveCall();
             mainWindow.showDialer();
         };
+    }
+
+    /**
+     * Finalise a call from the wrap-up screen: persist the disposition and notes
+     * the rep entered after the line dropped, then return to the dialer.
+     */
+    private void finalizeAndClose(String callId) {
+        callService.finalizeWrapUp(callId, mainWindow.selectedDisposition(), mainWindow.callNotes());
+        activeCallId = null;
+        mainWindow.endActiveCall();
+        mainWindow.showDialer();
     }
 
     /**

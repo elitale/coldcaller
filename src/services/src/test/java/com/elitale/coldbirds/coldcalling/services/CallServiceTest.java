@@ -256,6 +256,50 @@ class CallServiceTest {
         assertThat(saved.getValue().notes()).isEmpty();
     }
 
+    // ── finalizeWrapUp ──────────────────────────────────────────────────────────
+
+    @Test
+    void finalizeWrapUp_afterCallEnded_updatesPersistedRecord() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-wrap");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+        final Call persisted = aCall(Optional.empty(), Optional.empty(), Instant.parse("2020-01-01T00:00:00Z"));
+        when(callRepo.save(any())).thenReturn(Result.ok(persisted));
+        when(telephony.takeRecordingPath(any())).thenReturn(Optional.empty());
+        when(callRepo.findById(new CallId(7L))).thenReturn(Optional.of(persisted));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        callService.dial(REMOTE, LOCAL);
+        callService.onCallEnded("sip-wrap", "bye");
+        callService.finalizeWrapUp("sip-wrap",
+                Optional.of(new CallDisposition.Interested()), "Booked a demo");
+
+        final ArgumentCaptor<Call> saved = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo, atLeastOnce()).update(saved.capture());
+        assertThat(saved.getAllValues())
+                .anySatisfy(c -> assertThat(c.disposition()).contains(new CallDisposition.Interested()));
+        assertThat(saved.getAllValues())
+                .anySatisfy(c -> assertThat(c.notes()).contains("Booked a demo"));
+    }
+
+    @Test
+    void finalizeWrapUp_whileCallStillActive_doesNotTouchRepo() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-live");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+
+        callService.dial(REMOTE, LOCAL);
+        callService.finalizeWrapUp("sip-live",
+                Optional.of(new CallDisposition.Busy()), "note");
+
+        verify(callRepo, never()).update(any());
+    }
+
+    @Test
+    void finalizeWrapUp_unknownCall_isNoOp() {
+        callService.finalizeWrapUp("nope", Optional.empty(), "note");
+
+        verify(callRepo, never()).update(any());
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static Call aCall(Optional<CallDisposition> disposition, Optional<String> notes, Instant updatedAt) {

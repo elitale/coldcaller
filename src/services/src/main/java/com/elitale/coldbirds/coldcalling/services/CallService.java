@@ -71,6 +71,13 @@ public final class CallService implements TelephonyService.TelephonyListener {
     /** Calls that have started but not yet ended, keyed by SIP Call-ID. */
     private final ConcurrentHashMap<String, ActiveCall> activeCalls = new ConcurrentHashMap<>();
 
+    /**
+     * Persisted record id for calls that have just ended, keyed by SIP Call-ID.
+     * Lets the wrap-up screen update notes/disposition the user finishes typing
+     * after the line dropped. Entries are removed by {@link #finalizeWrapUp}.
+     */
+    private final ConcurrentHashMap<String, CallId> endedCallIds = new ConcurrentHashMap<>();
+
     // UI callbacks
     private IncomingCallListener          onIncomingCallCb   = (id, a, b) -> {};
     private Consumer<String>              onCallRingingCb    = id -> {};
@@ -208,6 +215,63 @@ public final class CallService implements TelephonyService.TelephonyListener {
     public void setNotes(String callId, String notes) {
         final ActiveCall call = activeCalls.get(callId);
         if (call != null) call.notes = (notes != null) ? notes : "";
+    }
+
+    /**
+     * Persist notes and disposition the user finalised on the wrap-up screen,
+     * after the call already ended and its record was saved. Looks up the
+     * persisted record by SIP Call-ID and updates it in place; a no-op if the
+     * call is still active (its in-memory state is used at persist time instead)
+     * or if no record was saved. Safe to call from any thread.
+     *
+     * @param callId      SIP Call-ID of the ended call
+     * @param disposition the chosen outcome, if any
+     * @param notes       free-text notes; blank clears them
+     */
+    public void finalizeWrapUp(String callId, Optional<CallDisposition> disposition, String notes) {
+        Objects.requireNonNull(callId, "callId must not be null");
+        Objects.requireNonNull(disposition, "disposition must not be null");
+        applyWrapUp(callId, disposition, notes);
+        // Terminal save — drop the mapping so the record can't be touched again.
+        endedCallIds.remove(callId);
+    }
+
+    /**
+     * Continuously persist the disposition and notes a rep edits on the wrap-up
+     * screen, without ending the wrap-up session. Unlike {@link #finalizeWrapUp}
+     * this keeps the call's persisted-id mapping so subsequent auto-saves still
+     * land. While the call is still in flight the edits are buffered in memory
+     * and written when the record is first persisted. Safe to call from any thread.
+     *
+     * @param callId      SIP Call-ID of the call being logged
+     * @param disposition the chosen outcome, if any
+     * @param notes       free-text notes; blank clears them
+     */
+    public void autoSaveWrapUp(String callId, Optional<CallDisposition> disposition, String notes) {
+        Objects.requireNonNull(callId, "callId must not be null");
+        Objects.requireNonNull(disposition, "disposition must not be null");
+        applyWrapUp(callId, disposition, notes);
+    }
+
+    /**
+     * Shared body for {@link #finalizeWrapUp} and {@link #autoSaveWrapUp}: buffer
+     * edits on a still-active call, otherwise write them through to the persisted
+     * record (looked up by SIP Call-ID), leaving the mapping intact.
+     */
+    private void applyWrapUp(String callId, Optional<CallDisposition> disposition, String notes) {
+        final ActiveCall active = activeCalls.get(callId);
+        if (active != null) {
+            // Call still in flight — capture for the upcoming persist.
+            disposition.ifPresent(d -> active.disposition = d);
+            active.notes = (notes != null) ? notes : "";
+            return;
+        }
+        final CallId persistedId = endedCallIds.get(callId);
+        if (persistedId == null) {
+            return;
+        }
+        disposition.ifPresent(d -> updateDisposition(persistedId, d));
+        updateNotes(persistedId, notes);
     }
 
     /**
@@ -388,7 +452,10 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
         final Result<Call> saved = callRepo.save(newCall);
         switch (saved) {
-            case Result.Ok<?>  ok  -> LOG.info("Call record saved for {}", call.sipCallId);
+            case Result.Ok<Call> ok -> {
+                endedCallIds.put(call.sipCallId, ok.value().id());
+                LOG.info("Call record saved for {}", call.sipCallId);
+            }
             case Result.Err<?> err -> LOG.error("Failed to save call record for {}: {}", call.sipCallId, err.message());
         }
     }
