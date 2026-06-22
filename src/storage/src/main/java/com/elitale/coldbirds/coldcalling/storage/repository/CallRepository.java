@@ -53,5 +53,7 @@ public interface CallRepository {
 
     List<Call> findByPhoneNumber(PhoneNumberId phoneNumberId);
 
+    List<Call> findByRemoteNumber(PhoneNumber remoteNumber);
+
     List<Call> findRecent(int limit);
 }

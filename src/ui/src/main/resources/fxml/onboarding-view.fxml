@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.geometry.*?>
+
+<!--
+  First-run onboarding wizard.
+  Controller: OnboardingController (set via FXMLLoader.setController before load).
+  Dynamic content (provider cards, number rows) is built by the controller.
+-->
+<StackPane xmlns:fx="http://javafx.com/fxml/1" styleClass="onboarding-root">
+    <padding><Insets top="32" right="32" bottom="32" left="32"/></padding>
+
+    <VBox styleClass="onboarding-card" maxWidth="600" maxHeight="600" spacing="0">
+
+        <!-- ── Header ─────────────────────────────────────────────── -->
+        <VBox spacing="4">
+            <padding><Insets top="24" right="28" bottom="16" left="28"/></padding>
+            <Label text="Set up coldCalling" styleClass="title-1"/>
+            <Label text="Let's get you ready to make calls." styleClass="caption"/>
+        </VBox>
+
+        <!-- ── Stepper ────────────────────────────────────────────── -->
+        <HBox spacing="8" alignment="CENTER_LEFT" styleClass="stepper">
+            <padding><Insets top="0" right="28" bottom="20" left="28"/></padding>
+            <Label fx:id="dot1" text="1" styleClass="step-dot"/>
+            <Label fx:id="name1" text="Provider" styleClass="step-name"/>
+            <Region fx:id="rule1" styleClass="step-rule" HBox.hgrow="ALWAYS"/>
+            <Label fx:id="dot2" text="2" styleClass="step-dot"/>
+            <Label fx:id="name2" text="Account" styleClass="step-name"/>
+            <Region fx:id="rule2" styleClass="step-rule" HBox.hgrow="ALWAYS"/>
+            <Label fx:id="dot3" text="3" styleClass="step-dot"/>
+            <Label fx:id="name3" text="Connection" styleClass="step-name"/>
+            <Region fx:id="rule3" styleClass="step-rule" HBox.hgrow="ALWAYS"/>
+            <Label fx:id="dot4" text="4" styleClass="step-dot"/>
+            <Label fx:id="name4" text="Numbers" styleClass="step-name"/>
+        </HBox>
+
+        <Separator/>
+
+        <!-- ── Step body ──────────────────────────────────────────── -->
+        <StackPane alignment="TOP_LEFT" VBox.vgrow="ALWAYS">
+            <padding><Insets top="20" right="28" bottom="12" left="28"/></padding>
+
+            <!-- Step 1: Provider -->
+            <VBox fx:id="step1Pane" spacing="12">
+                <Label text="Choose your provider" styleClass="title-2"/>
+                <Label text="More providers are coming soon." styleClass="caption"/>
+                <FlowPane fx:id="providerContainer" hgap="12" vgap="12"/>
+            </VBox>
+
+            <!-- Step 2: Twilio keys -->
+            <VBox fx:id="step2Pane" spacing="12">
+                <Label text="Connect your Twilio account" styleClass="title-2"/>
+                <Label text="Find these in your Twilio Console → Account Info." styleClass="caption"/>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Account SID" prefWidth="120"/>
+                    <TextField fx:id="sidField" promptText="ACxxxxxxxx…" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Auth Token" prefWidth="120"/>
+                    <PasswordField fx:id="tokenField" HBox.hgrow="ALWAYS"/>
+                </HBox>
+            </VBox>
+
+            <!-- Step 3: SIP -->
+            <VBox fx:id="step3Pane" spacing="12">
+                <Label text="Set up your SIP connection" styleClass="title-2"/>
+                <Label text="We'll register once to confirm it works." styleClass="caption"/>
+
+                <HBox spacing="12" alignment="CENTER_LEFT" styleClass="auto-config-row">
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label text="Set it up for me" styleClass="help-title"/>
+                        <Label text="Create a SIP domain and login on your Twilio account automatically."
+                               styleClass="help-line" wrapText="true"/>
+                    </VBox>
+                    <Button fx:id="autoSipButton" text="Auto-configure" styleClass="accent"
+                            onAction="#onAutoConfigureSip"/>
+                </HBox>
+
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Username" prefWidth="120"/>
+                    <TextField fx:id="sipUsernameField" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Password" prefWidth="120"/>
+                    <PasswordField fx:id="sipPasswordField" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Domain" prefWidth="120"/>
+                    <TextField fx:id="sipDomainField" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Proxy" prefWidth="120"/>
+                    <TextField fx:id="sipProxyField" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Proxy port" prefWidth="120"/>
+                    <Spinner fx:id="sipProxyPortSpinner" editable="true" prefWidth="120"/>
+                </HBox>
+
+                <VBox spacing="6" styleClass="help-card">
+                    <Label text="How to find these (Twilio)" styleClass="help-title"/>
+                    <Label styleClass="help-line" wrapText="true"
+                           text="1.  Console → Voice → Manage → SIP Domains. Create a domain — its name (yourapp.sip.twilio.com) is your Domain and Proxy."/>
+                    <Label styleClass="help-line" wrapText="true"
+                           text="2.  Under that domain, open Voice Authentication → Credential Lists and add a credential. Those are your Username and Password."/>
+                    <Label styleClass="help-line" wrapText="true"
+                           text="3.  Keep Proxy port at 5060 unless your provider tells you otherwise."/>
+                </VBox>
+            </VBox>
+
+            <!-- Step 4: Numbers -->
+            <VBox fx:id="step4Pane" spacing="12">
+                <Label text="Choose your numbers" styleClass="title-2"/>
+                <Label text="Pick the numbers you'll call and text from. You can add more later." styleClass="caption"/>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <CheckBox fx:id="selectAllCheck" text="Select all"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="countLabel" styleClass="caption"/>
+                </HBox>
+                <ScrollPane fitToWidth="true" hbarPolicy="NEVER" prefHeight="220" styleClass="number-scroll">
+                    <VBox fx:id="numbersContainer" spacing="4"/>
+                </ScrollPane>
+            </VBox>
+        </StackPane>
+
+        <Separator/>
+
+        <!-- ── Footer nav ─────────────────────────────────────────── -->
+        <HBox spacing="12" alignment="CENTER_LEFT">
+            <padding><Insets top="16" right="28" bottom="20" left="28"/></padding>
+            <Button fx:id="backButton" text="‹ Back" styleClass="flat" onAction="#onBack" minWidth="-Infinity"/>
+            <ProgressIndicator fx:id="progressIndicator" prefWidth="18" prefHeight="18" minWidth="-Infinity" visible="false"/>
+            <Label fx:id="statusLabel" styleClass="caption" HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+            <Button fx:id="primaryButton" text="Continue ›" styleClass="accent" onAction="#onPrimary" minWidth="-Infinity"/>
+        </HBox>
+    </VBox>
+</StackPane>

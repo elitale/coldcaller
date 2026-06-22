@@ -647,6 +647,20 @@
     -fx-text-fill: #8A8A8E;
 }
 
+.recent-number {
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #1D1D1F;
+}
+
+.recent-action {
+    -fx-font-size: 12px;
+    -fx-font-weight: 500;
+    -fx-padding: 3px 12px;
+    -fx-background-radius: 6px;
+    -fx-min-height: 26px;
+}
+
 .dialer-country {
     -fx-background-color: #F5F5F7;
     -fx-background-radius: 12px;
@@ -1081,5 +1095,132 @@
 .card-list .list-cell:odd {
     -fx-background-color: transparent;
 }
+
+/* ── Onboarding wizard ─────────────────────────────────────────────────────── */
+
+.onboarding-root {
+    -fx-background-color: -cc-bg-secondary;
+}
+
+.onboarding-card {
+    -fx-background-color: -cc-bg-elevated;
+    -fx-background-radius: 12px;
+    -fx-border-color: -cc-border;
+    -fx-border-radius: 12px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.10), 24, 0, 0, 6);
+}
+
+/* Stepper dots */
+.step-dot {
+    -fx-min-width: 26px;
+    -fx-min-height: 26px;
+    -fx-pref-width: 26px;
+    -fx-pref-height: 26px;
+    -fx-alignment: center;
+    -fx-background-color: -cc-bg-overlay;
+    -fx-background-radius: 100px;
+    -fx-text-fill: -cc-text-tertiary;
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+}
+
+.step-dot.active {
+    -fx-background-color: -cc-accent;
+    -fx-text-fill: -cc-text-on-accent;
+}
+
+.step-dot.done {
+    -fx-background-color: -cc-accent;
+    -fx-text-fill: -cc-text-on-accent;
+    -fx-font-size: 13px;
+}
+
+/* Stepper step names */
+.step-name {
+    -fx-font-size: 13px;
+    -fx-font-weight: 500;
+    -fx-text-fill: -cc-text-tertiary;
+}
+
+.step-name.active {
+    -fx-text-fill: -cc-text-primary;
+    -fx-font-weight: 600;
+}
+
+.step-name.done {
+    -fx-text-fill: -cc-text-secondary;
+}
+
+.step-rule {
+    -fx-min-width: 12px;
+    -fx-background-color: transparent;
+}
+
+/* Provider cards */
+.provider-card {
+    -fx-background-color: -cc-bg-elevated;
+    -fx-background-radius: 8px;
+    -fx-border-color: -cc-border;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+    -fx-padding: 12px;
+}
+
+.provider-card.selected {
+    -fx-border-color: -cc-accent;
+    -fx-border-width: 2px;
+}
+
+.provider-card.disabled {
+    -fx-opacity: 0.5;
+    -fx-cursor: default;
+}
+
+/* Number rows */
+.number-row {
+    -fx-padding: 10px 8px;
+    -fx-background-radius: 6px;
+}
+
+.number-row:hover {
+    -fx-background-color: -cc-bg-secondary;
+}
+
+.number-scroll {
+    -fx-background-color: transparent;
+    -fx-border-color: -cc-border;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1px;
+}
+
+/* Footer status text */
+.status-error { -fx-text-fill: -cc-error; }
+.status-ok    { -fx-text-fill: -cc-success; }
+
+/* SIP help panel */
+.help-card {
+    -fx-background-color: -cc-bg-secondary;
+    -fx-background-radius: 8px;
+    -fx-padding: 12px 14px;
+}
+
+.help-title {
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -cc-text-primary;
+}
+
+.help-line {
+    -fx-font-size: 12px;
+    -fx-text-fill: -cc-text-secondary;
+}
+
+.auto-config-row {
+    -fx-background-color: -cc-bg-secondary;
+    -fx-background-radius: 8px;
+    -fx-padding: 12px 14px;
+}
+
 
 

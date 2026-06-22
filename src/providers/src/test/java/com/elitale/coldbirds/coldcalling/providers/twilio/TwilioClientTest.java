@@ -235,6 +235,117 @@ class TwilioClientTest {
         assertThat(((Result.Err<List<DomainEvent.IncomingSms>>) result).message()).contains("not configured");
     }
 
+    // ── autoProvisionSip ─────────────────────────────────────────────────────
+
+    private static final String DOMAINS_EMPTY = """
+            {"domains":[],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":0,
+            "uri":"/2010-04-01/Accounts/AC.../SIP/Domains.json"}
+            """;
+
+    private static final String DOMAINS_WITH_REGISTRATION = """
+            {"domains":[
+              {"sid":"SD1","domain_name":"existing.sip.twilio.com","sip_registration":true,
+               "friendly_name":"mine"}
+            ],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":0,
+            "uri":"/2010-04-01/Accounts/AC.../SIP/Domains.json"}
+            """;
+
+    private static final String DOMAIN_CREATED = """
+            {"sid":"SD2","domain_name":"coldcalling-deadbeef.sip.twilio.com","sip_registration":true}
+            """;
+
+    private static final String CREDENTIAL_LISTS_EMPTY = """
+            {"credential_lists":[],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":0,
+            "uri":"/2010-04-01/Accounts/AC.../SIP/CredentialLists.json"}
+            """;
+
+    private static final String CREDENTIAL_LIST_CREATED = """
+            {"sid":"CL1","friendly_name":"coldCalling"}
+            """;
+
+    private static final String CREDENTIAL_CREATED = """
+            {"sid":"CR1","username":"coldcalling1234"}
+            """;
+
+    private static final String MAPPING_CREATED = """
+            {"sid":"CLM1","friendly_name":"coldCalling"}
+            """;
+
+    /** Dispatch canned responses by request method + URL, mimicking the Twilio SIP endpoints. */
+    private void stubSipDispatcher(final String domainsListJson, final String credListsJson) {
+        when(restClient.request(any(Request.class))).thenAnswer(invocation -> {
+            final Request req = invocation.getArgument(0);
+            final String url = req.constructURL().toString();
+            final String method = req.getMethod().toString();
+            if (url.contains("CredentialListMappings.json")) {
+                return new Response(MAPPING_CREATED, 201);
+            }
+            if (url.contains("/Credentials.json")) {
+                return new Response(CREDENTIAL_CREATED, 201);
+            }
+            if (url.contains("/CredentialLists.json")) {
+                return "POST".equals(method)
+                        ? new Response(CREDENTIAL_LIST_CREATED, 201)
+                        : new Response(credListsJson, 200);
+            }
+            if (url.contains("/Domains.json")) {
+                return "POST".equals(method)
+                        ? new Response(DOMAIN_CREATED, 201)
+                        : new Response(domainsListJson, 200);
+            }
+            return new Response(API_ERROR, 404);
+        });
+    }
+
+    @Test
+    void testAutoProvisionSip_createsDomainAndCredential_whenNoneExist() {
+        stubSipDispatcher(DOMAINS_EMPTY, CREDENTIAL_LISTS_EMPTY);
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning> result =
+                client.autoProvisionSip();
+
+        assertThat(result.isOk()).isTrue();
+        var prov = ((Result.Ok<com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning>) result).value();
+        assertThat(prov.domainName()).isEqualTo("coldcalling-deadbeef.sip.twilio.com");
+        assertThat(prov.username()).startsWith("coldcalling");
+        assertThat(prov.password()).hasSize(16);
+    }
+
+    @Test
+    void testAutoProvisionSip_reusesExistingRegistrationDomain() {
+        stubSipDispatcher(DOMAINS_WITH_REGISTRATION, CREDENTIAL_LISTS_EMPTY);
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning> result =
+                client.autoProvisionSip();
+
+        assertThat(result.isOk()).isTrue();
+        var prov = ((Result.Ok<com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning>) result).value();
+        assertThat(prov.domainName()).isEqualTo("existing.sip.twilio.com");
+    }
+
+    @Test
+    void testAutoProvisionSip_apiError_returnsErr() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(API_ERROR, 401));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        assertThat(client.autoProvisionSip().isErr()).isTrue();
+    }
+
+    @Test
+    void testAutoProvisionSip_notConfigured_returnsErr() {
+        TwilioConfig blank = new TwilioConfig("", "", TwilioConfig.DEFAULT_BASE_URL);
+        TwilioClient client = new TwilioClient(blank, restClient);
+
+        Result<com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning> result =
+                client.autoProvisionSip();
+
+        assertThat(result.isErr()).isTrue();
+        assertThat(((Result.Err<?>) result).message()).contains("not configured");
+    }
+
     // ── TwilioConfig ─────────────────────────────────────────────────────────
 
     @Test

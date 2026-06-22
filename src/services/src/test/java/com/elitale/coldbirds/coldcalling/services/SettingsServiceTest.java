@@ -74,6 +74,21 @@ class SettingsServiceTest {
     }
 
     @Test
+    void isOnboardingComplete_defaultsFalse_whenNotSet() {
+        when(repo.get(SettingsService.KEY_ONBOARDING_COMPLETED)).thenReturn(Optional.empty());
+        assertThat(service.isOnboardingComplete()).isFalse();
+    }
+
+    @Test
+    void onboardingComplete_roundTrips() {
+        service.setOnboardingComplete(true);
+        verify(repo).set(SettingsService.KEY_ONBOARDING_COMPLETED, "true");
+
+        when(repo.get(SettingsService.KEY_ONBOARDING_COMPLETED)).thenReturn(Optional.of("true"));
+        assertThat(service.isOnboardingComplete()).isTrue();
+    }
+
+    @Test
     void getJitterBufferMs_returnsDefault_whenNotSet() {
         when(repo.get(SettingsService.KEY_AUDIO_JITTER_BUFFER_MS)).thenReturn(Optional.empty());
         assertThat(service.getJitterBufferMs()).isEqualTo(40);

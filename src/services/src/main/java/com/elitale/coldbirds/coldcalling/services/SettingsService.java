@@ -31,6 +31,7 @@ public final class SettingsService {
     public static final String KEY_DIALER_AUTO_ADVANCE_DELAY = "dialer.auto_advance_delay_sec";
     public static final String KEY_DIALER_VOICEMAIL_DROP     = "dialer.voicemail_drop_enabled";
     public static final String KEY_DIALER_DEFAULT_COUNTRY    = "dialer.default_country";
+    public static final String KEY_ONBOARDING_COMPLETED      = "onboarding.completed";
 
     // ── Defaults ──────────────────────────────────────────────────────────────
 
@@ -156,6 +157,16 @@ public final class SettingsService {
     }
     public void setDefaultCountryIso(String isoCode) {
         repo.set(KEY_DIALER_DEFAULT_COUNTRY, Objects.requireNonNull(isoCode));
+    }
+
+    // ── Onboarding ───────────────────────────────────────────────────────
+
+    /** Whether the first-run setup wizard has been completed. Defaults to {@code false}. */
+    public boolean isOnboardingComplete() {
+        return Boolean.parseBoolean(get(KEY_ONBOARDING_COMPLETED, "false"));
+    }
+    public void setOnboardingComplete(boolean complete) {
+        repo.set(KEY_ONBOARDING_COMPLETED, String.valueOf(complete));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

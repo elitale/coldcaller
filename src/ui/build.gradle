@@ -14,9 +14,14 @@ dependencies {
     // the compiler must see TelephonyService even though ui never instantiates it.
     // telephony is already on the runtime classpath transitively via services -> telephony.
     compileOnly(project(':telephony'))
+    // compileOnly: onboarding UI references TwilioNumberData (providers) in method signatures;
+    // providers is on the runtime classpath transitively via services -> providers.
+    compileOnly(project(':providers'))
     implementation(libs.atlantafx)
     implementation(libs.slf4j.api)
 
     testImplementation(project(':domain'))
+    testCompileOnly(project(':telephony'))
+    testCompileOnly(project(':providers'))
     testRuntimeOnly(libs.logback.classic)
 }

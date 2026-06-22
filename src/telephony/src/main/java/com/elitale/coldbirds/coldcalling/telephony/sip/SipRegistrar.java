@@ -26,10 +26,10 @@ public final class SipRegistrar implements SipListener, AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(SipRegistrar.class);
 
     /** SIP REGISTER refresh interval in seconds (RFC 3261 recommends ≤ Expires/2). */
-    public static final int REFRESH_SECONDS = 60;
+    public static final int REFRESH_SECONDS = 1800;
 
-    /** SIP Contact header Expires value. */
-    private static final int CONTACT_EXPIRES = 120;
+    /** SIP Contact header Expires value. Twilio rejects anything below its Min-Expires (600) with 423. */
+    private static final int CONTACT_EXPIRES = 3600;
 
     /** Maximum authentication retry count per transaction to avoid infinite loops. */
     private static final int MAX_AUTH_RETRIES = 1;
@@ -51,6 +51,7 @@ public final class SipRegistrar implements SipListener, AutoCloseable {
 
     private ScheduledFuture<?> refreshTask;
     private boolean            isRegistered = false;
+    private int                authRetries  = 0;
 
     public SipRegistrar(
             final SipEngine            engine,
@@ -143,15 +144,16 @@ public final class SipRegistrar implements SipListener, AutoCloseable {
     // Private — send REGISTER
     // ------------------------------------------------------------------
 
-    private void sendRegister(final AuthorizationHeader authHeader) {
+    private void sendRegister(final Header authHeader) {
         try {
+            authRetries = 0;
             sendRegisterWithExpires(CONTACT_EXPIRES, authHeader);
         } catch (final Exception e) {
             LOG.error("Failed to send REGISTER: {}", e.getMessage(), e);
         }
     }
 
-    private void sendRegisterWithExpires(final int expires, final AuthorizationHeader authHeader)
+    private void sendRegisterWithExpires(final int expires, final Header authHeader)
             throws Exception {
 
         final AddressFactory af = engine.addressFactory();
@@ -162,14 +164,16 @@ public final class SipRegistrar implements SipListener, AutoCloseable {
         final String username = credentials.username();
 
         final SipURI requestUri = af.createSipURI(null, domain);
+        requestUri.setTransportParam(engine.transport());
         final Address toAddr    = af.createAddress(af.createSipURI(username, domain));
         final Address fromAddr  = af.createAddress(af.createSipURI(username, domain));
         final Address contactAddr = af.createAddress(
                 af.createSipURI(username, engine.localIp()));
         ((SipURI) contactAddr.getURI()).setPort(engine.localPort());
+        ((SipURI) contactAddr.getURI()).setTransportParam(engine.transport());
 
         final List<ViaHeader> via = List.of(hf.createViaHeader(
-                engine.localIp(), engine.localPort(), "udp", null));
+                engine.localIp(), engine.localPort(), engine.transport(), null));
 
         final MaxForwardsHeader maxFwd    = hf.createMaxForwardsHeader(70);
         final CallIdHeader      callId    = engine.sipProvider().getNewCallId();
@@ -194,9 +198,31 @@ public final class SipRegistrar implements SipListener, AutoCloseable {
     }
 
     private void handleAuthChallenge(final Response response, final ClientTransaction tx) {
-        // Basic digest authentication — full implementation requires MD5 hash
-        // Placeholder: log the challenge. Full digest auth will be added in a follow-up.
-        LOG.warn("SIP digest authentication challenge received — credentials may be incorrect");
-        registrationListener.onRegistrationFailed(response.getStatusCode(), "Authentication required");
+        if (authRetries >= MAX_AUTH_RETRIES) {
+            LOG.warn("SIP authentication failed after {} attempt(s)", authRetries);
+            registrationListener.onRegistrationFailed(response.getStatusCode(), "Authentication failed");
+            return;
+        }
+        authRetries++;
+        try {
+            final boolean proxy = response.getStatusCode() == Response.PROXY_AUTHENTICATION_REQUIRED;
+            final Header authHeader = buildDigestHeader(response, proxy);
+            sendRegisterWithExpires(CONTACT_EXPIRES, authHeader);
+        } catch (final Exception e) {
+            LOG.error("Failed to answer SIP auth challenge: {}", e.getMessage(), e);
+            registrationListener.onRegistrationFailed(response.getStatusCode(), "Authentication error");
+        }
+    }
+
+    /**
+     * Build a Digest {@code Authorization}/{@code Proxy-Authorization} header in
+     * answer to a 401/407 challenge (MD5, RFC 2617, optional {@code qop=auth}).
+     */
+    private Header buildDigestHeader(final Response response, final boolean proxy) throws Exception {
+        return SipDigestAuth.answer(
+                response, proxy,
+                credentials.username(), credentials.password(),
+                Request.REGISTER, "sip:" + credentials.domain(),
+                engine.headerFactory());
     }
 }

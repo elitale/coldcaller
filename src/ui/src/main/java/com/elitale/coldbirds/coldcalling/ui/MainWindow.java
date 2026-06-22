@@ -6,6 +6,9 @@ import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
+import com.elitale.coldbirds.coldcalling.domain.model.Call;
+import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.ui.controller.ActiveCallController;
@@ -17,12 +20,15 @@ import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
+import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.SequentialTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -38,6 +44,9 @@ import javafx.util.Duration;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -99,6 +108,12 @@ public final class MainWindow {
     private Parent powerDialerView;
     private Parent settingsView;
 
+    /** Number of recent calls shown on the dialer. */
+    private static final int RECENT_CALLS_LIMIT = 50;
+
+    /** Backing list for the dialer's "Recent Calls" view — mutated on the FX thread only. */
+    private final ObservableList<RecentCallRow> recentCalls = FXCollections.observableArrayList();
+
     // Root layout
     private BorderPane root;
 
@@ -158,6 +173,52 @@ public final class MainWindow {
         Platform.runLater(messagesController::refresh);
     }
 
+    /**
+     * Reload the dialer's "Recent Calls" list from the database. Safe to call from
+     * any thread — the DB read runs off the FX thread, the list update runs on it.
+     */
+    public void refreshRecentCalls() {
+        java.util.concurrent.CompletableFuture
+                .supplyAsync(() -> buildRecentRows(callService.findRecent(RECENT_CALLS_LIMIT)))
+                .thenAccept(rows -> Platform.runLater(() -> recentCalls.setAll(rows)));
+    }
+
+    /**
+     * Collapse the raw recent-call list into one row per phone number (newest
+     * first), resolving the total call count and country for each. Runs off the
+     * FX thread.
+     */
+    private List<RecentCallRow> buildRecentRows(final List<Call> calls) {
+        final Map<String, Call> latestByNumber = new LinkedHashMap<>();
+        for (final Call call : calls) {
+            latestByNumber.putIfAbsent(call.remoteNumber().value(), call);
+        }
+        return latestByNumber.values().stream()
+                .map(call -> new RecentCallRow(
+                        call.remoteNumber().value(),
+                        call.startedAt(),
+                        callService.findByRemoteNumber(call.remoteNumber()).size(),
+                        CountryLookup.byE164(CountryCatalog.ALL, call.remoteNumber().value()),
+                        contactService.findByPhone(call.remoteNumber())))
+                .toList();
+    }
+
+    /** Open the number-detail dialog (contact/lead + call history + recordings). */
+    private void openNumberDetail(String number) {
+        NumberDetailDialog.show(stage, number, callService, contactService, CountryCatalog.ALL);
+    }
+
+    /** Switch to the Messages screen and open the conversation for {@code number}. */
+    private void openMessageThread(String number) {
+        try {
+            final PhoneNumber remote = new PhoneNumber(number);
+            messagesController.openConversation(remote);
+            showCenter(messagesView);
+        } catch (final IllegalArgumentException e) {
+            showError("Can't message \"" + number + "\" — not a valid phone number.");
+        }
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /** Build and show the primary window. Must be called on the FX Application Thread. */
@@ -199,7 +260,10 @@ public final class MainWindow {
         // ── Dialer (@FXML fields injected during load — wire callbacks after)
         dialerController = new DialerController();
         dialerView = loadFxml("/fxml/dialer-view.fxml", dialerController);
-        dialerController.setRecentCalls(FXCollections.observableArrayList());
+        dialerController.setRecentCalls(recentCalls);
+        dialerController.setOnRecentSelected(this::openNumberDetail);
+        dialerController.setOnRecentCall(onDial);
+        dialerController.setOnRecentMessage(this::openMessageThread);
         dialerController.setOnDial(onDial);
         dialerController.setCountries(CountryCatalog.ALL);
         dialerController.selectCountryByIso(settingsService.getDefaultCountryIso());
@@ -232,6 +296,7 @@ public final class MainWindow {
                         "cupertino-light.css not found in UI resources"
                 ).toExternalForm()
         );
+        TextInputShortcuts.install(scene);
 
         scene.setOnKeyPressed(event -> {
             if (root.getCenter() == incomingCallView) {

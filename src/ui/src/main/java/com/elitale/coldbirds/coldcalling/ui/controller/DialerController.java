@@ -4,6 +4,8 @@ import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.CountrySearch;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
+import com.elitale.coldbirds.coldcalling.ui.support.RecentCallCell;
+import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -36,6 +38,7 @@ import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -70,7 +73,7 @@ public final class DialerController {
     @FXML private Region             inputCaret;
     @FXML private Button             callButton;
     @FXML private Button             backspaceButton;
-    @FXML private ListView<String>   recentCallsList;
+    @FXML private ListView<RecentCallRow> recentCallsList;
 
     private final StringProperty          dialedNumber    = new SimpleStringProperty("");
     private final ObjectProperty<Country> selectedCountry = new SimpleObjectProperty<>(null);
@@ -84,6 +87,15 @@ public final class DialerController {
 
     /** Callback invoked when the user changes the active country (for persistence). */
     private Consumer<Country> onCountrySelected = ignored -> {};
+
+    /** Callback invoked with the E.164 number when a recent call is opened. */
+    private Consumer<String> onRecentSelected = ignored -> {};
+
+    /** Callback invoked with the E.164 number when the row's Call button is pressed. */
+    private Consumer<String> onRecentCall = ignored -> {};
+
+    /** Callback invoked with the E.164 number when the row's Message button is pressed. */
+    private Consumer<String> onRecentMessage = ignored -> {};
 
     private Timeline clock;
 
@@ -129,8 +141,23 @@ public final class DialerController {
     }
 
     /** Populate the recent calls list. */
-    public void setRecentCalls(ObservableList<String> calls) {
+    public void setRecentCalls(ObservableList<RecentCallRow> calls) {
         recentCallsList.setItems(Objects.requireNonNull(calls, "calls must not be null"));
+    }
+
+    /** Register a callback invoked (with the E.164 number) when a recent call is opened. */
+    public void setOnRecentSelected(Consumer<String> callback) {
+        this.onRecentSelected = Objects.requireNonNull(callback, "callback must not be null");
+    }
+
+    /** Register a callback invoked (with the E.164 number) when a row's Call button is pressed. */
+    public void setOnRecentCall(Consumer<String> callback) {
+        this.onRecentCall = Objects.requireNonNull(callback, "callback must not be null");
+    }
+
+    /** Register a callback invoked (with the E.164 number) when a row's Message button is pressed. */
+    public void setOnRecentMessage(Consumer<String> callback) {
+        this.onRecentMessage = Objects.requireNonNull(callback, "callback must not be null");
     }
 
     /** Pre-fill the number display — e.g. when clicking a number in Contacts. */
@@ -145,6 +172,7 @@ public final class DialerController {
         configureCountrySelector();
         configureKeyboardEntry();
         configureCaret();
+        configureRecentCalls();
 
         numberDisplay.textProperty().bind(Bindings.createStringBinding(
                 this::composeDisplay, dialedNumber, selectedCountry));
@@ -167,6 +195,29 @@ public final class DialerController {
         });
 
         startClock();
+    }
+
+    /** Render rows by their display string and open detail on double-click / Enter. */
+    private void configureRecentCalls() {
+        recentCallsList.setCellFactory(list ->
+                new RecentCallCell(ZoneId.systemDefault(), onRecentCall, onRecentMessage));
+        recentCallsList.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                openSelectedRecent();
+            }
+        });
+        recentCallsList.setOnKeyPressed(event -> {
+            if (event.getCode() == KeyCode.ENTER) {
+                openSelectedRecent();
+            }
+        });
+    }
+
+    private void openSelectedRecent() {
+        RecentCallRow selected = recentCallsList.getSelectionModel().getSelectedItem();
+        if (selected != null) {
+            onRecentSelected.accept(selected.number());
+        }
     }
 
     private void configureCountrySelector() {
@@ -308,7 +359,10 @@ public final class DialerController {
 
     private void startClock() {
         clock = new Timeline(
-                new KeyFrame(Duration.ZERO, e -> updateLocalTime()),
+                new KeyFrame(Duration.ZERO, e -> {
+                    updateLocalTime();
+                    recentCallsList.refresh();
+                }),
                 new KeyFrame(Duration.seconds(1)));
         clock.setCycleCount(Animation.INDEFINITE);
         clock.play();

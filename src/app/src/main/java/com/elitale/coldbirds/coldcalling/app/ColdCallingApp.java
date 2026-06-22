@@ -1,6 +1,7 @@
 package com.elitale.coldbirds.coldcalling.app;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
 import com.elitale.coldbirds.coldcalling.services.*;
@@ -10,7 +11,11 @@ import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.telephony.sip.SipCredentials;
+import com.elitale.coldbirds.coldcalling.telephony.sip.SipTester;
+import com.elitale.coldbirds.coldcalling.storage.repository.*;
 import com.elitale.coldbirds.coldcalling.ui.MainWindow;
+import com.elitale.coldbirds.coldcalling.ui.OnboardingWindow;
+import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
@@ -31,8 +36,9 @@ import java.util.function.Consumer;
  * No business logic lives here.
  * <p>
  * All credentials (Twilio Account SID + Auth Token, SIP credentials) are read from the
- * SQLite {@code settings} table via {@link SettingsService}. They default to blank on
- * first run; the user configures them through the Settings screen.
+ * SQLite {@code settings} table via {@link SettingsService}. On first run they are blank
+ * and the user configures them through the {@link OnboardingWindow} setup wizard, after
+ * which {@link #launchMainApp(Stage)} builds the credential-dependent services.
  * The SIP stack and provider clients degrade gracefully when credentials are absent.
  */
 public final class ColdCallingApp extends Application {
@@ -48,9 +54,18 @@ public final class ColdCallingApp extends Application {
     private PhoneNumberService phoneNumberService;
     private PowerDialerService powerDialerService;
     private SettingsService    settingsService;
+    private OnboardingService  onboardingService;
     private MainWindow         mainWindow;
     private AudioDeviceManager audioDeviceManager;
     private AudioDeviceTester  audioDeviceTester;
+
+    // Repositories — built once in init(), reused by launchMainApp()
+    private ContactRepository     contactRepo;
+    private PhoneNumberRepository phoneNumberRepo;
+    private CallRepository        callRepo;
+    private SmsRepository         smsRepo;
+    private SettingsRepository    settingsRepo;
+    private CallListRepository    callListRepo;
 
     public static void main(String[] args) {
         launch(args);
@@ -60,7 +75,9 @@ public final class ColdCallingApp extends Application {
 
     /**
      * Called on the JavaFX launcher thread before {@link #start}.
-     * Performs all blocking initialisation (DB open, Flyway migration, STUN, SIP REGISTER).
+     * Performs credential-independent wiring: DB open, Flyway migration, repositories,
+     * settings, audio enumeration, and the onboarding service. Credential-dependent
+     * services (provider clients, telephony) are built later in {@link #launchMainApp}.
      */
     @Override
     public void init() {
@@ -72,70 +89,29 @@ public final class ColdCallingApp extends Application {
             final var connection = db.connection();
 
             // 2. Repositories
-            final var contactRepo     = new SqliteContactRepository(connection);
-            final var phoneNumberRepo = new SqlitePhoneNumberRepository(connection);
-            final var callRepo        = new SqliteCallRepository(connection);
-            final var smsRepo         = new SqliteSmsRepository(connection);
-            final var settingsRepo    = new SqliteSettingsRepository(connection);
-            final var callListRepo    = new SqliteCallListRepository(connection);
+            contactRepo     = new SqliteContactRepository(connection);
+            phoneNumberRepo = new SqlitePhoneNumberRepository(connection);
+            callRepo        = new SqliteCallRepository(connection);
+            smsRepo         = new SqliteSmsRepository(connection);
+            settingsRepo    = new SqliteSettingsRepository(connection);
+            callListRepo    = new SqliteCallListRepository(connection);
 
             // 3. Settings — typed wrapper read by all providers and telephony wiring below.
-            //    The app starts gracefully with no credentials configured.
             settingsService = new SettingsService(settingsRepo);
 
-            // 4. Providers — credentials from settings table, not environment variables.
-            final TwilioClient twilio = new TwilioClient(
-                    TwilioConfig.of(settingsService.getTwilioAccountSid(),
-                                    settingsService.getTwilioAuthToken()));
-
-            // 5. Services
-            contactService     = new ContactService(contactRepo);
-            phoneNumberService = new PhoneNumberService(phoneNumberRepo, twilio, settingsRepo);
-            smsService         = new SmsService(twilio, smsRepo, phoneNumberRepo, settingsService);
-
-            // 6. Telephony — callService is the TelephonyListener.
-            //    Circular dependency is broken with a two-step approach:
-            //      a) build TelephonyService with a no-op listener,
-            //      b) build CallService with the real TelephonyService,
-            //      c) swap the listener on TelephonyService to point at CallService.
-            final SipCredentials sipCreds = new SipCredentials(
-                    settingsService.getSipUsername(),
-                    settingsService.getSipPassword(),
-                    settingsService.getSipDomain(),
-                    settingsService.getSipProxy(),
-                    settingsService.getSipProxyPort()
-            );
-
-            telephonyService = new TelephonyService(sipCreds, NOOP_LISTENER, null, null);
-            callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo);
-            telephonyService.setListener(callService);  // wire back: SIP events → CallService
-
-            // 6a. Audio devices — enumerate, then apply the user's saved input/output (if any)
-            //     to the telephony service so calls use the chosen devices (blank = OS default).
+            // 4. Credential-independent services usable before onboarding.
+            contactService = new ContactService(contactRepo);
             audioDeviceManager = new AudioDeviceManager();
             audioDeviceTester  = new AudioDeviceTester();
-            telephonyService.setAudioDevices(
-                    audioDeviceManager.resolveInput(settingsService.getAudioInputDevice()).orElse(null),
-                    audioDeviceManager.resolveOutput(settingsService.getAudioOutputDevice()).orElse(null));
 
-            // 7. Power Dialer — dialCommand is a lambda capturing callService (safe: captured by
-            //    reference; callService is fully initialised before any dial() is ever called).
-            powerDialerService = new PowerDialerService(
-                    callListRepo, contactRepo, phoneNumberService,
-                    (remote, local) -> callService.dial(remote, local));
-
-            // 8. Start telephony (STUN + SIP register) — non-blocking; errors logged
-            try {
-                telephonyService.start();
-            } catch (Exception e) {
-                LOG.error("Telephony start failed — app will run without SIP: {}", e.getMessage());
-            }
-
-            // 9. Sync owned numbers from Twilio (best-effort, non-fatal)
-            if (!settingsService.getTwilioAccountSid().isBlank()
-                    && !settingsService.getTwilioAuthToken().isBlank()) {
-                phoneNumberService.fetchAndSync();
-            }
+            // 5. Onboarding — drives the first-run wizard. Uses a transient Twilio client
+            //    factory (default TwilioClient::new) so credentials can be tested before
+            //    any are persisted. The PhoneNumberService here is only used to persist the
+            //    chosen numbers (repo writes); its Twilio client is irrelevant to that path.
+            final PhoneNumberService onboardingNumbers =
+                    new PhoneNumberService(phoneNumberRepo,
+                            new TwilioClient(TwilioConfig.of("", "")), settingsRepo);
+            onboardingService = new OnboardingService(settingsService, onboardingNumbers, new SipTester());
 
             LOG.info("Dependency wiring complete");
 
@@ -147,6 +123,70 @@ public final class ColdCallingApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        if (onboardingService.isOnboardingComplete()) {
+            launchMainApp(stage);
+        } else {
+            LOG.info("First run — showing onboarding wizard");
+            new OnboardingWindow(stage, onboardingService).show(() -> launchMainApp(stage));
+        }
+    }
+
+    /**
+     * Build and start the credential-dependent services from the now-persisted
+     * settings, then show the main window. Invoked either directly (when onboarding
+     * was already completed) or as the onboarding wizard's completion callback.
+     * Must run on the FX Application Thread.
+     */
+    private void launchMainApp(Stage stage) {
+        // Providers — credentials from settings table (written by onboarding or Settings).
+        final TwilioClient twilio = new TwilioClient(
+                TwilioConfig.of(settingsService.getTwilioAccountSid(),
+                                settingsService.getTwilioAuthToken()));
+
+        // Services
+        phoneNumberService = new PhoneNumberService(phoneNumberRepo, twilio, settingsRepo);
+        smsService         = new SmsService(twilio, smsRepo, phoneNumberRepo, settingsService);
+
+        // Telephony — callService is the TelephonyListener. The circular dependency is
+        // broken with a two-step approach (no-op listener, then setListener()).
+        final SipCredentials sipCreds = new SipCredentials(
+                settingsService.getSipUsername(),
+                settingsService.getSipPassword(),
+                settingsService.getSipDomain(),
+                settingsService.getSipProxy(),
+                settingsService.getSipProxyPort()
+        );
+
+        telephonyService = new TelephonyService(sipCreds, NOOP_LISTENER, null, null);
+        callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo);
+        telephonyService.setListener(callService);  // wire back: SIP events → CallService
+        // Resolve the remote number's country so recordings land under the right folder.
+        telephonyService.setCountryResolver(
+                number -> CountryLookup.byE164(CountryCatalog.ALL, number));
+
+        // Audio devices — apply the user's saved input/output (blank = OS default).
+        telephonyService.setAudioDevices(
+                audioDeviceManager.resolveInput(settingsService.getAudioInputDevice()).orElse(null),
+                audioDeviceManager.resolveOutput(settingsService.getAudioOutputDevice()).orElse(null));
+
+        // Power Dialer
+        powerDialerService = new PowerDialerService(
+                callListRepo, contactRepo, phoneNumberService,
+                (remote, local) -> callService.dial(remote, local));
+
+        // Start telephony (STUN + SIP register) — non-blocking; errors logged.
+        try {
+            telephonyService.start();
+        } catch (Exception e) {
+            LOG.error("Telephony start failed — app will run without SIP: {}", e.getMessage());
+        }
+
+        // Sync owned numbers from Twilio (best-effort, non-fatal).
+        if (!settingsService.getTwilioAccountSid().isBlank()
+                && !settingsService.getTwilioAuthToken().isBlank()) {
+            phoneNumberService.fetchAndSync();
+        }
+
         // Build the single dial consumer — resolves default owned number then dispatches
         // to CallService on a background thread (never blocks the FX Application Thread).
         final Consumer<String> onDial = rawNumber ->
@@ -195,10 +235,16 @@ public final class ColdCallingApp extends Application {
 
         callService.setOnCallEnded((callId, reason) -> {
             mainWindow.showDialer();
+            mainWindow.refreshRecentCalls();
             powerDialerService.notifyCallEnded(callId, reason);
+            if (reason != null && reason.startsWith(TelephonyService.FAILURE_PREFIX)) {
+                notifyError("Call failed: "
+                        + reason.substring(TelephonyService.FAILURE_PREFIX.length()));
+            }
         });
 
         mainWindow.show();
+        mainWindow.refreshRecentCalls();
 
         // Begin polling Twilio for inbound SMS; persisted messages refresh the Messages view.
         smsService.startReceiving(sms -> mainWindow.refreshMessages());

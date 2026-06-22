@@ -90,6 +90,23 @@ public final class PhoneNumberService {
         };
     }
 
+    /**
+     * Persist a user-chosen subset of Twilio numbers into local storage.
+     * Numbers already present, or with an invalid E.164 value, are skipped.
+     *
+     * @param numbers the selected Twilio numbers to save
+     * @return number of newly inserted numbers
+     */
+    public Result<Integer> saveSelected(List<TwilioNumberData> numbers) {
+        Objects.requireNonNull(numbers, "numbers must not be null");
+        int inserted = 0;
+        for (final TwilioNumberData data : numbers) {
+            inserted += syncNumber(data);
+        }
+        LOG.info("saveSelected complete: {} new number(s) inserted", inserted);
+        return Result.ok(inserted);
+    }
+
     // ── Private ───────────────────────────────────────────────────────────────
 
     private int syncNumber(TwilioNumberData data) {

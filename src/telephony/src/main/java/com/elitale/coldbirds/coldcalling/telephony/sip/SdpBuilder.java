@@ -18,43 +18,49 @@ public final class SdpBuilder {
     private SdpBuilder() {}
 
     /**
-     * Build an SDP offer.
+     * Build a secure (SRTP) SDP offer.
      *
-     * @param localIp   local (or STUN-discovered public) IP address; must not be null
-     * @param rtpPort   local RTP port; must be in range [1, 65535]
-     * @param sessionId unique session identifier (typically epoch seconds or a long id); must not be null
+     * @param localIp     local (or STUN-discovered public) IP address; must not be null
+     * @param rtpPort     local RTP port; must be in range [1, 65535]
+     * @param sessionId   unique session identifier; must not be null
+     * @param cryptoInline {@code inline:} base64 keying material for the crypto line; must not be null
      * @return SDP body as a CRLF-terminated string
      */
     public static String buildOffer(
             final String localIp,
             final int    rtpPort,
-            final String sessionId) {
+            final String sessionId,
+            final String cryptoInline) {
 
-        Objects.requireNonNull(localIp,   "localIp must not be null");
-        Objects.requireNonNull(sessionId, "sessionId must not be null");
+        Objects.requireNonNull(localIp,      "localIp must not be null");
+        Objects.requireNonNull(sessionId,    "sessionId must not be null");
+        Objects.requireNonNull(cryptoInline, "cryptoInline must not be null");
         validatePort(rtpPort);
 
-        return buildSdp(localIp, rtpPort, sessionId, "sendrecv");
+        return buildSdp(localIp, rtpPort, sessionId, "sendrecv", cryptoInline);
     }
 
     /**
-     * Build an SDP answer (typically in response to an inbound INVITE).
+     * Build a secure (SRTP) SDP answer (typically in response to an inbound INVITE).
      *
-     * @param localIp   local RTP address; must not be null
-     * @param rtpPort   local RTP port; must be in range [1, 65535]
-     * @param sessionId unique session identifier; must not be null
+     * @param localIp     local RTP address; must not be null
+     * @param rtpPort     local RTP port; must be in range [1, 65535]
+     * @param sessionId   unique session identifier; must not be null
+     * @param cryptoInline {@code inline:} base64 keying material for the crypto line; must not be null
      * @return SDP body as a CRLF-terminated string
      */
     public static String buildAnswer(
             final String localIp,
             final int    rtpPort,
-            final String sessionId) {
+            final String sessionId,
+            final String cryptoInline) {
 
-        Objects.requireNonNull(localIp,   "localIp must not be null");
-        Objects.requireNonNull(sessionId, "sessionId must not be null");
+        Objects.requireNonNull(localIp,      "localIp must not be null");
+        Objects.requireNonNull(sessionId,    "sessionId must not be null");
+        Objects.requireNonNull(cryptoInline, "cryptoInline must not be null");
         validatePort(rtpPort);
 
-        return buildSdp(localIp, rtpPort, sessionId, "sendrecv");
+        return buildSdp(localIp, rtpPort, sessionId, "sendrecv", cryptoInline);
     }
 
     // ------------------------------------------------------------------
@@ -65,9 +71,10 @@ public final class SdpBuilder {
             final String localIp,
             final int    rtpPort,
             final String sessionId,
-            final String direction) {
+            final String direction,
+            final String cryptoInline) {
 
-        final StringBuilder sb = new StringBuilder(256);
+        final StringBuilder sb = new StringBuilder(320);
 
         // Session description
         sb.append("v=0").append(CRLF);
@@ -77,12 +84,14 @@ public final class SdpBuilder {
         sb.append("c=IN IP4 ").append(localIp).append(CRLF);
         sb.append("t=0 0").append(CRLF);
 
-        // Media description — audio only, PCMU
+        // Media description — audio only, PCMU over secure RTP (SAVP)
         sb.append("m=audio ").append(rtpPort)
-          .append(" RTP/AVP ").append(PCMU_PAYLOAD_TYPE).append(CRLF);
+          .append(" RTP/SAVP ").append(PCMU_PAYLOAD_TYPE).append(CRLF);
         sb.append("a=rtpmap:").append(PCMU_PAYLOAD_TYPE)
           .append(" PCMU/8000").append(CRLF);
         sb.append("a=ptime:20").append(CRLF);
+        sb.append("a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:")
+          .append(cryptoInline).append(CRLF);
         sb.append("a=").append(direction).append(CRLF);
 
         return sb.toString();

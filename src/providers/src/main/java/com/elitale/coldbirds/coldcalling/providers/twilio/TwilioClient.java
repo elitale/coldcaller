@@ -3,14 +3,21 @@ package com.elitale.coldbirds.coldcalling.providers.twilio;
 import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.twilio.exception.TwilioException;
 import com.twilio.http.TwilioRestClient;
 import com.twilio.rest.api.v2010.account.IncomingPhoneNumber;
 import com.twilio.rest.api.v2010.account.Message;
+import com.twilio.rest.api.v2010.account.sip.CredentialList;
+import com.twilio.rest.api.v2010.account.sip.Domain;
+import com.twilio.rest.api.v2010.account.sip.credentiallist.Credential;
+import com.twilio.rest.api.v2010.account.sip.domain.authtypes.authtypecalls.AuthCallsCredentialListMapping;
+import com.twilio.rest.api.v2010.account.sip.domain.authtypes.authtyperegistrations.AuthRegistrationsCredentialListMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -163,6 +170,118 @@ public final class TwilioClient {
             log.error("Twilio listPhoneNumbers error", e);
             return Result.err("Twilio listPhoneNumbers error: " + e.getMessage(), e);
         }
+    }
+
+    // ── SIP provisioning ──────────────────────────────────────────────────────
+
+    private static final String CREDENTIAL_LIST_NAME = "coldCalling";
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    /**
+     * Auto-provision a working SIP registration on this Twilio account.
+     *
+     * <p>Reuses the first registration-enabled SIP domain when one exists,
+     * otherwise creates {@code coldcalling-XXXXXXXX.sip.twilio.com}. A fresh
+     * credential (generated username + strong password) is created on the
+     * {@code coldCalling} credential list, which is then mapped to the domain for
+     * both registration and call auth. Existing mappings are tolerated.
+     *
+     * @return {@link Result.Ok} with the domain, username and generated password,
+     *         or {@link Result.Err} on API/network failure.
+     */
+    public Result<SipProvisioning> autoProvisionSip() {
+        if (!config.isConfigured()) {
+            log.warn("Twilio not configured — set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to provision SIP");
+            return Result.err("Twilio not configured: set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
+        }
+        try {
+            String domainName = null;
+            String domainSid  = null;
+            for (final Domain domain : Domain.reader().read(restClient)) {
+                if (Boolean.TRUE.equals(domain.getSipRegistration())) {
+                    domainName = domain.getDomainName();
+                    domainSid  = domain.getSid();
+                    break;
+                }
+            }
+            if (domainSid == null) {
+                final String newName = "coldcalling-" + randomHex(8) + ".sip.twilio.com";
+                final Domain created = Domain.creator(newName)
+                        .setFriendlyName(CREDENTIAL_LIST_NAME)
+                        .setSipRegistration(true)
+                        .create(restClient);
+                domainName = created.getDomainName();
+                domainSid  = created.getSid();
+                log.info("Created Twilio SIP domain {}", domainName);
+            }
+
+            String credentialListSid = null;
+            for (final CredentialList list : CredentialList.reader().read(restClient)) {
+                if (CREDENTIAL_LIST_NAME.equals(list.getFriendlyName())) {
+                    credentialListSid = list.getSid();
+                    break;
+                }
+            }
+            if (credentialListSid == null) {
+                credentialListSid = CredentialList.creator(CREDENTIAL_LIST_NAME).create(restClient).getSid();
+            }
+
+            final String username = "coldcalling" + randomHex(4);
+            final String password = randomPassword();
+            Credential.creator(credentialListSid, username, password).create(restClient);
+
+            mapCredentialList(domainSid, credentialListSid);
+
+            log.info("Provisioned SIP credential {} on domain {}", username, domainName);
+            return Result.ok(new SipProvisioning(domainName, username, password));
+
+        } catch (TwilioException e) {
+            log.warn("Twilio autoProvisionSip failed: {}", e.getMessage());
+            return Result.err("Twilio SIP setup failed: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Twilio autoProvisionSip error", e);
+            return Result.err("Twilio SIP setup error: " + e.getMessage(), e);
+        }
+    }
+
+    /** Map a credential list to a domain for registration and call auth; existing mappings are ignored. */
+    private void mapCredentialList(final String domainSid, final String credentialListSid) {
+        try {
+            AuthRegistrationsCredentialListMapping.creator(domainSid, credentialListSid).create(restClient);
+        } catch (TwilioException e) {
+            log.debug("Registration credential-list mapping skipped: {}", e.getMessage());
+        }
+        try {
+            AuthCallsCredentialListMapping.creator(domainSid, credentialListSid).create(restClient);
+        } catch (TwilioException e) {
+            log.debug("Calls credential-list mapping skipped: {}", e.getMessage());
+        }
+    }
+
+    private static String randomHex(final int chars) {
+        final byte[] bytes = new byte[(chars + 1) / 2];
+        RANDOM.nextBytes(bytes);
+        final StringBuilder sb = new StringBuilder();
+        for (final byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.substring(0, chars);
+    }
+
+    /** Generate a Twilio-compliant SIP password: 16 chars with upper, lower and digit. */
+    private static String randomPassword() {
+        final String upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        final String lower = "abcdefghijkmnpqrstuvwxyz";
+        final String digit = "23456789";
+        final String all   = upper + lower + digit;
+        final StringBuilder sb = new StringBuilder();
+        sb.append(upper.charAt(RANDOM.nextInt(upper.length())));
+        sb.append(lower.charAt(RANDOM.nextInt(lower.length())));
+        sb.append(digit.charAt(RANDOM.nextInt(digit.length())));
+        for (int i = 3; i < 16; i++) {
+            sb.append(all.charAt(RANDOM.nextInt(all.length())));
+        }
+        return sb.toString();
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

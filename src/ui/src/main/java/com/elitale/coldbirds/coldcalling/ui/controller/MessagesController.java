@@ -46,6 +46,10 @@ public final class MessagesController {
     private final ObservableList<SmsMessage> conversations = FXCollections.observableArrayList();
     private final ObservableList<SmsMessage> thread        = FXCollections.observableArrayList();
 
+    /** True once a remote thread is open (existing conversation or a freshly started one). */
+    private final javafx.beans.property.BooleanProperty hasRemote =
+            new javafx.beans.property.SimpleBooleanProperty(false);
+
     /** The remote number whose thread is currently open, if any. */
     private Optional<PhoneNumber> selectedRemote = Optional.empty();
 
@@ -85,7 +89,7 @@ public final class MessagesController {
         sendBtn.disableProperty().bind(
                 composeField.textProperty().isEmpty()
                         .or(fromNumberCombo.getSelectionModel().selectedItemProperty().isNull())
-                        .or(conversationList.getSelectionModel().selectedItemProperty().isNull()));
+                        .or(hasRemote.not()));
 
         conversationList.getSelectionModel().selectedItemProperty().addListener(
                 (obs, old, selected) -> {
@@ -122,6 +126,27 @@ public final class MessagesController {
         loadConversations();
     }
 
+    /**
+     * Open (or start) the SMS thread for {@code remote} and bring it into view —
+     * used when the user taps "Message" on a recent call. If a conversation with
+     * this number already exists it is selected; otherwise a fresh, empty thread
+     * is opened ready to compose.
+     *
+     * @param remote the remote party's number; must not be null
+     */
+    public void openConversation(final PhoneNumber remote) {
+        Objects.requireNonNull(remote, "remote must not be null");
+        loadConversations();
+        loadThread(remote);
+        Platform.runLater(() -> {
+            conversations.stream()
+                    .filter(m -> m.remoteNumber().equals(remote))
+                    .findFirst()
+                    .ifPresent(conversationList.getSelectionModel()::select);
+            composeField.requestFocus();
+        });
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private void loadConversations() {
@@ -132,6 +157,7 @@ public final class MessagesController {
 
     private void loadThread(PhoneNumber remoteNumber) {
         selectedRemote = Optional.of(remoteNumber);
+        hasRemote.set(true);
         threadHeader.setText(remoteNumber.value());
         threadSubtitle.setText("SMS thread");
         CompletableFuture.supplyAsync(() -> smsService.findThread(remoteNumber))

@@ -27,10 +27,12 @@ public final class SipEngine implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(SipEngine.class);
 
-    private static final String TRANSPORT = "udp";
+    /** Default SIP transport. Twilio Secure Media requires TLS. */
+    private static final String DEFAULT_TRANSPORT = "tls";
 
     private final String            localIp;
     private final int               localPort;
+    private final String            transport;
     private final SipListener       listener;
 
     private SipStack       sipStack;
@@ -40,19 +42,36 @@ public final class SipEngine implements AutoCloseable {
     private HeaderFactory  headerFactory;
 
     /**
-     * Create a SipEngine bound to the given local address.
+     * Create a SipEngine bound to the given local address using TLS transport.
      *
-     * @param localIp  local IP (may be STUN-discovered public IP); must not be null
-     * @param localPort local SIP UDP port (typically 5060 or an ephemeral port)
+     * @param localIp  local bindable IP; must not be null
+     * @param localPort local SIP port
      * @param listener  callback receiver for all SIP events; must not be null
      */
     public SipEngine(
             final String      localIp,
             final int         localPort,
             final SipListener listener) {
+        this(localIp, localPort, DEFAULT_TRANSPORT, listener);
+    }
+
+    /**
+     * Create a SipEngine bound to the given local address and transport.
+     *
+     * @param localIp   local bindable IP; must not be null
+     * @param localPort local SIP port
+     * @param transport SIP transport ("tls", "tcp", or "udp"); must not be null
+     * @param listener  callback receiver for all SIP events; must not be null
+     */
+    public SipEngine(
+            final String      localIp,
+            final int         localPort,
+            final String      transport,
+            final SipListener listener) {
 
         this.localIp   = Objects.requireNonNull(localIp,   "localIp must not be null");
         this.localPort = localPort;
+        this.transport = Objects.requireNonNull(transport, "transport must not be null");
         this.listener  = Objects.requireNonNull(listener,  "listener must not be null");
     }
 
@@ -77,11 +96,11 @@ public final class SipEngine implements AutoCloseable {
             addressFactory = factory.createAddressFactory();
             headerFactory  = factory.createHeaderFactory();
 
-            final ListeningPoint lp = sipStack.createListeningPoint(localIp, localPort, TRANSPORT);
+            final ListeningPoint lp = sipStack.createListeningPoint(localIp, localPort, transport);
             sipProvider = sipStack.createSipProvider(lp);
             sipProvider.addSipListener(listener);
 
-            LOG.info("SIP stack started on {}:{}", localIp, localPort);
+            LOG.info("SIP stack started on {}:{}/{}", localIp, localPort, transport);
         } catch (final TooManyListenersException e) {
             throw new SipException("Failed to register SIP listener", e);
         } catch (final Exception e) {
@@ -169,6 +188,11 @@ public final class SipEngine implements AutoCloseable {
         return localPort;
     }
 
+    /** SIP transport in use ("tls", "tcp", or "udp"). */
+    public String transport() {
+        return transport;
+    }
+
     // ------------------------------------------------------------------
     // Private
     // ------------------------------------------------------------------
@@ -180,6 +204,14 @@ public final class SipEngine implements AutoCloseable {
         props.setProperty("gov.nist.javax.sip.TRACE_LEVEL", "0"); // 0 = production
         props.setProperty("gov.nist.javax.sip.LOG_MESSAGE_CONTENT", "false");
         props.setProperty("gov.nist.javax.sip.DELIVER_TERMINATED_EVENT_FOR_ACK", "true");
+        // TLS client config: we are the client (no client cert); verify Twilio's
+        // server cert via the JVM default trust store (cacerts trusts Twilio's CA).
+        props.setProperty("gov.nist.javax.sip.TLS_CLIENT_AUTH_TYPE",  "Disabled");
+        props.setProperty("gov.nist.javax.sip.TLS_CLIENT_PROTOCOLS", "TLSv1.2,TLSv1.3");
+        // Route the stack's logger through SLF4J. The bundled default
+        // (gov.nist.core.LogWriter) hard-depends on log4j 1.x, which is absent,
+        // so without this the stack fails to instantiate with NoClassDefFoundError.
+        props.setProperty("gov.nist.javax.sip.STACK_LOGGER", Slf4jStackLogger.class.getName());
         return props;
     }
 

@@ -92,6 +92,42 @@ class PhoneNumberServiceTest {
         assertThat(result).isInstanceOf(Result.Err.class);
     }
 
+    @Test
+    void saveSelected_savesNewNumbers() {
+        when(repo.findByNumber(NUMBER)).thenReturn(Optional.empty());
+        when(repo.save(any())).thenReturn(Result.ok(stubOwned()));
+
+        final Result<Integer> result = service.saveSelected(
+                List.of(new TwilioNumberData("PN1", NUMBER.value(), "in-use"))
+        );
+
+        assertThat(result).isInstanceOf(Result.Ok.class);
+        assertThat(((Result.Ok<Integer>) result).value()).isEqualTo(1);
+        verify(repo).save(any());
+    }
+
+    @Test
+    void saveSelected_skipsExistingNumbers() {
+        when(repo.findByNumber(NUMBER)).thenReturn(Optional.of(stubOwned()));
+
+        final Result<Integer> result = service.saveSelected(
+                List.of(new TwilioNumberData("PN1", NUMBER.value(), "in-use"))
+        );
+
+        assertThat(((Result.Ok<Integer>) result).value()).isZero();
+        verify(repo, never()).save(any());
+    }
+
+    @Test
+    void saveSelected_skipsInvalidNumbers() {
+        final Result<Integer> result = service.saveSelected(
+                List.of(new TwilioNumberData("PN1", "not-e164", "in-use"))
+        );
+
+        assertThat(((Result.Ok<Integer>) result).value()).isZero();
+        verify(repo, never()).save(any());
+    }
+
     private OwnedNumber stubOwned() {
         return new OwnedNumber(
                 ID, NUMBER, Optional.empty(),

@@ -132,6 +132,19 @@ public final class SqliteCallRepository implements CallRepository {
     }
 
     @Override
+    public List<Call> findByRemoteNumber(PhoneNumber remoteNumber) {
+        String sql = "SELECT * FROM calls WHERE remote_number=? ORDER BY started_at DESC";
+        List<Call> result = new ArrayList<>();
+        try (var stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, remoteNumber.value());
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) result.add(map(rs));
+            }
+        } catch (SQLException ignored) {}
+        return List.copyOf(result);
+    }
+
+    @Override
     public List<Call> findRecent(int limit) {
         String sql = "SELECT * FROM calls ORDER BY started_at DESC LIMIT " + limit;
         List<Call> result = new ArrayList<>();

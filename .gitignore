@@ -33,3 +33,6 @@ src/infra/cdk.out/
 *.pem
 *.p12
 *.keystore
+
+# Local SIP test credentials (never commit)
+.scripts/creds.txt

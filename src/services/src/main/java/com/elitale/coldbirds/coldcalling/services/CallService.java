@@ -193,6 +193,16 @@ public final class CallService implements TelephonyService.TelephonyListener {
     }
 
     /**
+     * Return every call recorded against {@code remoteNumber}, newest first.
+     * Does not block — safe to call from a background thread.
+     *
+     * @param remoteNumber the remote party's E.164 number
+     */
+    public List<Call> findByRemoteNumber(PhoneNumber remoteNumber) {
+        return callRepo.findByRemoteNumber(Objects.requireNonNull(remoteNumber, "remoteNumber"));
+    }
+
+    /**
      * Returns the E.164 remote number for an in-flight call, falling back
      * to the raw callId if the call cannot be found (should not happen in practice).
      *
@@ -266,6 +276,8 @@ public final class CallService implements TelephonyService.TelephonyListener {
                 ? call.disposition
                 : mapReasonToDisposition(reason);
 
+        final Optional<String> recordingPath = telephony.takeRecordingPath(call.sipCallId);
+
         final NewCall newCall = new NewCall(
                 call.direction,
                 call.localNumberId.get(),
@@ -276,7 +288,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
                 Optional.of(answeredAt),
                 Optional.of(endedAt),
                 Optional.of(durationMs),
-                Optional.empty(),
+                recordingPath,
                 Optional.ofNullable(call.notes.isBlank() ? null : call.notes)
         );
 

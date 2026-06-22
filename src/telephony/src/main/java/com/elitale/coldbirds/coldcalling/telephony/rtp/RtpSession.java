@@ -25,7 +25,7 @@ import java.util.function.Consumer;
  *
  * <p>Must call {@link #close()} on every call termination to avoid thread leaks.
  */
-public final class RtpSession implements AutoCloseable {
+public final class RtpSession implements RtpTransport {
 
     private static final Logger LOG = LoggerFactory.getLogger(RtpSession.class);
 

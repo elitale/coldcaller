@@ -37,13 +37,16 @@ public final class AudioPipeline implements AutoCloseable {
     private static final int BUFFER_FRAMES  = G711Codec.SAMPLES_PER_PACKET; // 160 frames = 20 ms
     private static final int BUFFER_BYTES   = BUFFER_FRAMES * FORMAT.getFrameSize(); // 320 bytes
 
-    private final RtpSession    rtpSession;
+    private final RtpTransport  rtpSession;
     private final Mixer.Info    inputDevice;  // null = system default
     private final Mixer.Info    outputDevice; // null = system default
 
     private TargetDataLine  micLine;
     private SourceDataLine  speakerLine;
     private Thread          captureThread;
+
+    /** Optional call recorder; when set, both audio directions are tapped. */
+    private volatile CallRecorder recorder;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -53,13 +56,24 @@ public final class AudioPipeline implements AutoCloseable {
      * @param outputDevice speaker mixer info, or null for system default
      */
     public AudioPipeline(
-            final RtpSession  rtpSession,
+            final RtpTransport rtpSession,
             final Mixer.Info  inputDevice,
             final Mixer.Info  outputDevice) {
 
         this.rtpSession   = Objects.requireNonNull(rtpSession, "rtpSession must not be null");
         this.inputDevice  = inputDevice;
         this.outputDevice = outputDevice;
+    }
+
+    /**
+     * Attach a recorder to capture both call directions. Must be set before
+     * {@link #start()}. The pipeline does not own the recorder's lifecycle —
+     * the caller is responsible for closing it when the call ends.
+     *
+     * @param recorder the recorder, or null to disable recording
+     */
+    public void setRecorder(final CallRecorder recorder) {
+        this.recorder = recorder;
     }
 
     // ------------------------------------------------------------------
@@ -117,6 +131,11 @@ public final class AudioPipeline implements AutoCloseable {
     public void receiveAudio(final short[] pcm) {
         if (!running.get() || speakerLine == null) return;
 
+        final CallRecorder rec = recorder;
+        if (rec != null) {
+            rec.onRemoteFrame(pcm);
+        }
+
         final byte[] bytes = shortsToBytes(pcm);
         speakerLine.write(bytes, 0, bytes.length);
     }
@@ -134,6 +153,14 @@ public final class AudioPipeline implements AutoCloseable {
             if (read < BUFFER_BYTES) continue;
 
             final short[] pcm = bytesToShorts(buffer);
+
+            // Record every captured frame so the recording timeline is continuous,
+            // independent of silence suppression on the outbound RTP stream.
+            final CallRecorder rec = recorder;
+            if (rec != null) {
+                rec.onMicFrame(pcm);
+            }
+
             if (!isSilent(pcm)) {
                 rtpSession.sendAudio(pcm);
             }

@@ -1,6 +1,5 @@
 dependencies {
     implementation(project(':domain'))
-    implementation(libs.jain.sip.api)
     implementation(libs.jain.sip.ri)
     implementation(libs.jlibrtp)
     implementation(libs.slf4j.api)
