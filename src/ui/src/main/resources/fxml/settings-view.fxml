@@ -35,6 +35,8 @@
                         <HBox spacing="12" alignment="CENTER_LEFT">
                             <Label text="Default number" prefWidth="180"/>
                             <ComboBox fx:id="defaultNumberCombo" prefWidth="240"/>
+                            <Button fx:id="refreshNumbersButton" text="Refresh"
+                                    onAction="#onRefreshNumbers"/>
                         </HBox>
 
                         <HBox alignment="CENTER_RIGHT">

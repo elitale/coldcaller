@@ -1,6 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDevice;
@@ -37,6 +38,7 @@ public final class SettingsController {
 
     // General
     @FXML private ComboBox<String> defaultNumberCombo;
+    @FXML private Button           refreshNumbersButton;
 
     // Twilio
     @FXML private TextField        twilioAccountSidField;
@@ -159,6 +161,26 @@ public final class SettingsController {
             phoneNumberService.setDefault(new PhoneNumber(sel));
         }
         showStatus("General settings saved.");
+    }
+
+    /**
+     * Re-sync the user's phone numbers from Twilio, then reload the default-number
+     * combo. Network and DB work run off the FX thread; the current selection is
+     * preserved when it survives the refresh.
+     */
+    @FXML
+    private void onRefreshNumbers() {
+        refreshNumbersButton.setDisable(true);
+        showStatus("Refreshing numbers\u2026");
+        CompletableFuture.supplyAsync(this::fetchAndListNumbers)
+                .thenAcceptAsync(this::applyRefreshedNumbers, Platform::runLater)
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> {
+                        refreshNumbersButton.setDisable(false);
+                        showStatus("Couldn\u2019t refresh numbers.");
+                    });
+                    return null;
+                });
     }
 
     @FXML
@@ -302,6 +324,32 @@ public final class SettingsController {
                 .ifPresentOrElse(
                         combo::setValue,
                         () -> combo.getItems().stream().findFirst().ifPresent(combo::setValue));
+    }
+
+    private record NumbersRefresh(String message, List<String> numbers) {}
+
+    /** Background thread: pull numbers from Twilio, then read back the owned list. */
+    private NumbersRefresh fetchAndListNumbers() {
+        final String message = switch (phoneNumberService.fetchAndSync()) {
+            case Result.Ok<Integer> ok -> ok.value() == 0
+                    ? "Numbers up to date."
+                    : ok.value() + " new number(s) added.";
+            case Result.Err<?> err -> "Couldn\u2019t refresh numbers \u2014 check Twilio settings.";
+        };
+        final List<String> numbers = phoneNumberService.listOwned()
+                .stream().map(n -> n.number().value()).toList();
+        return new NumbersRefresh(message, numbers);
+    }
+
+    /** FX thread: refresh the combo, keeping the current selection when still present. */
+    private void applyRefreshedNumbers(NumbersRefresh r) {
+        refreshNumbersButton.setDisable(false);
+        final String current = defaultNumberCombo.getValue();
+        defaultNumberCombo.setItems(FXCollections.observableArrayList(r.numbers()));
+        if (current != null && r.numbers().contains(current)) {
+            defaultNumberCombo.setValue(current);
+        }
+        showStatus(r.message());
     }
 
     /** Selected device id, or "" (system default) when nothing is selected. */

@@ -84,6 +84,22 @@ class SmsServiceTest {
     }
 
     @Test
+    void refreshInbound_returnsCountOfNewMessages() {
+        Instant since = Instant.parse("2024-01-01T00:00:00Z");
+        Instant sentAt = Instant.parse("2024-01-02T10:00:00Z");
+        when(settings.getSmsLastPolledAt()).thenReturn(since);
+        DomainEvent.IncomingSms event = new DomainEvent.IncomingSms(TO, FROM, "reply", sentAt);
+        when(twilio.fetchInboundSince(since)).thenReturn(Result.ok(List.of(event)));
+        stubOwnedNumber(FROM, FROM_ID);
+        when(smsRepo.save(any())).thenReturn(Result.err("stub"));
+
+        int count = service.refreshInbound();
+
+        assertThat(count).isEqualTo(1);
+        verify(settings).setSmsLastPolledAt(sentAt);
+    }
+
+    @Test
     void pollInbound_apiError_returnsEmpty_andDoesNotAdvanceWatermark() {
         Instant since = Instant.parse("2024-01-01T00:00:00Z");
         when(settings.getSmsLastPolledAt()).thenReturn(since);

@@ -12,8 +12,8 @@
     <!-- ── Page header ─────────────────────────────────────────────────────── -->
     <top>
         <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
-            <Label text="Messages" styleClass="view-title"/>
-        </HBox>
+            <Label text="Messages" styleClass="view-title"/>            <Region HBox.hgrow="ALWAYS"/>
+            <Button fx:id="refreshBtn" text="Refresh" onAction="#onRefresh"/>        </HBox>
     </top>
 
     <!-- ── Two-pane body ───────────────────────────────────────────────────── -->

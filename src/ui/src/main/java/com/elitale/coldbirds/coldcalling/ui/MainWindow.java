@@ -160,17 +160,25 @@ public final class MainWindow {
     }
 
     /**
-     * Show the calling screen in its Ringing phase (outbound dial). The screen
-     * appears the instant the call starts ringing, before the remote answers.
-     * Safe to call from any thread.
+     * Open the calling screen in its connecting phase ("Calling…") the instant
+     * the user presses call, before the SIP INVITE goes out. Safe to call from
+     * any thread.
      */
-    public void showCallRinging(String number, Runnable onHangUp) {
+    public void showCallStarting(String number, Runnable onHangUp) {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onHangUp);
-            activeCallController.startRinging(party);
+            activeCallController.startConnecting(party);
             root.setCenter(activeCallView);
         });
+    }
+
+    /**
+     * Flip the already-visible calling screen from "Calling…" to "Ringing…" once
+     * the INVITE has been dispatched. Safe to call from any thread.
+     */
+    public void markCallRinging() {
+        activeCallController.markRinging();
     }
 
     /**

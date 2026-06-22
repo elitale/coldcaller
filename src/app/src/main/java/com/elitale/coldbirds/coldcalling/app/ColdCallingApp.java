@@ -239,10 +239,17 @@ public final class ColdCallingApp extends Application {
             }
         });
 
-        // Outbound: show the calling screen the instant the call starts ringing.
+        // Outbound: open the calling screen the instant the user presses call —
+        // BEFORE the SIP INVITE is dispatched — so dialling feels immediate.
+        callService.setOnCallStarting(remote -> {
+            activeCallId = null;
+            mainWindow.showCallStarting(remote, () -> callService.hangUp());
+        });
+
+        // INVITE dispatched → flip the already-visible screen to "Ringing…".
         callService.setOnCallRinging(callId -> {
             activeCallId = callId;
-            mainWindow.showCallRinging(caller(callId), () -> callService.hangUp());
+            mainWindow.markCallRinging();
         });
 
         // Outbound that never started (not signed in, DNC, etc.): show the reason.
@@ -282,8 +289,10 @@ public final class ColdCallingApp extends Application {
         mainWindow.show();
         mainWindow.refreshRecentCalls();
 
-        // Begin polling Twilio for inbound SMS; persisted messages refresh the Messages view.
-        smsService.startReceiving(sms -> mainWindow.refreshMessages());
+        // Twilio inbound SMS polling is disabled for now. To re-enable, restore:
+        //   smsService.startReceiving(sms -> mainWindow.refreshMessages());
+        // Until then, the Messages view refreshes when the user opens it. Numbers
+        // can be re-synced on demand via the Refresh button in Settings.
     }
 
     /** Surface an error to the user as a toast (no-op if the window isn't up yet). */

@@ -135,6 +135,16 @@ public final class SmsService {
     }
 
     /**
+     * Fetch any new inbound SMS from Twilio once — the same work a single background
+     * poll tick performs — for the manual "Refresh" action now that automatic polling
+     * is disabled. Persists new messages, advances the watermark, and returns the count
+     * of new inbound messages. Blocking I/O — never call on the FX thread.
+     */
+    public int refreshInbound() {
+        return pollInbound().size();
+    }
+
+    /**
      * Fetch inbound SMS newer than the persisted watermark, persist each new message, and
      * advance the watermark. Returns the newly persisted inbound events (may be empty).
      * <p>

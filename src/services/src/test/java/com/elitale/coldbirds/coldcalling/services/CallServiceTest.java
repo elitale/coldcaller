@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -80,6 +81,66 @@ class CallServiceTest {
         callService.dial(REMOTE, LOCAL);
 
         assertThat(ringingId.get()).isEqualTo("sip-call-9");
+    }
+
+    @Test
+    void dial_firesCallStartingBeforePlacingTheCall() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-call-9");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+
+        @SuppressWarnings("unchecked")
+        Consumer<String> starting = mock(Consumer.class);
+        callService.setOnCallStarting(starting);
+
+        callService.dial(REMOTE, LOCAL);
+
+        // The screen-show callback must fire BEFORE the SIP INVITE is dispatched.
+        InOrder order = inOrder(starting, telephony);
+        order.verify(starting).accept(REMOTE.value());
+        order.verify(telephony).dial(LOCAL, REMOTE);
+    }
+
+    @Test
+    void dial_callStartingThenRinging_inOrder() {
+        when(telephony.dial(LOCAL, REMOTE)).thenReturn("sip-call-9");
+        stubOwnedNumber(LOCAL, LOCAL_ID);
+
+        @SuppressWarnings("unchecked")
+        Consumer<String> starting = mock(Consumer.class);
+        @SuppressWarnings("unchecked")
+        Consumer<String> ringing = mock(Consumer.class);
+        callService.setOnCallStarting(starting);
+        callService.setOnCallRinging(ringing);
+
+        callService.dial(REMOTE, LOCAL);
+
+        InOrder order = inOrder(starting, ringing);
+        order.verify(starting).accept(REMOTE.value());
+        order.verify(ringing).accept("sip-call-9");
+    }
+
+    @Test
+    void dial_dnc_doesNotFireCallStarting() {
+        stubContactDnc(REMOTE, true);
+        @SuppressWarnings("unchecked")
+        Consumer<String> starting = mock(Consumer.class);
+        callService.setOnCallStarting(starting);
+
+        callService.dial(REMOTE, LOCAL);
+
+        verify(starting, never()).accept(any());
+    }
+
+    @Test
+    void dial_unknownLocalNumber_doesNotFireCallStarting() {
+        when(phoneNumberRepo.findByNumber(LOCAL)).thenReturn(Optional.empty());
+        @SuppressWarnings("unchecked")
+        Consumer<String> starting = mock(Consumer.class);
+        callService.setOnCallStarting(starting);
+
+        callService.dial(REMOTE, LOCAL);
+
+        verify(starting, never()).accept(any());
     }
 
     @Test

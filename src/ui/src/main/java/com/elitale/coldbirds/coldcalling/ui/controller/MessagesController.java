@@ -37,6 +37,7 @@ public final class MessagesController {
     @FXML private ComboBox<OwnedNumber> fromNumberCombo;
     @FXML private TextField             composeField;
     @FXML private Button                sendBtn;
+    @FXML private Button                refreshBtn;
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,23 @@ public final class MessagesController {
     @FXML
     private void onNewMessage() {
         showNewMessageDialog();
+    }
+
+    /**
+     * Manually pull new inbound SMS from Twilio, then reload the conversation list
+     * and the open thread. Wired to the Refresh button now that automatic background
+     * polling is disabled. Network and DB work run off the FX thread.
+     */
+    @FXML
+    private void onRefresh() {
+        if (smsService == null) return;
+        refreshBtn.setDisable(true);
+        CompletableFuture.supplyAsync(() -> smsService.refreshInbound())
+                .whenCompleteAsync((count, ex) -> {
+                    refreshBtn.setDisable(false);
+                    loadConversations();
+                    selectedRemote.ifPresent(this::loadThread);
+                }, Platform::runLater);
     }
 
     // ── Public API ────────────────────────────────────────────────────────────

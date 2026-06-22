@@ -197,19 +197,33 @@ public final class ActiveCallController {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /** Show the screen in its Ringing phase with the resolved party. Any thread. */
-    public void startRinging(CallParticipant party) {
+    /**
+     * Show the screen in its connecting phase ("Calling…") with the resolved
+     * party. Opened the instant the user presses call, before the SIP INVITE is
+     * even dispatched. Any thread.
+     */
+    public void startConnecting(CallParticipant party) {
         Objects.requireNonNull(party, "party must not be null");
         runOnFx(() -> {
             reset(party);
             phase = Phase.RINGING;
-            statusLabel.setText("Ringing\u2026");
+            statusLabel.setText("Calling\u2026");
             setRingStyle("call-ring--ringing");
             hangUpButton.setText("Cancel");
             setControlsDisabled(true);
             startPulse();
             tones.startRingback();
             animateIn();
+        });
+    }
+
+    /**
+     * Flip the connecting screen's status to "Ringing…" once the INVITE is on
+     * the wire. No-op once the call has connected or failed. Any thread.
+     */
+    public void markRinging() {
+        runOnFx(() -> {
+            if (phase == Phase.RINGING) statusLabel.setText("Ringing\u2026");
         });
     }
 

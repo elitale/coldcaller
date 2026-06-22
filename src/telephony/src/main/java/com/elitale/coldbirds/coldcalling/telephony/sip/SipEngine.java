@@ -208,6 +208,14 @@ public final class SipEngine implements AutoCloseable {
         // server cert via the JVM default trust store (cacerts trusts Twilio's CA).
         props.setProperty("gov.nist.javax.sip.TLS_CLIENT_AUTH_TYPE",  "Disabled");
         props.setProperty("gov.nist.javax.sip.TLS_CLIENT_PROTOCOLS", "TLSv1.2,TLSv1.3");
+        // Keep the single TLS channel to Twilio warm and reused. Without this the
+        // stack tears the socket down after a response (e.g. a 407 auth challenge)
+        // and the authenticated re-INVITE then fails with "Could not connect" when
+        // it tries to reopen the connection. CRLF keep-alives every 20s hold the
+        // connection open so REGISTER, INVITE and the auth re-INVITE all share it.
+        props.setProperty("gov.nist.javax.sip.RELIABLE_CONNECTION_KEEP_ALIVE_TIMEOUT", "20");
+        props.setProperty("gov.nist.javax.sip.AGGRESSIVE_CLEANUP", "false");
+        props.setProperty("gov.nist.javax.sip.CONNECTION_TIMEOUT", "10000");
         // Route the stack's logger through SLF4J. The bundled default
         // (gov.nist.core.LogWriter) hard-depends on log4j 1.x, which is absent,
         // so without this the stack fails to instantiate with NoClassDefFoundError.
