@@ -128,10 +128,16 @@
                         <HBox spacing="12" alignment="CENTER_LEFT">
                             <Label text="Input Device" prefWidth="180"/>
                             <ComboBox fx:id="audioInputCombo" prefWidth="280"/>
+                            <Button fx:id="inputTestButton" text="Test" onAction="#onToggleMicTest"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label prefWidth="180"/>
+                            <ProgressBar fx:id="inputLevelBar" progress="0" prefWidth="280"/>
                         </HBox>
                         <HBox spacing="12" alignment="CENTER_LEFT">
                             <Label text="Output Device" prefWidth="180"/>
                             <ComboBox fx:id="audioOutputCombo" prefWidth="280"/>
+                            <Button fx:id="outputTestButton" text="Test sound" onAction="#onTestSpeaker"/>
                         </HBox>
                         <HBox spacing="12" alignment="CENTER_LEFT">
                             <Label text="Jitter Buffer (ms)" prefWidth="180"/>

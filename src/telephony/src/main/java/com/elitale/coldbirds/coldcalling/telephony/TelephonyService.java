@@ -73,8 +73,8 @@ public final class TelephonyService implements SipListener, AutoCloseable {
 
     private final SipCredentials      credentials;
     private volatile TelephonyListener listener;
-    private final Mixer.Info          inputDevice;
-    private final Mixer.Info          outputDevice;
+    private volatile Mixer.Info       inputDevice;
+    private volatile Mixer.Info       outputDevice;
 
     private final G711Codec codec = new G711Codec();
     private final AtomicInteger cseq = new AtomicInteger(1);
@@ -123,6 +123,18 @@ public final class TelephonyService implements SipListener, AutoCloseable {
      */
     public void setListener(final TelephonyListener listener) {
         this.listener = Objects.requireNonNull(listener, "listener must not be null");
+    }
+
+    /**
+     * Update the audio devices used for the <em>next</em> call. Applied immediately without
+     * a restart; an in-progress call keeps the devices it started with.
+     *
+     * @param inputDevice  microphone to use, or null for system default
+     * @param outputDevice speaker to use, or null for system default
+     */
+    public void setAudioDevices(final Mixer.Info inputDevice, final Mixer.Info outputDevice) {
+        this.inputDevice  = inputDevice;
+        this.outputDevice = outputDevice;
     }
 
     /**

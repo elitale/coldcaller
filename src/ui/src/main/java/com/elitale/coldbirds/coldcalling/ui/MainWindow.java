@@ -6,6 +6,8 @@ import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.ui.controller.ActiveCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.CallHistoryController;
 import com.elitale.coldbirds.coldcalling.ui.controller.ContactsController;
@@ -37,6 +39,7 @@ import javafx.util.Duration;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -53,7 +56,10 @@ public final class MainWindow {
             PhoneNumberService phoneNumberService,
             Consumer<String>   onDial,
             PowerDialerService powerDialerService,
-            SettingsService    settingsService) {}
+            SettingsService    settingsService,
+            AudioDeviceManager audioDeviceManager,
+            AudioDeviceTester  audioDeviceTester,
+            BiConsumer<String, String> onApplyAudioDevices) {}
 
     private static final double SIDEBAR_WIDTH  = 190;
     private static final double MIN_WINDOW_W   = 960;
@@ -69,6 +75,9 @@ public final class MainWindow {
     private final Consumer<String>   onDial;
     private final PowerDialerService powerDialerService;
     private final SettingsService    settingsService;
+    private final AudioDeviceManager audioDeviceManager;
+    private final AudioDeviceTester  audioDeviceTester;
+    private final BiConsumer<String, String> onApplyAudioDevices;
 
     // Controllers
     private DialerController       dialerController;
@@ -106,6 +115,9 @@ public final class MainWindow {
         this.onDial             = Objects.requireNonNull(deps.onDial(),             "onDial");
         this.powerDialerService = Objects.requireNonNull(deps.powerDialerService(), "powerDialerService");
         this.settingsService    = Objects.requireNonNull(deps.settingsService(),    "settingsService");
+        this.audioDeviceManager = Objects.requireNonNull(deps.audioDeviceManager(), "audioDeviceManager");
+        this.audioDeviceTester  = Objects.requireNonNull(deps.audioDeviceTester(),  "audioDeviceTester");
+        this.onApplyAudioDevices = Objects.requireNonNull(deps.onApplyAudioDevices(), "onApplyAudioDevices");
     }
 
     // ── Thread-safe public API ────────────────────────────────────────────────
@@ -174,6 +186,9 @@ public final class MainWindow {
         settingsController = new SettingsController();
         settingsController.setSettingsService(settingsService);
         settingsController.setPhoneNumberService(phoneNumberService);
+        settingsController.setAudioDeviceManager(audioDeviceManager);
+        settingsController.setAudioDeviceTester(audioDeviceTester);
+        settingsController.setOnApplyAudioDevices(onApplyAudioDevices);
         settingsView = loadFxml("/fxml/settings-view.fxml", settingsController);
 
         // ── Dialer (@FXML fields injected during load — wire callbacks after)
@@ -271,6 +286,12 @@ public final class MainWindow {
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
 
+    /** Swap the centre pane, stopping any live mic test left running in Settings. */
+    private void showCenter(Parent view) {
+        settingsController.dispose();
+        root.setCenter(view);
+    }
+
     private VBox buildSidebar() {
         VBox sidebar = new VBox(2);
         sidebar.setPrefWidth(SIDEBAR_WIDTH);
@@ -281,16 +302,16 @@ public final class MainWindow {
         appName.getStyleClass().add("title-2");
         appName.setPadding(new Insets(0, 0, 12, 4));
 
-        Button dialerBtn      = navButton("Dialer",       () -> root.setCenter(dialerView));
-        Button contactsBtn    = navButton("Contacts",     () -> root.setCenter(contactsView));
-        Button historyBtn     = navButton("Call History", () -> root.setCenter(callHistoryView));
+        Button dialerBtn      = navButton("Dialer",       () -> showCenter(dialerView));
+        Button contactsBtn    = navButton("Contacts",     () -> showCenter(contactsView));
+        Button historyBtn     = navButton("Call History", () -> showCenter(callHistoryView));
         Button messagesBtn    = navButton("Messages",     () -> {
             messagesController.refresh();
-            root.setCenter(messagesView);
+            showCenter(messagesView);
         });
         Button powerDialerBtn = navButton("Power Dialer", () -> {
             powerDialerController.refresh();
-            root.setCenter(powerDialerView);
+            showCenter(powerDialerView);
         });
 
         Region spacer = new Region();

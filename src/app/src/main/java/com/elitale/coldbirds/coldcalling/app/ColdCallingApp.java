@@ -9,6 +9,8 @@ import com.elitale.coldbirds.coldcalling.services.*;
 import com.elitale.coldbirds.coldcalling.storage.DatabaseManager;
 import com.elitale.coldbirds.coldcalling.storage.sqlite.*;
 import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.telephony.sip.SipCredentials;
 import com.elitale.coldbirds.coldcalling.ui.MainWindow;
 import javafx.application.Application;
@@ -20,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -48,6 +51,8 @@ public final class ColdCallingApp extends Application {
     private PowerDialerService powerDialerService;
     private SettingsService    settingsService;
     private MainWindow         mainWindow;
+    private AudioDeviceManager audioDeviceManager;
+    private AudioDeviceTester  audioDeviceTester;
 
     public static void main(String[] args) {
         launch(args);
@@ -111,6 +116,14 @@ public final class ColdCallingApp extends Application {
             callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo);
             telephonyService.setListener(callService);  // wire back: SIP events → CallService
 
+            // 6a. Audio devices — enumerate, then apply the user's saved input/output (if any)
+            //     to the telephony service so calls use the chosen devices (blank = OS default).
+            audioDeviceManager = new AudioDeviceManager();
+            audioDeviceTester  = new AudioDeviceTester();
+            telephonyService.setAudioDevices(
+                    audioDeviceManager.resolveInput(settingsService.getAudioInputDevice()).orElse(null),
+                    audioDeviceManager.resolveOutput(settingsService.getAudioOutputDevice()).orElse(null));
+
             // 7. Power Dialer — dialCommand is a lambda capturing callService (safe: captured by
             //    reference; callService is fully initialised before any dial() is ever called).
             powerDialerService = new PowerDialerService(
@@ -166,7 +179,8 @@ public final class ColdCallingApp extends Application {
 
         mainWindow = new MainWindow(stage, new MainWindow.Dependencies(
                 contactService, callService, smsService, phoneNumberService,
-                onDial, powerDialerService, settingsService));
+                onDial, powerDialerService, settingsService,
+                audioDeviceManager, audioDeviceTester, applyAudioDevices()));
 
         // Wire call events → MainWindow + PowerDialerService (composed lambdas)
         callService.setOnIncomingCall((callId, caller, called) ->
@@ -198,6 +212,16 @@ public final class ColdCallingApp extends Application {
         if (mainWindow != null) {
             mainWindow.showError(message);
         }
+    }
+
+    /**
+     * Callback the Settings screen invokes when the user saves audio devices: resolves the
+     * persisted device ids to mixers and applies them to telephony for the next call.
+     */
+    private BiConsumer<String, String> applyAudioDevices() {
+        return (inputId, outputId) -> telephonyService.setAudioDevices(
+                audioDeviceManager.resolveInput(inputId).orElse(null),
+                audioDeviceManager.resolveOutput(outputId).orElse(null));
     }
 
     @Override
