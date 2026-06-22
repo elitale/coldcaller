@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 
+import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +29,7 @@ class CallServiceTest {
     @Mock CallRepository         callRepo;
     @Mock ContactRepository      contactRepo;
     @Mock PhoneNumberRepository  phoneNumberRepo;
+    @Mock SettingsService        settings;
 
     CallService callService;
 
@@ -37,7 +40,7 @@ class CallServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        callService = new CallService(telephony, callRepo, contactRepo, phoneNumberRepo);
+        callService = new CallService(telephony, callRepo, contactRepo, phoneNumberRepo, settings);
     }
 
     // ── dial ──────────────────────────────────────────────────────────────────
@@ -275,6 +278,51 @@ class CallServiceTest {
     void remoteLevel_delegatesToTelephony() {
         when(telephony.remoteLevel()).thenReturn(0.73);
         assertThat(callService.remoteLevel()).isEqualTo(0.73);
+    }
+
+    @Test
+    void isRecording_delegatesToTelephony() {
+        when(telephony.isRecording()).thenReturn(true);
+        assertThat(callService.isRecording()).isTrue();
+    }
+
+    // ── dropVoicemail ───────────────────────────────────────────────────────────
+
+    @Test
+    void dropVoicemail_disabled_returnsEmpty_andSkipsTelephony() {
+        when(settings.isVoicemailDropEnabled()).thenReturn(false);
+
+        assertThat(callService.dropVoicemail()).isEmpty();
+        verify(telephony, never()).playGreeting(any());
+    }
+
+    @Test
+    void dropVoicemail_noGreetingConfigured_returnsEmpty_andSkipsTelephony() {
+        when(settings.isVoicemailDropEnabled()).thenReturn(true);
+        when(settings.getVoicemailGreetingPath()).thenReturn("   ");
+
+        assertThat(callService.dropVoicemail()).isEmpty();
+        verify(telephony, never()).playGreeting(any());
+    }
+
+    @Test
+    void dropVoicemail_enabledWithGreeting_delegatesToTelephony() {
+        when(settings.isVoicemailDropEnabled()).thenReturn(true);
+        when(settings.getVoicemailGreetingPath()).thenReturn("/greetings/vm.wav");
+        when(telephony.playGreeting(Path.of("/greetings/vm.wav")))
+                .thenReturn(Optional.of(Duration.ofSeconds(3)));
+
+        assertThat(callService.dropVoicemail()).contains(Duration.ofSeconds(3));
+        verify(telephony).playGreeting(Path.of("/greetings/vm.wav"));
+    }
+
+    @Test
+    void dropVoicemail_noActiveCall_returnsEmpty() {
+        when(settings.isVoicemailDropEnabled()).thenReturn(true);
+        when(settings.getVoicemailGreetingPath()).thenReturn("/greetings/vm.wav");
+        when(telephony.playGreeting(any())).thenReturn(Optional.empty());
+
+        assertThat(callService.dropVoicemail()).isEmpty();
     }
 
     // ── updateDisposition / updateNotes ─────────────────────────────────────────

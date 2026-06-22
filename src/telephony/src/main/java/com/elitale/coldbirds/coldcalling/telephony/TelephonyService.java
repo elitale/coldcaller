@@ -9,6 +9,7 @@ import com.elitale.coldbirds.coldcalling.telephony.rtp.RecordingPaths;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.RtpSession;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.RtpTransport;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.SecureRtpSession;
+import com.elitale.coldbirds.coldcalling.telephony.rtp.VoicemailGreeting;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.srtp.SrtpContext;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.srtp.SrtpKey;
 import com.elitale.coldbirds.coldcalling.telephony.sip.*;
@@ -24,12 +25,14 @@ import javax.sip.header.*;
 import javax.sip.message.*;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import java.io.IOException;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.GeneralSecurityException;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -256,6 +259,43 @@ public final class TelephonyService implements SipListener, AutoCloseable {
     public double remoteLevel() {
         final AudioPipeline pipeline = activePipeline;
         return pipeline != null ? pipeline.remoteLevel() : 0.0;
+    }
+
+    /**
+     * Whether the active call is currently being recorded to disk.
+     *
+     * @return {@code true} when a recorder is attached to the active call, {@code false} otherwise
+     */
+    public boolean isRecording() {
+        return activeRecorder != null;
+    }
+
+    /**
+     * Inject a pre-recorded greeting WAV into the active call's outbound RTP stream
+     * (voicemail drop). Decodes and validates the file as 8 kHz mono 16-bit PCM,
+     * then plays it in place of live mic audio for its duration. The recorder and
+     * RTP session are left untouched.
+     *
+     * <p>No-ops (returns empty) when no call is active or the file is missing/invalid.
+     *
+     * @param greetingWav path to the greeting WAV file
+     * @return the playback duration when the drop started, or empty when it was skipped
+     */
+    public Optional<Duration> playGreeting(final Path greetingWav) {
+        Objects.requireNonNull(greetingWav, "greetingWav must not be null");
+        final AudioPipeline pipeline = activePipeline;
+        if (pipeline == null) {
+            return Optional.empty();
+        }
+        try {
+            final VoicemailGreeting greeting = VoicemailGreeting.load(greetingWav);
+            pipeline.playGreeting(greeting.frames());
+            LOG.debug("Voicemail greeting playing for {} ms", greeting.duration().toMillis());
+            return Optional.of(greeting.duration());
+        } catch (final IOException | UnsupportedAudioFileException | IllegalArgumentException e) {
+            LOG.warn("Voicemail greeting playback skipped: {}", e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**

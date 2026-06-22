@@ -10,14 +10,24 @@ import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDevice;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
+import com.elitale.coldbirds.coldcalling.telephony.rtp.VoicemailGreeting;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
+import javafx.stage.FileChooser;
+import javafx.stage.Window;
 import javafx.util.StringConverter;
 
+import javax.sound.sampled.UnsupportedAudioFileException;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -74,6 +84,10 @@ public final class SettingsController {
     @FXML private Spinner<Integer> noAnswerTimeoutSpinner;
     @FXML private Spinner<Integer> autoAdvanceDelaySpinner;
     @FXML private CheckBox         voicemailDropCheckBox;
+    @FXML private Label            greetingPathLabel;
+
+    // Appearance
+    @FXML private CheckBox         reduceMotionCheckBox;
 
     // ── Services ──────────────────────────────────────────────────────────────
 
@@ -351,6 +365,79 @@ public final class SettingsController {
         showStatus("Power Dialer settings saved.");
     }
 
+    /**
+     * Pick a WAV greeting, validate its telephony format off the FX thread, and copy it
+     * into {@code ~/.coldcalling/} so the drop path always has a stable, format-checked
+     * source. Applied immediately (no Save button) since the copy is the commit.
+     */
+    @FXML
+    private void onChooseGreeting() {
+        final FileChooser chooser = new FileChooser();
+        chooser.setTitle("Choose voicemail greeting");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("WAV audio", "*.wav"));
+        final Window owner = greetingPathLabel.getScene() == null
+                ? null : greetingPathLabel.getScene().getWindow();
+        final File picked = chooser.showOpenDialog(owner);
+        if (picked == null) {
+            return;
+        }
+        showStatus("Validating greeting\u2026");
+        CompletableFuture.supplyAsync(() -> copyValidatedGreeting(picked.toPath()))
+                .thenAcceptAsync(result -> {
+                    switch (result) {
+                        case Result.Ok<String> ok -> {
+                            greetingPathLabel.setText(greetingDisplayName(ok.value()));
+                            showStatus("Voicemail greeting saved.");
+                        }
+                        case Result.Err<String> err -> showStatus(err.message());
+                    }
+                }, Platform::runLater);
+    }
+
+    /** Forget the configured greeting. The drop control then no-ops until one is chosen. */
+    @FXML
+    private void onClearGreeting() {
+        settingsService.setVoicemailGreetingPath("");
+        greetingPathLabel.setText("None selected");
+        showStatus("Voicemail greeting cleared.");
+    }
+
+    /** Runs on a background thread — validates format, then copies into the app data dir. */
+    private Result<String> copyValidatedGreeting(Path source) {
+        try {
+            VoicemailGreeting.load(source);  // throws on a non-telephony format
+        } catch (UnsupportedAudioFileException | IllegalArgumentException badFormat) {
+            return Result.err("Greeting must be an 8 kHz mono 16-bit WAV.");
+        } catch (IOException io) {
+            return Result.err("Couldn't read that file.");
+        }
+        try {
+            final Path dir = Path.of(System.getProperty("user.home"), ".coldcalling");
+            Files.createDirectories(dir);
+            final Path dest = dir.resolve("voicemail-greeting.wav");
+            Files.copy(source, dest, StandardCopyOption.REPLACE_EXISTING);
+            settingsService.setVoicemailGreetingPath(dest.toString());
+            return Result.ok(dest.toString());
+        } catch (IOException io) {
+            return Result.err("Couldn't save the greeting.");
+        }
+    }
+
+    private static String greetingDisplayName(String path) {
+        if (path == null || path.isBlank()) {
+            return "None selected";
+        }
+        return Path.of(path).getFileName().toString();
+    }
+
+    /** Persist and apply reduce-motion immediately so the effect is visible at once. */
+    @FXML
+    private void onReduceMotionToggled() {
+        final boolean reduce = reduceMotionCheckBox.isSelected();
+        settingsService.setReduceMotion(reduce);
+        Motion.setReduced(reduce);
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private record AllSettings(
@@ -361,7 +448,8 @@ public final class SettingsController {
             CallRoutingConfig routing,
             List<AudioDevice> inputDevices, List<AudioDevice> outputDevices,
             String audioInput,          String audioOutput, int jitterMs,
-            int noAnswerSec,            int advanceDelaySec, boolean voicemailDrop) {}
+            int noAnswerSec,            int advanceDelaySec, boolean voicemailDrop,
+            String greetingPath,        boolean reduceMotion) {}
 
     /** Runs on a background thread — no UI access here. */
     private AllSettings loadAll() {
@@ -380,7 +468,9 @@ public final class SettingsController {
                 settingsService.getAudioInputDevice(), settingsService.getAudioOutputDevice(),
                 settingsService.getJitterBufferMs(),
                 settingsService.getNoAnswerTimeoutSec(), settingsService.getAutoAdvanceDelaySec(),
-                settingsService.isVoicemailDropEnabled());
+                settingsService.isVoicemailDropEnabled(),
+                settingsService.getVoicemailGreetingPath(),
+                settingsService.isReduceMotion());
     }
 
     /** Runs on the FX Application Thread — safe to update UI fields here. */
@@ -408,6 +498,8 @@ public final class SettingsController {
         noAnswerTimeoutSpinner.getValueFactory().setValue(s.noAnswerSec());
         autoAdvanceDelaySpinner.getValueFactory().setValue(s.advanceDelaySec());
         voicemailDropCheckBox.setSelected(s.voicemailDrop());
+        greetingPathLabel.setText(greetingDisplayName(s.greetingPath()));
+        reduceMotionCheckBox.setSelected(s.reduceMotion());
 
         statusLabel.setText("");
     }

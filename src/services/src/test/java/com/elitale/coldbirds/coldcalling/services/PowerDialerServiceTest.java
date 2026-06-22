@@ -26,6 +26,7 @@ class PowerDialerServiceTest {
     @Mock CallListRepository       callListRepo;
     @Mock ContactRepository        contactRepo;
     @Mock PhoneNumberService       phoneNumberService;
+    @Mock SettingsService          settings;
     @Mock ScheduledExecutorService scheduler;
 
     final List<PhoneNumber[]> dialed = new ArrayList<>();
@@ -41,12 +42,15 @@ class PowerDialerServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        // Default timeouts mirror SettingsService defaults (30s no-answer, 1s auto-advance).
+        when(settings.getNoAnswerTimeoutSec()).thenReturn(30);
+        when(settings.getAutoAdvanceDelaySec()).thenReturn(1);
         // Non-immediate by default: captures tasks but does NOT run them.
         // This prevents the 30-second NO_ANSWER timer from draining the list during start().
         when(scheduler.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(mock(ScheduledFuture.class));
         service = new PowerDialerService(
-                callListRepo, contactRepo, phoneNumberService, dialCaptor, scheduler);
+                callListRepo, contactRepo, phoneNumberService, settings, dialCaptor, scheduler);
         stubOwnedNumber();
     }
 
@@ -122,7 +126,49 @@ class PowerDialerServiceTest {
         assertThat(dialed).hasSize(1);
         assertThat(dialed.get(0)[0]).isEqualTo(PHONE_B);
     }
+    // ── queue preview ────────────────────────────────────────────
 
+    @Test
+    void upcoming_returnsNextContactsAfterCurrent() {
+        stubTwoContactList();
+        service.start(LIST_ID);
+        // Current position is PHONE_A (index 0); upcoming is PHONE_B (index 1).
+        assertThat(service.upcoming(5))
+                .extracting(c -> c.phone())
+                .containsExactly(PHONE_B);
+    }
+
+    @Test
+    void upcoming_clampsToRequestedCount() {
+        stubTwoContactList();
+        service.start(LIST_ID);
+        assertThat(service.upcoming(0)).isEmpty();
+    }
+
+    @Test
+    void upcoming_emptyWhenNoSession() {
+        assertThat(service.upcoming(3)).isEmpty();
+    }
+
+    // ── settings-driven timeouts ─────────────────────────────────────
+
+    @Test
+    void dialCurrent_usesNoAnswerTimeoutFromSettings() {
+        when(settings.getNoAnswerTimeoutSec()).thenReturn(12);
+        stubTwoContactList();
+        service.start(LIST_ID);
+        // start() dials the first contact and schedules the no-answer timer at 12_000 ms.
+        verify(scheduler).schedule(any(Runnable.class), eq(12_000L), any());
+    }
+
+    @Test
+    void notifyCallEnded_usesAutoAdvanceDelayFromSettings() {
+        when(settings.getAutoAdvanceDelaySec()).thenReturn(3);
+        stubTwoContactList();
+        service.start(LIST_ID);
+        service.notifyCallEnded("c1", "no-answer");
+        verify(scheduler).schedule(any(Runnable.class), eq(3_000L), any());
+    }
     // ── stop / pause ──────────────────────────────────────────────────────────
 
     @Test

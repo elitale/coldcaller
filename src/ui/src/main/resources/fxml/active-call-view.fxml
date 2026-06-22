@@ -49,6 +49,14 @@
     <Label fx:id="statusLabel" text="" styleClass="call-status"
            alignment="CENTER" maxWidth="Infinity"/>
 
+    <!-- Recording indicator — visible only while the call is being recorded -->
+    <HBox fx:id="recChip" spacing="6" alignment="CENTER" styleClass="call-rec"
+          visible="false" managed="false">
+        <Region styleClass="call-rec-dot" maxWidth="9" maxHeight="9"
+                prefWidth="9" prefHeight="9" minWidth="9" minHeight="9"/>
+        <Label text="REC" styleClass="call-rec-text"/>
+    </HBox>
+
     <!-- Live mic meter — visible only while connected -->
     <HBox fx:id="micMeterRow" spacing="9" alignment="CENTER" maxWidth="Infinity"
           visible="false" managed="false">
@@ -61,6 +69,7 @@
         <Button fx:id="muteButton"      onAction="#onMuteToggle"   styleClass="call-control"/>
         <Button fx:id="keypadButton"    onAction="#onKeypadToggle" styleClass="call-control"/>
         <Button fx:id="holdButton"      onAction="#onHoldToggle"   styleClass="call-control"/>
+        <Button fx:id="outputButton"    onAction="#onCycleOutput"  styleClass="call-control"/>
         <Button fx:id="voicemailButton" styleClass="call-control"/>
         <Button fx:id="redialButton"    onAction="#onRedial"
                 styleClass="call-control" visible="false" managed="false"/>

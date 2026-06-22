@@ -6,7 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.sound.sampled.*;
+import java.util.List;
 import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -52,6 +55,15 @@ public final class AudioPipeline implements AutoCloseable {
 
     /** Optional call recorder; when set, both audio directions are tapped. */
     private volatile CallRecorder recorder;
+
+    /**
+     * Pre-recorded greeting frames pending injection into the outbound RTP stream.
+     * While {@link #greetingActive} is true the capture loop sends these frames in
+     * place of live mic audio (voicemail drop). The recorder and RTP session are
+     * left untouched.
+     */
+    private final Queue<short[]> greetingFrames = new ConcurrentLinkedQueue<>();
+    private volatile boolean greetingActive = false;
 
     /** Live normalized RMS levels (0..1), polled by the UI meter; reset to 0 on close. */
     private volatile double micLevel;
@@ -103,6 +115,52 @@ public final class AudioPipeline implements AutoCloseable {
         return remoteLevel;
     }
 
+    /**
+     * Queue a pre-recorded greeting for injection into the outbound RTP stream
+     * (voicemail drop). The capture loop sends these frames in place of live mic
+     * audio for their duration, then restores the mic. Ignored when the list is
+     * empty or a greeting is already playing.
+     *
+     * @param frames 20 ms PCM frames (160 samples each); must not be null
+     */
+    public void playGreeting(final List<short[]> frames) {
+        Objects.requireNonNull(frames, "frames must not be null");
+        if (frames.isEmpty() || greetingActive) {
+            return;
+        }
+        greetingFrames.clear();
+        greetingFrames.addAll(frames);
+        greetingActive = true;
+    }
+
+    /**
+     * @return {@code true} while a queued greeting is still being injected
+     */
+    public boolean isPlayingGreeting() {
+        return greetingActive;
+    }
+
+    /**
+     * Decide which frame to push to RTP for one 20 ms capture tick. While a
+     * greeting is active its frames take precedence over the mic; once exhausted
+     * the mic resumes (with silence suppression). Package-private so the
+     * injection logic is unit-tested without audio hardware.
+     *
+     * @param micPcm the freshly captured mic frame
+     * @param level  the mic frame's normalized RMS level
+     * @return the frame to send, or {@code null} to suppress (silence)
+     */
+    short[] selectOutboundFrame(final short[] micPcm, final double level) {
+        if (greetingActive) {
+            final short[] frame = greetingFrames.poll();
+            if (frame != null) {
+                return frame;
+            }
+            greetingActive = false; // exhausted → restore live mic
+        }
+        return level >= SILENCE_LEVEL ? micPcm : null;
+    }
+
     // ------------------------------------------------------------------
     // Lifecycle
     // ------------------------------------------------------------------
@@ -148,6 +206,9 @@ public final class AudioPipeline implements AutoCloseable {
 
         micLevel = 0.0;
         remoteLevel = 0.0;
+
+        greetingActive = false;
+        greetingFrames.clear();
 
         LOG.debug("Audio pipeline closed");
     }
@@ -195,8 +256,9 @@ public final class AudioPipeline implements AutoCloseable {
                 rec.onMicFrame(pcm);
             }
 
-            if (level >= SILENCE_LEVEL) {
-                rtpSession.sendAudio(pcm);
+            final short[] outbound = selectOutboundFrame(pcm, level);
+            if (outbound != null) {
+                rtpSession.sendAudio(outbound);
             }
         }
     }

@@ -30,7 +30,9 @@ public final class SettingsService {
     public static final String KEY_DIALER_NO_ANSWER_TIMEOUT  = "dialer.no_answer_timeout_sec";
     public static final String KEY_DIALER_AUTO_ADVANCE_DELAY = "dialer.auto_advance_delay_sec";
     public static final String KEY_DIALER_VOICEMAIL_DROP     = "dialer.voicemail_drop_enabled";
+    public static final String KEY_DIALER_VOICEMAIL_GREETING = "dialer.voicemail_greeting_path";
     public static final String KEY_DIALER_DEFAULT_COUNTRY    = "dialer.default_country";
+    public static final String KEY_UI_REDUCE_MOTION          = "ui.reduce_motion";
     public static final String KEY_ONBOARDING_COMPLETED      = "onboarding.completed";
     public static final String KEY_CALL_ROUTING_PROVIDER     = "callrouting.provider";
     public static final String KEY_CALL_ROUTING_MODE         = "callrouting.mode";
@@ -157,12 +159,33 @@ public final class SettingsService {
         repo.set(KEY_DIALER_VOICEMAIL_DROP, String.valueOf(enabled));
     }
 
+    /** Absolute path to the pre-recorded voicemail-drop greeting WAV, or empty when unset. */
+    public String getVoicemailGreetingPath() {
+        return get(KEY_DIALER_VOICEMAIL_GREETING, "");
+    }
+    public void setVoicemailGreetingPath(String path) {
+        repo.set(KEY_DIALER_VOICEMAIL_GREETING, Objects.requireNonNull(path));
+    }
+
     /** ISO 3166-1 alpha-2 code of the user's default dialing country. */
     public String getDefaultCountryIso() {
         return get(KEY_DIALER_DEFAULT_COUNTRY, DEFAULT_COUNTRY_ISO);
     }
     public void setDefaultCountryIso(String isoCode) {
         repo.set(KEY_DIALER_DEFAULT_COUNTRY, Objects.requireNonNull(isoCode));
+    }
+
+    // ── UI / accessibility ────────────────────────────────────────────────
+
+    /**
+     * Whether non-essential animation should be suppressed (the Motion Doctrine
+     * accessibility gate). Defaults to {@code false}.
+     */
+    public boolean isReduceMotion() {
+        return Boolean.parseBoolean(get(KEY_UI_REDUCE_MOTION, "false"));
+    }
+    public void setReduceMotion(boolean reduce) {
+        repo.set(KEY_UI_REDUCE_MOTION, String.valueOf(reduce));
     }
 
     // ── Onboarding ───────────────────────────────────────────────────────

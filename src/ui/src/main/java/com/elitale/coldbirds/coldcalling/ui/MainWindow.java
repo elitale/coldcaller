@@ -24,6 +24,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
+import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
 import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
@@ -56,6 +57,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Main application window — fixed sidebar + swappable centre pane.
@@ -114,8 +116,19 @@ public final class MainWindow {
     /** Auto-save sink registered before {@link #show()} builds the controller. */
     private BiConsumer<Optional<CallDisposition>, String> pendingLogAutoSave;
 
+    /** Wrap-up disposition-chosen sink registered before {@link #show()} builds the controller. */
+    private Runnable pendingWrapUpDispositionChosen;
+    /** Voicemail-drop action + completion sink registered before {@link #show()} builds the controller. */
+    private Supplier<Optional<java.time.Duration>> pendingVoicemailDrop;
+    private Runnable pendingVoicemailCompleted;
     /** Most recent remote number shown on the calling screen — reused by Redial. */
     private String lastDialedNumber;
+
+    /** Mini Call HUD (alt-tab pill) + the live-call state that gates it. */
+    private CallHudWindow   callHud;
+    private CallParticipant activeParty;
+    private Instant         callConnectedAt;
+    private boolean         callLive;
 
     // Loaded FXML roots
     private Parent dialerView;
@@ -178,6 +191,7 @@ public final class MainWindow {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             lastDialedNumber = number;
+            activeParty = party;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startConnecting(party);
             root.setCenter(activeCallView);
@@ -198,6 +212,9 @@ public final class MainWindow {
      */
     public void markCallConnected(Instant connectedAt) {
         activeCallController.markConnected(connectedAt);
+        callConnectedAt = connectedAt;
+        callLive = true;
+        updateHud();
     }
 
     /**
@@ -208,9 +225,13 @@ public final class MainWindow {
         final CallParticipant party = participantFor(number);
         Platform.runLater(() -> {
             lastDialedNumber = number;
+            activeParty = party;
+            callConnectedAt = connectedAt;
+            callLive = true;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startActive(party, connectedAt);
             root.setCenter(activeCallView);
+            updateHud();
         });
     }
 
@@ -238,8 +259,46 @@ public final class MainWindow {
         }
     }
 
+    /**
+     * Register the handler fired when the rep picks a disposition during the wrap-up phase.
+     * The power dialer uses it to auto-advance to the next contact. May be called before
+     * {@link #show()} builds the controller; the handler is then applied once it exists.
+     */
+    public void setOnWrapUpDispositionChosen(Runnable handler) {
+        this.pendingWrapUpDispositionChosen = Objects.requireNonNull(handler);
+        if (activeCallController != null) {
+            activeCallController.setOnDispositionChosen(handler);
+        }
+    }
+
+    /**
+     * Register the voicemail-drop action invoked from the calling screen. Performs the
+     * drop and returns the greeting's playback duration (empty when skipped). May be
+     * called before {@link #show()} builds the controller; applied once it exists.
+     */
+    public void setOnVoicemailDrop(Supplier<Optional<java.time.Duration>> handler) {
+        this.pendingVoicemailDrop = Objects.requireNonNull(handler);
+        if (activeCallController != null) {
+            activeCallController.setOnVoicemailDrop(handler);
+        }
+    }
+
+    /**
+     * Register the sink fired once a dropped greeting finishes playing, so the power
+     * dialer can advance. May be called before {@link #show()} builds the controller;
+     * applied once it exists.
+     */
+    public void setOnVoicemailCompleted(Runnable handler) {
+        this.pendingVoicemailCompleted = Objects.requireNonNull(handler);
+        if (activeCallController != null) {
+            activeCallController.setOnVoicemailCompleted(handler);
+        }
+    }
+
     /** Stop the calling screen's timers and tones. Safe to call from any thread. */
     public void endActiveCall() {
+        callLive = false;
+        updateHud();
         activeCallController.dispose();
     }
 
@@ -250,6 +309,8 @@ public final class MainWindow {
      * Safe to call from any thread.
      */
     public void showCallWrapUp(Instant endedAt, Runnable onSaveClose) {
+        callLive = false;
+        updateHud();
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onSaveClose);
             activeCallController.markEnded(endedAt);
@@ -261,6 +322,8 @@ public final class MainWindow {
      * failure. {@code onClose} dismisses the screen. Safe to call from any thread.
      */
     public void markCallFailed(String reason, Runnable onClose) {
+        callLive = false;
+        updateHud();
         Platform.runLater(() -> {
             activeCallController.setOnHangUp(onClose);
             activeCallController.markFailed(reason);
@@ -300,6 +363,32 @@ public final class MainWindow {
     /** Return to the dialer view. Safe to call from any thread. */
     public void showDialer() {
         Platform.runLater(() -> root.setCenter(dialerView));
+    }
+
+    /**
+     * Re-evaluate the Mini Call HUD against the current call + focus state and show or
+     * hide it accordingly. Safe to call from any thread — the work is marshalled to the
+     * FX thread, where the focus and mute state are read.
+     */
+    private void updateHud() {
+        if (callHud == null) {
+            return;
+        }
+        Platform.runLater(() -> {
+            if (callHud == null) {
+                return;
+            }
+            final boolean show = CallHudVisibility.shouldShow(callLive, stage.isFocused())
+                    && callConnectedAt != null;
+            if (show) {
+                final String name = activeParty != null
+                        ? activeParty.headline()
+                        : (lastDialedNumber == null ? "" : lastDialedNumber);
+                callHud.showFor(name, callConnectedAt, activeCallController.isMuted());
+            } else {
+                callHud.hide();
+            }
+        });
     }
 
     /** Show a transient error toast (alert icon + message). Safe to call from any thread. */
@@ -435,6 +524,15 @@ public final class MainWindow {
         if (pendingLogAutoSave != null) {
             activeCallController.setOnLogChanged(pendingLogAutoSave);
         }
+        if (pendingWrapUpDispositionChosen != null) {
+            activeCallController.setOnDispositionChosen(pendingWrapUpDispositionChosen);
+        }
+        if (pendingVoicemailDrop != null) {
+            activeCallController.setOnVoicemailDrop(pendingVoicemailDrop);
+        }
+        if (pendingVoicemailCompleted != null) {
+            activeCallController.setOnVoicemailCompleted(pendingVoicemailCompleted);
+        }
         // Redial re-dials the last remote number through the same dial path the
         // dialer uses; the button is shown only in the wrap-up / failed phases.
         activeCallController.setOnRedial(() -> {
@@ -446,9 +544,22 @@ public final class MainWindow {
 
         // Live audio levels drive the avatar halo (remote voice) + the mic waveform.
         activeCallController.setAudioLevels(callService::micLevel, callService::remoteLevel);
+        // Live recording state drives the in-call REC indicator.
+        activeCallController.setRecordingState(callService::isRecording);
         // In-call ••• menu switches mic/speaker live and writes the choice through to settings.
         activeCallController.setAudioDevices(audioDeviceManager, onSwitchAudioDevices,
                 settingsService::getAudioInputDevice, settingsService::getAudioOutputDevice);
+
+        // Mini Call HUD — the alt-tab pill. Reuses the call card's hang-up + mute so a single
+        // source of truth (the controller) stays in sync; shows only while a call is live and
+        // the main window is unfocused (see the focus listener in show()).
+        callHud = new CallHudWindow(stage);
+        callHud.setOnHangUp(activeCallController::triggerHangUp);
+        callHud.setOnMuteToggle(() -> {
+            activeCallController.toggleMute();
+            callHud.syncMuted(activeCallController.isMuted());
+        });
+        callHud.setRecordingState(callService::isRecording);
 
         root = new BorderPane();
         root.setLeft(buildSidebar());
@@ -482,6 +593,8 @@ public final class MainWindow {
         stage.setScene(scene);
         stage.setMinWidth(MIN_WINDOW_W);
         stage.setMinHeight(MIN_WINDOW_H);
+        // Show/hide the Mini Call HUD as the main window gains/loses focus during a call.
+        stage.focusedProperty().addListener((obs, was, isNow) -> updateHud());
         stage.show();
     }
 

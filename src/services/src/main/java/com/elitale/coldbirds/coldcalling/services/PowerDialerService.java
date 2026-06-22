@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,8 +28,6 @@ import java.util.function.Consumer;
 public final class PowerDialerService {
 
     private static final Logger LOG = LoggerFactory.getLogger(PowerDialerService.class);
-    private static final long   AUTO_ADVANCE_MS = 1_000L;
-    private static final long   NO_ANSWER_MS    = 30_000L;
 
     /** Snapshot statistics for UI display. */
     public record SessionStats(int dialedCount, int connectedCount, int remaining) {}
@@ -70,6 +69,7 @@ public final class PowerDialerService {
     private final CallListRepository                  callListRepo;
     private final ContactRepository                   contactRepo;
     private final PhoneNumberService                  phoneNumberService;
+    private final SettingsService                     settings;
     private final BiConsumer<PhoneNumber, PhoneNumber> dialCommand;
     private final ScheduledExecutorService            scheduler;
 
@@ -86,8 +86,9 @@ public final class PowerDialerService {
             CallListRepository callListRepo,
             ContactRepository contactRepo,
             PhoneNumberService phoneNumberService,
+            SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand) {
-        this(callListRepo, contactRepo, phoneNumberService, dialCommand,
+        this(callListRepo, contactRepo, phoneNumberService, settings, dialCommand,
                 Executors.newSingleThreadScheduledExecutor(r -> {
                     Thread t = new Thread(r, "power-dialer-scheduler");
                     t.setDaemon(true);
@@ -100,11 +101,13 @@ public final class PowerDialerService {
             CallListRepository callListRepo,
             ContactRepository contactRepo,
             PhoneNumberService phoneNumberService,
+            SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand,
             ScheduledExecutorService scheduler) {
         this.callListRepo       = Objects.requireNonNull(callListRepo);
         this.contactRepo        = Objects.requireNonNull(contactRepo);
         this.phoneNumberService = Objects.requireNonNull(phoneNumberService);
+        this.settings           = Objects.requireNonNull(settings);
         this.dialCommand        = Objects.requireNonNull(dialCommand);
         this.scheduler          = Objects.requireNonNull(scheduler);
     }
@@ -194,6 +197,23 @@ public final class PowerDialerService {
         return Optional.ofNullable(session).map(Session::toStats);
     }
 
+    /**
+     * The next {@code n} contacts queued after the current one, in dial order, for the
+     * queue-preview panel. Returns an empty list when no session is active, {@code n <= 0},
+     * or the list is exhausted; clamps to however many remain.
+     *
+     * @param n maximum number of upcoming contacts to return
+     */
+    public synchronized List<Contact> upcoming(int n) {
+        if (session == null || n <= 0) return List.of();
+        final List<CallListEntry> entries = session.callList.entries();
+        final List<Contact> result = new ArrayList<>();
+        for (int i = session.position + 1; i < entries.size() && result.size() < n; i++) {
+            contactRepo.findById(entries.get(i).contactId()).ifPresent(result::add);
+        }
+        return List.copyOf(result);
+    }
+
     // ── Call event notifications (composed in ColdCallingApp) ─────────────────
 
     public synchronized void notifyCallAnswered(String callId) {
@@ -212,7 +232,7 @@ public final class PowerDialerService {
             markCurrentEntry(CallListEntry.DialStatus.DIALED);
         } else {
             markCurrentEntry(reasonToStatus(reason));
-            scheduleAdvance(AUTO_ADVANCE_MS);
+            scheduleAdvance(autoAdvanceMs());
         }
         fireSessionChanged();
     }
@@ -238,7 +258,7 @@ public final class PowerDialerService {
             session.dialedCount++;
             onStatsCb.accept(session.toStats());
             dialCommand.accept(contact.get().phone(), local.get().number());
-            scheduleAdvance(NO_ANSWER_MS);
+            scheduleAdvance(noAnswerMs());
         });
     }
 
@@ -284,6 +304,16 @@ public final class PowerDialerService {
 
     private static CallListEntry.DialStatus reasonToStatus(String reason) {
         return "skipped".equals(reason) ? CallListEntry.DialStatus.SKIPPED : CallListEntry.DialStatus.DIALED;
+    }
+
+    /** No-answer ring timeout in ms, read live from settings (default 30s). */
+    private long noAnswerMs() {
+        return settings.getNoAnswerTimeoutSec() * 1_000L;
+    }
+
+    /** Delay before auto-advancing past an unanswered call, in ms (default 1s). */
+    private long autoAdvanceMs() {
+        return settings.getAutoAdvanceDelaySec() * 1_000L;
     }
 
     private void fireSessionChanged() {

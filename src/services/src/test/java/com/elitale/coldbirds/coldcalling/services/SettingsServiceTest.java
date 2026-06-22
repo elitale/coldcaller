@@ -113,6 +113,36 @@ class SettingsServiceTest {
     }
 
     @Test
+    void getVoicemailGreetingPath_returnsBlank_whenNotSet() {
+        when(repo.get(SettingsService.KEY_DIALER_VOICEMAIL_GREETING)).thenReturn(Optional.empty());
+        assertThat(service.getVoicemailGreetingPath()).isEmpty();
+    }
+
+    @Test
+    void setVoicemailGreetingPath_delegates_toRepo() {
+        service.setVoicemailGreetingPath("/tmp/greeting.wav");
+        verify(repo).set(SettingsService.KEY_DIALER_VOICEMAIL_GREETING, "/tmp/greeting.wav");
+    }
+
+    @Test
+    void isReduceMotion_returnsFalse_whenNotSet() {
+        when(repo.get(SettingsService.KEY_UI_REDUCE_MOTION)).thenReturn(Optional.empty());
+        assertThat(service.isReduceMotion()).isFalse();
+    }
+
+    @Test
+    void isReduceMotion_returnsTrue_whenStoredAsTrue() {
+        when(repo.get(SettingsService.KEY_UI_REDUCE_MOTION)).thenReturn(Optional.of("true"));
+        assertThat(service.isReduceMotion()).isTrue();
+    }
+
+    @Test
+    void setReduceMotion_delegates_toRepo() {
+        service.setReduceMotion(true);
+        verify(repo).set(SettingsService.KEY_UI_REDUCE_MOTION, "true");
+    }
+
+    @Test
     void getCallRoutingProvider_defaultsTwilio_whenNotSet() {
         when(repo.get(SettingsService.KEY_CALL_ROUTING_PROVIDER)).thenReturn(Optional.empty());
         assertThat(service.getCallRoutingProvider()).isEqualTo("twilio");

@@ -2,7 +2,9 @@ package com.elitale.coldbirds.coldcalling.app;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
+import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
 import com.elitale.coldbirds.coldcalling.services.*;
@@ -17,6 +19,7 @@ import com.elitale.coldbirds.coldcalling.storage.repository.*;
 import com.elitale.coldbirds.coldcalling.ui.MainWindow;
 import com.elitale.coldbirds.coldcalling.ui.OnboardingWindow;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.stage.Stage;
@@ -25,6 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -62,6 +66,9 @@ public final class ColdCallingApp extends Application {
 
     /** SIP Call-ID of the call currently shown on the calling/wrap-up screen, if any. */
     private volatile String activeCallId;
+
+    /** SIP Call-ID of the call being ended by a hands-free voicemail drop, if any. */
+    private volatile String voicemailDropCallId;
 
     // Repositories — built once in init(), reused by launchMainApp()
     private ContactRepository     contactRepo;
@@ -162,7 +169,7 @@ public final class ColdCallingApp extends Application {
         );
 
         telephonyService = new TelephonyService(sipCreds, NOOP_LISTENER, null, null);
-        callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo);
+        callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo, settingsService);
         telephonyService.setListener(callService);  // wire back: SIP events → CallService
         // Resolve the remote number's country so recordings land under the right folder.
         telephonyService.setCountryResolver(
@@ -175,8 +182,11 @@ public final class ColdCallingApp extends Application {
 
         // Power Dialer
         powerDialerService = new PowerDialerService(
-                callListRepo, contactRepo, phoneNumberService,
+                callListRepo, contactRepo, phoneNumberService, settingsService,
                 (remote, local) -> callService.dial(remote, local));
+
+        // Seed the global Motion Doctrine gate from the saved preference.
+        Motion.setReduced(settingsService.isReduceMotion());
 
         // Start telephony (STUN + SIP register) — non-blocking; errors logged.
         try {
@@ -241,6 +251,42 @@ public final class ColdCallingApp extends Application {
             }
         });
 
+        // During a power-dialer run, picking a disposition on the wrap-up screen finalises
+        // the current call and advances to the next contact — hands-free triage. Outside a
+        // running session this is a no-op (manual calls finalise via "Save & Close").
+        mainWindow.setOnWrapUpDispositionChosen(() -> {
+            final boolean running = powerDialerService.getCurrentSession()
+                    .map(session -> session.state() instanceof PowerDialerState.Running)
+                    .orElse(false);
+            if (!running) return;
+            final String id = activeCallId;
+            if (id != null) {
+                finalizeAndClose(id);
+            }
+            CompletableFuture.runAsync(powerDialerService::advance);
+        });
+
+        // Voicemail drop: the calling screen's Voicemail control (or the V key) invokes this
+        // action, which plays the configured greeting into the live call and returns its
+        // duration so the button can show a determinate "dropping" affordance.
+        mainWindow.setOnVoicemailDrop(callService::dropVoicemail);
+
+        // When the greeting finishes during a running power-dialer session, end the current
+        // call and advance to the next contact — voicemail → drop → advance as one hands-free
+        // flow. The actual advance happens when the resulting call-end event arrives (below),
+        // so the outcome is recorded as Voicemail and the wrap-up screen is skipped. Manual
+        // calls leave the line to the rep.
+        mainWindow.setOnVoicemailCompleted(() -> {
+            final boolean running = powerDialerService.getCurrentSession()
+                    .map(session -> session.state() instanceof PowerDialerState.Running)
+                    .orElse(false);
+            final String id = activeCallId;
+            if (running && id != null) {
+                voicemailDropCallId = id;
+                callService.hangUp();
+            }
+        });
+
         // Outbound: open the calling screen the instant the user presses call —
         // BEFORE the SIP INVITE is dispatched — so dialling feels immediate.
         callService.setOnCallStarting(remote -> {
@@ -277,6 +323,12 @@ public final class ColdCallingApp extends Application {
         callService.setOnCallEnded((callId, reason) -> {
             powerDialerService.notifyCallEnded(callId, reason);
             mainWindow.refreshRecentCalls();
+            if (callId.equals(voicemailDropCallId)) {
+                // Hands-free voicemail: record the outcome and advance, skipping wrap-up.
+                voicemailDropCallId = null;
+                finalizeVoicemailAndAdvance(callId);
+                return;
+            }
             if (reason != null && reason.startsWith(TelephonyService.FAILURE_PREFIX)) {
                 // Failed call: keep the calling screen up and show the reason there.
                 final String detail = reason.substring(TelephonyService.FAILURE_PREFIX.length());
@@ -325,6 +377,20 @@ public final class ColdCallingApp extends Application {
         activeCallId = null;
         mainWindow.endActiveCall();
         mainWindow.showDialer();
+    }
+
+    /**
+     * Finalise a call that ended via a voicemail drop during a power-dialer run:
+     * record the Voicemail disposition, return to the dialer, and advance to the
+     * next contact — no wrap-up screen. Runs on the call-ended (JAIN-SIP) thread;
+     * the call record is already persisted by the time this fires.
+     */
+    private void finalizeVoicemailAndAdvance(String callId) {
+        callService.finalizeWrapUp(callId, Optional.of(new CallDisposition.Voicemail()), "");
+        activeCallId = null;
+        mainWindow.endActiveCall();
+        mainWindow.showDialer();
+        CompletableFuture.runAsync(powerDialerService::advance);
     }
 
     /**

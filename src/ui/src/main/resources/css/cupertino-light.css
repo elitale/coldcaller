@@ -1359,6 +1359,69 @@
     -fx-font-weight: 600;
 }
 
+/* Recording indicator chip (visibility + pulse driven in the controller) */
+.call-rec {
+    -fx-padding: 0;
+}
+.call-rec-dot {
+    -fx-background-color: -cc-error;
+    -fx-background-radius: 999px;
+    -fx-effect: dropshadow(gaussian, rgba(255, 59, 48, 0.45), 6, 0, 0, 0);
+}
+.call-rec-text {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-text-fill: -cc-error;
+}
+
+/* Mini Call HUD — the alt-tab call pill (the only floating element) */
+.call-hud {
+    -fx-background-color: -cc-bg-elevated;
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+    -fx-border-color: -cc-separator;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.28), 24, 0, 0, 8);
+}
+.call-hud-name {
+    -fx-font-family: "Inter", ".AppleSystemUIFont", sans-serif;
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+    -fx-text-fill: -cc-text-primary;
+}
+.call-hud-timer {
+    -fx-font-family: "Inter", ".AppleSystemUIFont", sans-serif;
+    -fx-font-size: 12px;
+    -fx-text-fill: -cc-text-secondary;
+}
+.call-hud-btn {
+    -fx-background-radius: 999px;
+    -fx-min-width: 36px;
+    -fx-min-height: 36px;
+    -fx-max-width: 36px;
+    -fx-max-height: 36px;
+    -fx-background-color: -cc-bg-secondary;
+    -fx-cursor: hand;
+}
+.call-hud-btn .ikonli-font-icon {
+    -fx-icon-color: -cc-text-primary;
+    -fx-fill: -cc-text-primary;
+}
+.call-hud-btn--muted {
+    -fx-background-color: -cc-warning;
+}
+.call-hud-btn--muted .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-fill: white;
+}
+.call-hud-btn--hangup {
+    -fx-background-color: -cc-error;
+}
+.call-hud-btn--hangup .ikonli-font-icon {
+    -fx-icon-color: white;
+    -fx-fill: white;
+}
+
 .call-hint {
     -fx-font-size: 12px;
     -fx-text-fill: -cc-text-tertiary;

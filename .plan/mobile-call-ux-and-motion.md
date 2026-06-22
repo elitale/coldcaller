@@ -1,6 +1,6 @@
 # Plan — Mobile-Style Call UX · Cold-Caller Functionality · Meaningful Motion
 
-> Status: **PROPOSED — awaiting approval.** Product + UX + design only. No code in this doc.
+> Status: **IMPLEMENTED.** Phases 1–3 shipped (MUST items: auto-advance, voicemail drop, recording indicator, Mini Call HUD; NICE items: dial-pad press motion, queue preview, speaker/headset toggle; meaningful-motion doctrine via in-app Reduce Motion). `./gradlew build` green. SKIP items (AMD, slide-to-answer, max-motion, number-reputation) deferred per §0/§8 — number-reputation tracked for its own `.plan/number-reputation-health.md`.
 > Trigger (verbatim): *"anything else is pending check and correct UX behaviour it should resemble how calls dialed and handled at mobile devices and must have functionality for the coldcallers check with buyer agent about this, try to add as much motion as possible, plan this."*
 > Reviewed by: **`buyer` agent (6-persona ICP panel)** — Marcus (agency founder), Priya (solo freelancer), Jake (SDR manager), Carlos (founder-led sales), Lisa (VP Sales), Alex (the daily-veto SDR). Their verdict is folded in and **locks the decisions below**.
 > Builds on shipped work: [active-call-audio-visualization.md](.plan/active-call-audio-visualization.md) (halo/ripple/waveform/device-switch — SHIPPED), [calling-screen.md](.plan/calling-screen.md) (the in-window call-screen model + the 6–0 veto of a floating call window), [dialer-ux-fixes.md](.plan/dialer-ux-fixes.md).

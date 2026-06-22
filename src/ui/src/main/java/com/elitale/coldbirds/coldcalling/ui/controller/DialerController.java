@@ -4,6 +4,7 @@ import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.DialNumberFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallCell;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
 import javafx.animation.Animation;
@@ -337,6 +338,7 @@ public final class DialerController {
     @FXML
     private void onDigitPressed(ActionEvent event) {
         Button btn = (Button) event.getSource();
+        Motion.pressFlash(btn);
         Object ud = btn.getUserData();
         String digit = (ud != null) ? ud.toString() : btn.getText();
         numberField.replaceSelection(digit);

@@ -79,6 +79,14 @@
                         onAction="#onAdvance" disable="true"/>
             </HBox>
 
+            <!-- Up Next queue preview — shown only during an active session -->
+            <VBox fx:id="upNextSection" spacing="8" VBox.vgrow="ALWAYS"
+                  visible="false" managed="false">
+                <Label text="Up Next" styleClass="section-title"/>
+                <ListView fx:id="upNextView" prefHeight="180" VBox.vgrow="ALWAYS"
+                          styleClass="card-list"/>
+            </VBox>
+
         </VBox>
     </center>
 

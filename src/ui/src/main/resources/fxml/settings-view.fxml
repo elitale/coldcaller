@@ -176,10 +176,32 @@
                             <Label text="Voicemail drop" prefWidth="200"/>
                             <CheckBox fx:id="voicemailDropCheckBox"/>
                         </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Voicemail greeting" prefWidth="200"/>
+                            <Label fx:id="greetingPathLabel" text="None selected" styleClass="caption"
+                                   HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                            <Button text="Choose…" onAction="#onChooseGreeting"/>
+                            <Button text="Clear" onAction="#onClearGreeting"/>
+                        </HBox>
+                        <Label text="An 8 kHz mono 16-bit WAV played into the line when you drop voicemail."
+                               styleClass="caption" wrapText="true"/>
 
                         <HBox alignment="CENTER_RIGHT">
                             <Button text="Save" styleClass="accent" onAction="#onSavePowerDialer"/>
                         </HBox>
+                    </VBox>
+
+                    <!-- ── Appearance ───────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Appearance" styleClass="title-2"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Reduce motion" prefWidth="200"/>
+                            <CheckBox fx:id="reduceMotionCheckBox" onAction="#onReduceMotionToggled"/>
+                        </HBox>
+                        <Label text="Minimise non-essential animation (halos, ripples, press effects) across the app."
+                               styleClass="caption" wrapText="true"/>
                     </VBox>
 
                 </VBox>

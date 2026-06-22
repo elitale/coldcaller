@@ -10,6 +10,7 @@ import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallTones;
 import com.elitale.coldbirds.coldcalling.ui.support.DispositionCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.LocalTimeFormatter;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
 import javafx.animation.AnimationTimer;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
@@ -25,6 +26,7 @@ import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.Menu;
+import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.Toggle;
@@ -48,6 +50,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
@@ -69,6 +72,7 @@ public final class ActiveCallController {
 
     private static final double RIPPLE_THRESHOLD = 0.16;
     private static final double RIPPLE_SECONDS   = 0.75;
+    private static final double REC_PULSE_SECONDS = 1.4;
     private static final Color  MIC_ON_COLOR  = Color.web("#34C759"); // success green
     private static final Color  MIC_OFF_COLOR = Color.web("#98989D"); // muted / idle grey
 
@@ -84,6 +88,7 @@ public final class ActiveCallController {
     @FXML private Button    muteButton;
     @FXML private Button    keypadButton;
     @FXML private Button    holdButton;
+    @FXML private Button    outputButton;
     @FXML private Button    voicemailButton;
     @FXML private Button    hangUpButton;
     @FXML private Button    redialButton;
@@ -94,6 +99,7 @@ public final class ActiveCallController {
     @FXML private TextArea  notesArea;
     @FXML private Label     notesStatus;
     @FXML private Region    rippleCircle;
+    @FXML private HBox      recChip;
     @FXML private HBox      micMeterRow;
     @FXML private Label     micStateIcon;
     @FXML private AudioWaveform micMeter;
@@ -118,6 +124,9 @@ public final class ActiveCallController {
     private double   micSmoothed    = 0.0;
     private double   ripplePhase    = 1.0; // ≥1 = idle
     private long     lastFrameNanos = 0L;
+    private BooleanSupplier recordingSupplier = () -> false;
+    private boolean  recVisible     = false;
+    private double   recPhase       = 0.0;
 
     private AudioDeviceManager audioDeviceManager;
     private BiConsumer<String, String> onSwitchAudioDevices = (in, out) -> {};
@@ -133,6 +142,10 @@ public final class ActiveCallController {
     private Consumer<Boolean> onHoldCb   = ignored -> {};
     private Consumer<String>  onDtmfCb   = ignored -> {};
     private BiConsumer<Optional<CallDisposition>, String> onLogChangedCb = (d, n) -> {};
+    private Runnable          onDispositionChosenCb = () -> {};
+    private Supplier<Optional<java.time.Duration>> onVoicemailDropCb = Optional::empty;
+    private Runnable          onVoicemailCompletedCb = () -> {};
+    private boolean           voicemailDropping = false;
 
     /** Default no-arg constructor — required by FXMLLoader. */
     public ActiveCallController() {}
@@ -142,6 +155,15 @@ public final class ActiveCallController {
     public void setOnMute(Consumer<Boolean> cb) { this.onMuteCb   = Objects.requireNonNull(cb); }
     public void setOnHold(Consumer<Boolean> cb) { this.onHoldCb   = Objects.requireNonNull(cb); }
     public void setOnDtmf(Consumer<String> cb)  { this.onDtmfCb   = Objects.requireNonNull(cb); }
+
+    /** @return whether the mic is currently muted on the call card. */
+    public boolean isMuted() { return muted; }
+
+    /** Toggle mute from another surface (the Mini Call HUD); keeps the call card in sync. */
+    public void toggleMute() { onMuteToggle(); }
+
+    /** Trigger the current hang-up action programmatically (e.g. from the Mini Call HUD). */
+    public void triggerHangUp() { onHangUp(); }
 
     /**
      * Inject the live audio-level sources that drive the avatar halo (remote
@@ -180,6 +202,48 @@ public final class ActiveCallController {
         this.onLogChangedCb = Objects.requireNonNull(cb);
     }
 
+    /**
+     * Register the "disposition chosen during wrap-up" sink. Fired exactly once when the
+     * rep picks a disposition chip while the call is in its wrap-up phase — the power dialer
+     * uses this to auto-advance to the next contact. Distinct from {@link #setOnLogChanged}
+     * (which also fires on every note keystroke) so advancing is driven only by a deliberate
+     * disposition pick, never by typing notes or by an active (not-yet-ended) call.
+     */
+    public void setOnDispositionChosen(Runnable cb) {
+        this.onDispositionChosenCb = Objects.requireNonNull(cb);
+    }
+
+    /**
+     * Register the voicemail-drop action. Invoked when the rep clicks the Voicemail
+     * control or presses {@code V} on a connected call. The supplier performs the
+     * drop and returns the greeting's playback duration, or empty when the drop was
+     * skipped (disabled, no greeting configured, or no active call). When a duration
+     * is returned the control shows a determinate ring for that long, then settles.
+     */
+    public void setOnVoicemailDrop(Supplier<Optional<java.time.Duration>> cb) {
+        this.onVoicemailDropCb = Objects.requireNonNull(cb);
+    }
+
+    /**
+     * Register the sink fired once a dropped greeting has finished playing. The power
+     * dialer uses this to end the current call and advance to the next contact, making
+     * voicemail → drop → advance a single hands-free flow. No-op for manual calls.
+     */
+    public void setOnVoicemailCompleted(Runnable cb) {
+        this.onVoicemailCompletedCb = Objects.requireNonNull(cb);
+    }
+
+    /**
+     * Inject the live recording-state source for the in-call REC indicator. Polled ~60fps
+     * by the level timer while connected; the chip shows (and pulses, unless reduce-motion
+     * is on) whenever the supplier reports {@code true}.
+     *
+     * @param recording supplies whether the active call is currently being recorded
+     */
+    public void setRecordingState(BooleanSupplier recording) {
+        this.recordingSupplier = Objects.requireNonNull(recording, "recording must not be null");
+    }
+
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
 
     @FXML
@@ -187,13 +251,17 @@ public final class ActiveCallController {
         applyIcon(muteButton,      "bi-mic",              "Mute");
         applyIcon(keypadButton,    "bi-grid-3x3-gap",     "Keypad");
         applyIcon(holdButton,      "bi-pause-fill",       "Hold");
+        applyIcon(outputButton,    "bi-volume-up-fill",   "Speaker");
         applyIcon(voicemailButton, "bi-soundwave",        "Voicemail");
         applyIcon(hangUpButton,    "bi-telephone-x-fill", "Hang Up");
         applyIcon(redialButton,    "bi-telephone-outbound-fill", "Redial");
         applyIcon(closeButton,     "bi-sliders",          null);
 
+        outputButton.setTooltip(new Tooltip("Switch audio output"));
+
         voicemailButton.setDisable(true);
-        voicemailButton.setTooltip(new Tooltip("Voicemail drop — coming soon"));
+        voicemailButton.setTooltip(new Tooltip("Drop a pre-recorded voicemail (V)"));
+        voicemailButton.setOnAction(e -> onVoicemailDrop());
         redialButton.setTooltip(new Tooltip("Call this number again"));
         showRedial(false);
         closeButton.setTooltip(new Tooltip("Audio devices"));
@@ -226,6 +294,10 @@ public final class ActiveCallController {
             if (suppressAutoSave) return;
             notesDebounce.stop();
             fireLogChanged();
+            // A deliberate disposition pick during wrap-up advances the power dialer.
+            if (sel != null && phase == Phase.WRAPUP) {
+                onDispositionChosenCb.run();
+            }
         });
     }
 
@@ -296,6 +368,26 @@ public final class ActiveCallController {
         double micK = rawMic > micSmoothed ? 0.6 : 0.25;
         micSmoothed += (rawMic - micSmoothed) * micK;
         micMeter.push(micSmoothed);
+
+        updateRecIndicator(dt);
+    }
+
+    /** Show / hide the REC chip from the live recording state, pulsing it unless reduce-motion. */
+    private void updateRecIndicator(double dt) {
+        boolean recording = recordingSupplier.getAsBoolean();
+        if (recording != recVisible) {
+            recVisible = recording;
+            recPhase = 0.0;
+            recChip.setVisible(recording);
+            recChip.setManaged(recording);
+        }
+        if (!recording) return;
+        if (Motion.isReduced()) {
+            recChip.setOpacity(1.0);
+        } else {
+            recPhase += dt / REC_PULSE_SECONDS;
+            recChip.setOpacity(0.55 + 0.45 * (0.5 + 0.5 * Math.sin(recPhase * 2.0 * Math.PI)));
+        }
     }
 
     private static double clamp01(double v) {
@@ -309,8 +401,11 @@ public final class ActiveCallController {
         micSmoothed    = 0.0;
         ripplePhase    = 1.0;
         lastFrameNanos = 0L;
+        recVisible     = false;
+        recPhase       = 0.0;
         selectedInputId  = currentInputId.get();
         selectedOutputId = currentOutputId.get();
+        updateOutputLabel();
         closeButton.setVisible(true);
         closeButton.setManaged(true);
         micMeter.clear();
@@ -328,6 +423,9 @@ public final class ActiveCallController {
         haloCircle.setVisible(false);
         rippleCircle.setVisible(false);
         rippleCircle.setOpacity(0.0);
+        recVisible = false;
+        recChip.setVisible(false);
+        recChip.setManaged(false);
         micMeter.clear();
         micMeterRow.setVisible(false);
         micMeterRow.setManaged(false);
@@ -340,6 +438,21 @@ public final class ActiveCallController {
         if (glyph == null) return;
         glyph.setIconLiteral(muted ? "bi-mic-mute-fill" : "bi-mic");
         glyph.setIconColor(muted ? MIC_OFF_COLOR : MIC_ON_COLOR);
+    }
+
+    /** One-shot "connect" pop on the avatar the moment the line goes live. No-op under reduce-motion. */
+    private void playConnectBloom() {
+        if (Motion.isReduced()) return;
+        avatarRing.setScaleX(0.9);
+        avatarRing.setScaleY(0.9);
+        Timeline bloom = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                        new KeyValue(avatarRing.scaleXProperty(), 0.9),
+                        new KeyValue(avatarRing.scaleYProperty(), 0.9)),
+                new KeyFrame(Duration.millis(220),
+                        new KeyValue(avatarRing.scaleXProperty(), 1.0, Interpolator.EASE_OUT),
+                        new KeyValue(avatarRing.scaleYProperty(), 1.0, Interpolator.EASE_OUT)));
+        bloom.play();
     }
 
     private void showAudioMenu() {
@@ -373,13 +486,53 @@ public final class ActiveCallController {
         onSwitchAudioDevices.accept(selectedInputId, selectedOutputId);
     }
 
+    /**
+     * Primary speaker/headset control: round-robins to the next output device and applies it
+     * through the shipped switch path. The ••• menu remains the full mic+speaker picker.
+     */
+    @FXML
+    private void onCycleOutput() {
+        Motion.pressFlash(outputButton);
+        if (audioDeviceManager == null) {
+            return;
+        }
+        final List<AudioDevice> outputs = audioDeviceManager.outputDevices();
+        if (outputs.isEmpty()) {
+            return;
+        }
+        int index = -1;
+        for (int i = 0; i < outputs.size(); i++) {
+            if (outputs.get(i).id().equals(selectedOutputId)) {
+                index = i;
+                break;
+            }
+        }
+        final AudioDevice next = outputs.get((index + 1) % outputs.size());
+        selectedOutputId = next.id();
+        onSwitchAudioDevices.accept(selectedInputId, selectedOutputId);
+        updateOutputLabel();
+    }
+
+    /** Surface which output is active on the speaker control's tooltip. */
+    private void updateOutputLabel() {
+        if (audioDeviceManager == null) {
+            return;
+        }
+        final String name = audioDeviceManager.outputDevices().stream()
+                .filter(device -> device.id().equals(selectedOutputId))
+                .map(AudioDevice::name)
+                .findFirst()
+                .orElse("Speaker");
+        outputButton.setTooltip(new Tooltip(name));
+    }
+
     private void buildKeypad() {
         String[] keys = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"};
         for (int i = 0; i < keys.length; i++) {
             String key = keys[i];
             Button btn = new Button(key);
             btn.getStyleClass().add("keypad-key");
-            btn.setOnAction(e -> pressDigit(key));
+            btn.setOnAction(e -> { Motion.pressFlash(btn); pressDigit(key); });
             keypadGrid.add(btn, i % 3, i / 3);
         }
     }
@@ -445,6 +598,7 @@ public final class ActiveCallController {
             refreshDuration();
             tickTimer.playFromStart();
             startLevelMeter();
+            playConnectBloom();
         });
     }
 
@@ -565,6 +719,7 @@ public final class ActiveCallController {
             case M -> { event.consume(); onMuteToggle(); }
             case H -> { event.consume(); onHoldToggle(); }
             case K -> { event.consume(); onKeypadToggle(); }
+            case V -> { event.consume(); onVoicemailDrop(); }
             default -> {
                 String text = event.getText();
                 if (text != null && text.matches("[1-8]")) {
@@ -576,7 +731,62 @@ public final class ActiveCallController {
     }
 
     // ── FXML event handlers ───────────────────────────────────────────────────
+    /**
+     * Drop the configured greeting into the live call. Acts only on a connected
+     * (Active) call and ignores re-entrant clicks while a drop is in flight. An
+     * empty result from the drop action (disabled / no greeting / no call) just
+     * flashes the control; otherwise the button shows a determinate ring for the
+     * greeting's length, then settles dimmed and fires the completion sink.
+     */
+    private void onVoicemailDrop() {
+        if (voicemailDropping || phase != Phase.ACTIVE) return;
+        final Optional<java.time.Duration> playing = onVoicemailDropCb.get();
+        if (playing.isEmpty()) {
+            Motion.pressFlash(voicemailButton);
+            return;
+        }
+        playVoicemailAffordance(playing.get());
+    }
 
+    private void playVoicemailAffordance(final java.time.Duration playing) {
+        voicemailDropping = true;
+        voicemailButton.setDisable(true);
+        voicemailButton.setText("Dropping\u2026");
+        final long millis = Math.max(1L, playing.toMillis());
+
+        if (Motion.isReduced()) {
+            // No determinate ring under reduced motion — hold the state for the
+            // greeting's length, then settle.
+            final PauseTransition wait = new PauseTransition(Duration.millis(millis));
+            wait.setOnFinished(e -> finishVoicemailDrop());
+            wait.play();
+            return;
+        }
+
+        final ProgressIndicator ring = new ProgressIndicator(0);
+        ring.setPrefSize(20, 20);
+        ring.setMaxSize(20, 20);
+        voicemailButton.setGraphic(ring);
+        final Timeline ringTimer = new Timeline(
+                new KeyFrame(Duration.ZERO,           new KeyValue(ring.progressProperty(), 0)),
+                new KeyFrame(Duration.millis(millis), new KeyValue(ring.progressProperty(), 1)));
+        ringTimer.setOnFinished(e -> finishVoicemailDrop());
+        ringTimer.play();
+    }
+
+    private void finishVoicemailDrop() {
+        voicemailDropping = false;
+        restoreVoicemailIcon();
+        voicemailButton.setText("Voicemail");
+        voicemailButton.setOpacity(0.5); // settled: greeting dropped
+        onVoicemailCompletedCb.run();
+    }
+
+    private void restoreVoicemailIcon() {
+        final FontIcon icon = new FontIcon("bi-soundwave");
+        icon.setIconSize(20);
+        voicemailButton.setGraphic(icon);
+    }
     @FXML
     private void onMuteToggle() {
         muted = !muted;
@@ -651,6 +861,10 @@ public final class ActiveCallController {
         holdButton.setText("Hold");
         holdButton.getStyleClass().remove("call-control--hold");
         ((FontIcon) holdButton.getGraphic()).setIconLiteral("bi-pause-fill");
+        voicemailDropping = false;
+        restoreVoicemailIcon();
+        voicemailButton.setText("Voicemail");
+        voicemailButton.setOpacity(1.0);
         hangUpButton.setText("Hang Up");
         hangUpButton.setDisable(false);
         ((FontIcon) hangUpButton.getGraphic()).setIconLiteral("bi-telephone-x-fill");
@@ -740,12 +954,16 @@ public final class ActiveCallController {
         muteButton.setDisable(disabled);
         keypadButton.setDisable(disabled);
         holdButton.setDisable(disabled);
+        outputButton.setDisable(disabled);
+        voicemailButton.setDisable(disabled || voicemailDropping);
     }
 
     private void disableCallControls() {
         muteButton.setDisable(true);
         keypadButton.setDisable(true);
         holdButton.setDisable(true);
+        outputButton.setDisable(true);
+        voicemailButton.setDisable(true);
     }
 
     private void showRedial(boolean show) {

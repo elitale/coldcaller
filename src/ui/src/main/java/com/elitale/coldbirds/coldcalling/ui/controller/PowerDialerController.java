@@ -49,10 +49,17 @@ public final class PowerDialerController {
     @FXML private Button stopBtn;
     @FXML private Button advanceBtn;
 
+    @FXML private VBox             upNextSection;
+    @FXML private ListView<Contact> upNextView;
+
     // ── State ─────────────────────────────────────────────────────────────────
 
+    /** How many upcoming contacts to preview in the "Up Next" queue. */
+    private static final int UP_NEXT_LIMIT = 5;
+
     private PowerDialerService powerDialerService;
-    private final ObservableList<CallList> lists = FXCollections.observableArrayList();
+    private final ObservableList<CallList> lists  = FXCollections.observableArrayList();
+    private final ObservableList<Contact>  upNext = FXCollections.observableArrayList();
 
     /** Required no-arg constructor for FXMLLoader. */
     public PowerDialerController() {}
@@ -78,6 +85,21 @@ public final class PowerDialerController {
 
         callListView.getSelectionModel().selectedItemProperty().addListener(
                 (obs, old, sel) -> deleteListBtn.setDisable(sel == null));
+
+        upNextView.setItems(upNext);
+        upNextView.setCellFactory(lv -> new ListCell<>() {
+            @Override
+            protected void updateItem(Contact item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    final String company = item.company().map(c -> "  ·  " + c).orElse("");
+                    setText(item.displayName() + company);
+                }
+            }
+        });
+        upNextView.setPlaceholder(new Label("End of list"));
 
         powerDialerService.setOnSessionChanged(
                 s -> Platform.runLater(() -> applySessionState(s)));
@@ -176,12 +198,19 @@ public final class PowerDialerController {
         pauseBtn.setDisable(!active);
         stopBtn.setDisable(!active);
         pauseBtn.setText(paused ? "Resume" : "Pause");
+        upNextSection.setVisible(active);
+        upNextSection.setManaged(active);
         if (sessionOpt.isPresent()) {
             final var s = sessionOpt.get();
             dialedCountLabel.setText(String.valueOf(s.dialedCount()));
             connectedCountLabel.setText(String.valueOf(s.connectedCount()));
         }
-        if (!active) resetStats();
+        if (active) {
+            refreshUpNext();
+        } else {
+            upNext.clear();
+            resetStats();
+        }
     }
 
     private void applyContact(Optional<Contact> contactOpt) {
@@ -201,6 +230,13 @@ public final class PowerDialerController {
         noActiveLabel.setManaged(false);
         contactDetails.setVisible(true);
         contactDetails.setManaged(true);
+        refreshUpNext();
+    }
+
+    /** Reload the "Up Next" preview off the FX thread, then publish on it. */
+    private void refreshUpNext() {
+        CompletableFuture.supplyAsync(() -> powerDialerService.upcoming(UP_NEXT_LIMIT))
+                .thenAcceptAsync(upNext::setAll, Platform::runLater);
     }
 
     private void applyStats(SessionStats stats) {

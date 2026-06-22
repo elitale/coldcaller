@@ -11,6 +11,8 @@ import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -67,6 +69,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
     private final CallRepository        callRepo;
     private final ContactRepository     contactRepo;
     private final PhoneNumberRepository phoneNumberRepo;
+    private final SettingsService       settings;
 
     /** Calls that have started but not yet ended, keyed by SIP Call-ID. */
     private final ConcurrentHashMap<String, ActiveCall> activeCalls = new ConcurrentHashMap<>();
@@ -91,11 +94,13 @@ public final class CallService implements TelephonyService.TelephonyListener {
             TelephonyService      telephony,
             CallRepository        callRepo,
             ContactRepository     contactRepo,
-            PhoneNumberRepository phoneNumberRepo) {
+            PhoneNumberRepository phoneNumberRepo,
+            SettingsService       settings) {
         this.telephony       = Objects.requireNonNull(telephony,       "telephony must not be null");
         this.callRepo        = Objects.requireNonNull(callRepo,        "callRepo must not be null");
         this.contactRepo     = Objects.requireNonNull(contactRepo,     "contactRepo must not be null");
         this.phoneNumberRepo = Objects.requireNonNull(phoneNumberRepo, "phoneNumberRepo must not be null");
+        this.settings        = Objects.requireNonNull(settings,        "settings must not be null");
     }
 
     // ── Callback registration ─────────────────────────────────────────────────
@@ -228,6 +233,36 @@ public final class CallService implements TelephonyService.TelephonyListener {
      */
     public double remoteLevel() {
         return telephony.remoteLevel();
+    }
+
+    /**
+     * Whether the active call is currently being recorded, for the in-call REC indicator.
+     *
+     * @return {@code true} when recording is active, {@code false} otherwise
+     */
+    public boolean isRecording() {
+        return telephony.isRecording();
+    }
+
+    /**
+     * Drop the configured voicemail greeting into the active call.
+     *
+     * <p>No-ops (returns empty) when voicemail drop is disabled in settings, no
+     * greeting file is configured, no call is active, or the greeting file is
+     * missing/invalid. On success returns the playback duration so the UI can
+     * show a determinate progress affordance.
+     *
+     * @return the greeting playback duration when the drop started, or empty when skipped
+     */
+    public Optional<Duration> dropVoicemail() {
+        if (!settings.isVoicemailDropEnabled()) {
+            return Optional.empty();
+        }
+        final String greetingPath = settings.getVoicemailGreetingPath();
+        if (greetingPath.isBlank()) {
+            return Optional.empty();
+        }
+        return telephony.playGreeting(Path.of(greetingPath));
     }
 
     /**
