@@ -8,9 +8,41 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
 
 ## Screenshots
 
-### Dialer
+<p align="center">
+  <a href="screenshots/dialer.png"><img src="screenshots/dialer.png" alt="coldCalling — Dialer" width="900"></a>
+</p>
+<p align="center">
+  <b>Dialer</b> — dial pad with a country / caller-ID picker, a live <em>Recent Calls</em> feed, and a contact panel with one-tap dispositions, auto-saving notes, talk-time stats, and playable call recordings.
+</p>
 
-![Dialer](screenshots/dialer.png)
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="screenshots/calling.png"><img src="screenshots/calling.png" alt="Active call screen" width="430"></a>
+      <br><br><b>Active Call</b>
+      <br><sub>Mute · Keypad · Hold · Hang&nbsp;up with a real-time mic meter, one-tap dispositions (Interested, Callback, DNC…), and notes that save as you type.</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="screenshots/powerDialer.png"><img src="screenshots/powerDialer.png" alt="Power Dialer" width="430"></a>
+      <br><br><b>Power Dialer</b>
+      <br><sub>Load a call list and auto-dial through it hands-free — Start / Pause / Stop with live Dialed / Connected / Remaining counters.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="screenshots/history.png"><img src="screenshots/history.png" alt="Call History" width="430"></a>
+      <br><br><b>Call History</b>
+      <br><sub>Every inbound / outbound call with duration, disposition, and date — filter by direction, search, and call back in one click.</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="screenshots/messages.png"><img src="screenshots/messages.png" alt="Messages" width="430"></a>
+      <br><br><b>Messages</b>
+      <br><sub>Two-way SMS threads per number — pick the sending number, type, and send; inbound texts arrive in real time.</sub>
+    </td>
+  </tr>
+</table>
+
+> Tip: click any screenshot to open it full-size.
 
 ---
 
