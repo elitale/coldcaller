@@ -1,8 +1,6 @@
 package com.elitale.coldbirds.coldcalling.app;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
-import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
-import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayConfig;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
 import com.elitale.coldbirds.coldcalling.services.*;
@@ -32,9 +30,9 @@ import java.util.function.Consumer;
  * in {@link #init()}, and hand the primary {@link Stage} to {@link MainWindow}.
  * No business logic lives here.
  * <p>
- * All credentials (Twilio Account SID + Auth Token, SIP credentials, SMS relay URL/key)
- * are read from the SQLite {@code settings} table via {@link SettingsService}. They default
- * to blank on first run; the user configures them through the Settings screen.
+ * All credentials (Twilio Account SID + Auth Token, SIP credentials) are read from the
+ * SQLite {@code settings} table via {@link SettingsService}. They default to blank on
+ * first run; the user configures them through the Settings screen.
  * The SIP stack and provider clients degrade gracefully when credentials are absent.
  */
 public final class ColdCallingApp extends Application {
@@ -90,14 +88,10 @@ public final class ColdCallingApp extends Application {
                     TwilioConfig.of(settingsService.getTwilioAccountSid(),
                                     settingsService.getTwilioAuthToken()));
 
-            final SmsRelayClient relay = new SmsRelayClient(
-                    new SmsRelayConfig(settingsService.getSmsRelayUrl(),
-                                       settingsService.getSmsRelayKey()));
-
             // 5. Services
             contactService     = new ContactService(contactRepo);
             phoneNumberService = new PhoneNumberService(phoneNumberRepo, twilio, settingsRepo);
-            smsService         = new SmsService(twilio, relay, smsRepo, phoneNumberRepo);
+            smsService         = new SmsService(twilio, smsRepo, phoneNumberRepo, settingsService);
 
             // 6. Telephony — callService is the TelephonyListener.
             //    Circular dependency is broken with a two-step approach:
@@ -205,6 +199,9 @@ public final class ColdCallingApp extends Application {
         });
 
         mainWindow.show();
+
+        // Begin polling Twilio for inbound SMS; persisted messages refresh the Messages view.
+        smsService.startReceiving(sms -> mainWindow.refreshMessages());
     }
 
     /** Surface an error to the user as a toast (no-op if the window isn't up yet). */

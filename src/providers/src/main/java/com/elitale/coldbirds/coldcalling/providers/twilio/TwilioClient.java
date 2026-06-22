@@ -1,5 +1,6 @@
 package com.elitale.coldbirds.coldcalling.providers.twilio;
 
+import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
@@ -10,6 +11,9 @@ import com.twilio.rest.api.v2010.account.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -82,8 +86,55 @@ public final class TwilioClient {
         }
     }
 
-    // ── Phone numbers ─────────────────────────────────────────────────────────
+    /**
+     * Fetch inbound SMS messages received since {@code since} (exclusive).
+     * <p>
+     * Replaces the former WebSocket relay: instead of receiving Twilio webhooks, the desktop
+     * polls the Messages REST resource. Twilio's {@code DateSent} filter has day granularity,
+     * so results are additionally filtered in-memory to be strictly after {@code since}; messages
+     * with a non-E.164 sender (e.g. alphanumeric sender IDs) are skipped.
+     *
+     * @return {@link Result.Ok} with inbound messages newer than {@code since}, oldest-first as
+     *         returned by Twilio; {@link Result.Err} on API error or network failure.
+     */
+    public Result<List<DomainEvent.IncomingSms>> fetchInboundSince(Instant since) {
+        Objects.requireNonNull(since, "since must not be null");
+        if (!config.isConfigured()) {
+            log.warn("Twilio not configured — set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to fetch inbound SMS");
+            return Result.err("Twilio not configured: set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
+        }
+        try {
+            final ZonedDateTime after = since.atZone(ZoneOffset.UTC);
+            final List<DomainEvent.IncomingSms> inbound = new ArrayList<>();
+            for (final Message message : Message.reader().setDateSentAfter(after).read(restClient)) {
+                if (message.getDirection() != Message.Direction.INBOUND) continue;
 
+                final Instant sentAt = message.getDateSent() == null
+                        ? Instant.now()
+                        : message.getDateSent().toInstant();
+                if (!sentAt.isAfter(since)) continue;  // day-granularity filter — enforce strict watermark
+
+                try {
+                    final PhoneNumber from = new PhoneNumber(addressOf(message.getFrom()));
+                    final PhoneNumber to   = new PhoneNumber(message.getTo() == null ? "" : message.getTo());
+                    final String body = message.getBody() == null ? "" : message.getBody();
+                    inbound.add(new DomainEvent.IncomingSms(from, to, body, sentAt));
+                } catch (IllegalArgumentException badAddress) {
+                    log.debug("Skipping inbound SMS with non-E.164 address: {}", badAddress.getMessage());
+                }
+            }
+            return Result.ok(List.copyOf(inbound));
+
+        } catch (TwilioException e) {
+            log.warn("Twilio fetchInboundSince failed: {}", e.getMessage());
+            return Result.err("Twilio fetchInboundSince failed: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Twilio fetchInboundSince error", e);
+            return Result.err("Twilio fetchInboundSince error: " + e.getMessage(), e);
+        }
+    }
+
+    // ── Phone numbers ─────────────────────────────────────────────────────────
     /**
      * List all phone numbers owned by this Twilio account.
      *
@@ -115,6 +166,10 @@ public final class TwilioClient {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static String addressOf(com.twilio.type.PhoneNumber address) {
+        return address == null ? "" : address.toString();
+    }
 
     private static TwilioRestClient buildRestClient(TwilioConfig config) {
         Objects.requireNonNull(config, "config must not be null");

@@ -4,7 +4,6 @@ import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
@@ -13,36 +12,46 @@ import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSms
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Handles outbound SMS via {@link TwilioClient} and inbound SMS via the
- * AWS WebSocket relay ({@link SmsRelayClient}). Persists all messages to
- * {@link SmsRepository}.
+ * Handles outbound SMS via {@link TwilioClient} and inbound SMS by polling the Twilio
+ * REST API on a background scheduler. Persists all messages to {@link SmsRepository}.
  */
 public final class SmsService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SmsService.class);
 
+    /** Default cadence for inbound polling. */
+    private static final Duration DEFAULT_POLL_INTERVAL = Duration.ofSeconds(15);
+
     private final TwilioClient          twilio;
-    private final SmsRelayClient        relay;
     private final SmsRepository         smsRepo;
     private final PhoneNumberRepository phoneNumberRepo;
+    private final SettingsService       settings;
+
+    /** Active inbound poller, or null when not polling. Guarded by {@code this}. */
+    private ScheduledExecutorService poller;
 
     public SmsService(
             TwilioClient          twilio,
-            SmsRelayClient        relay,
             SmsRepository         smsRepo,
-            PhoneNumberRepository phoneNumberRepo) {
+            PhoneNumberRepository phoneNumberRepo,
+            SettingsService       settings) {
         this.twilio          = Objects.requireNonNull(twilio,          "twilio must not be null");
-        this.relay           = Objects.requireNonNull(relay,           "relay must not be null");
         this.smsRepo         = Objects.requireNonNull(smsRepo,         "smsRepo must not be null");
         this.phoneNumberRepo = Objects.requireNonNull(phoneNumberRepo, "phoneNumberRepo must not be null");
+        this.settings        = Objects.requireNonNull(settings,        "settings must not be null");
     }
 
     /**
@@ -94,23 +103,60 @@ public final class SmsService {
     }
 
     /**
-     * Connect the WebSocket relay to receive inbound SMS.
+     * Begin polling Twilio for inbound SMS at {@link #DEFAULT_POLL_INTERVAL}. Each newly
+     * fetched message is persisted and passed to {@code handler}. Idempotent: a second call
+     * while already polling is ignored.
      *
-     * @param handler called for each inbound message (on the relay thread)
+     * @param handler called for each new inbound message (on a polling thread)
      */
     public void startReceiving(Consumer<DomainEvent.IncomingSms> handler) {
-        Objects.requireNonNull(handler, "handler must not be null");
-        relay.connect(event -> {
-            persistInbound(event);
-            handler.accept(event);
-        });
-        LOG.info("SMS relay connected");
+        startReceiving(handler, DEFAULT_POLL_INTERVAL);
     }
 
-    /** Disconnect the WebSocket relay. */
-    public void stopReceiving() {
-        relay.disconnect();
-        LOG.info("SMS relay disconnected");
+    /** Begin polling at a custom {@code interval}. See {@link #startReceiving(Consumer)}. */
+    public synchronized void startReceiving(Consumer<DomainEvent.IncomingSms> handler, Duration interval) {
+        Objects.requireNonNull(handler,  "handler must not be null");
+        Objects.requireNonNull(interval, "interval must not be null");
+        if (poller != null) return;  // already polling
+        poller = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofVirtual().name("sms-poller").factory());
+        poller.scheduleAtFixedRate(
+                () -> pollInbound().forEach(handler),
+                0, interval.toMillis(), TimeUnit.MILLISECONDS);
+        LOG.info("SMS inbound polling started ({}s interval)", interval.toSeconds());
+    }
+
+    /** Stop inbound polling. No-op if not polling. */
+    public synchronized void stopReceiving() {
+        if (poller == null) return;
+        poller.shutdownNow();
+        poller = null;
+        LOG.info("SMS inbound polling stopped");
+    }
+
+    /**
+     * Fetch inbound SMS newer than the persisted watermark, persist each new message, and
+     * advance the watermark. Returns the newly persisted inbound events (may be empty).
+     * <p>
+     * Package-visible for the scheduler and tests; performs blocking I/O — never call on the
+     * FX thread.
+     */
+    List<DomainEvent.IncomingSms> pollInbound() {
+        final Instant since = settings.getSmsLastPolledAt();
+        final Result<List<DomainEvent.IncomingSms>> fetched = twilio.fetchInboundSince(since);
+        if (fetched instanceof Result.Err<?> err) {
+            LOG.warn("Inbound SMS poll failed: {}", err.message());
+            return List.of();
+        }
+
+        final List<DomainEvent.IncomingSms> events = ((Result.Ok<List<DomainEvent.IncomingSms>>) fetched).value();
+        Instant watermark = since;
+        for (final DomainEvent.IncomingSms event : events) {
+            persistInbound(event);
+            if (event.occurredAt().isAfter(watermark)) watermark = event.occurredAt();
+        }
+        if (watermark.isAfter(since)) settings.setSmsLastPolledAt(watermark);
+        return events;
     }
 
     /**

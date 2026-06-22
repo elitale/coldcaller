@@ -9,11 +9,6 @@
 -->
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
-    <!-- ToggleGroup defined at root scope so RadioButtons in the Appearance
-         section can reference it via $themeGroup -->
-    <fx:define>
-        <ToggleGroup fx:id="themeGroup"/>
-    </fx:define>
 
     <!-- ── Toolbar ───────────────────────────────────────────────── -->
     <top>
@@ -100,26 +95,6 @@
                         </HBox>
                     </VBox>
 
-                    <!-- ── SMS Relay ────────────────────────────────────────────── -->
-                    <VBox styleClass="bg-elevated" spacing="12">
-                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
-                        <Label text="SMS Relay" styleClass="title-2"/>
-                        <Label text="Restart required for changes to take effect" styleClass="caption"/>
-
-                        <HBox spacing="12" alignment="CENTER_LEFT">
-                            <Label text="WebSocket URL" prefWidth="180"/>
-                            <TextField fx:id="smsRelayUrlField" prefWidth="320"/>
-                        </HBox>
-                        <HBox spacing="12" alignment="CENTER_LEFT">
-                            <Label text="API Key" prefWidth="180"/>
-                            <PasswordField fx:id="smsRelayKeyField" prefWidth="240"/>
-                        </HBox>
-
-                        <HBox alignment="CENTER_RIGHT">
-                            <Button text="Save" styleClass="accent" onAction="#onSaveSmsRelay"/>
-                        </HBox>
-                    </VBox>
-
                     <!-- ── Audio ───────────────────────────────────────────────── -->
                     <VBox styleClass="bg-elevated" spacing="12">
                         <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
@@ -169,23 +144,6 @@
 
                         <HBox alignment="CENTER_RIGHT">
                             <Button text="Save" styleClass="accent" onAction="#onSavePowerDialer"/>
-                        </HBox>
-                    </VBox>
-
-                    <!-- ── Appearance ───────────────────────────────────────────── -->
-                    <VBox styleClass="bg-elevated" spacing="12">
-                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
-                        <Label text="Appearance" styleClass="title-2"/>
-
-                        <HBox spacing="16" alignment="CENTER_LEFT">
-                            <Label text="Theme" prefWidth="180"/>
-                            <RadioButton text="Light"  toggleGroup="$themeGroup" userData="light"/>
-                            <RadioButton text="Dark"   toggleGroup="$themeGroup" userData="dark"/>
-                            <RadioButton text="System" toggleGroup="$themeGroup" userData="system"/>
-                        </HBox>
-
-                        <HBox alignment="CENTER_RIGHT">
-                            <Button text="Save" styleClass="accent" onAction="#onSaveAppearance"/>
                         </HBox>
                     </VBox>
 

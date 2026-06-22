@@ -153,6 +153,11 @@ public final class MainWindow {
         Platform.runLater(() -> addToast(message));
     }
 
+    /** Refresh the Messages view (e.g. after an inbound poll). Safe to call from any thread. */
+    public void refreshMessages() {
+        Platform.runLater(messagesController::refresh);
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     /** Build and show the primary window. Must be called on the FX Application Thread. */

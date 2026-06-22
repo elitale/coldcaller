@@ -2,7 +2,6 @@ package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
@@ -10,17 +9,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class SmsServiceTest {
 
     @Mock TwilioClient          twilio;
-    @Mock SmsRelayClient        relay;
     @Mock SmsRepository         smsRepo;
     @Mock PhoneNumberRepository phoneNumberRepo;
+    @Mock SettingsService       settings;
 
     SmsService service;
 
@@ -31,7 +33,7 @@ class SmsServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new SmsService(twilio, relay, smsRepo, phoneNumberRepo);
+        service = new SmsService(twilio, smsRepo, phoneNumberRepo, settings);
     }
 
     @Test
@@ -65,15 +67,38 @@ class SmsServiceTest {
     }
 
     @Test
-    void startReceiving_connectsRelay() {
-        service.startReceiving(sms -> {});
-        verify(relay).connect(any());
+    void pollInbound_persistsNewMessages_andAdvancesWatermark() {
+        Instant since = Instant.parse("2024-01-01T00:00:00Z");
+        Instant sentAt = Instant.parse("2024-01-02T10:00:00Z");
+        when(settings.getSmsLastPolledAt()).thenReturn(since);
+        DomainEvent.IncomingSms event = new DomainEvent.IncomingSms(TO, FROM, "reply", sentAt);
+        when(twilio.fetchInboundSince(since)).thenReturn(Result.ok(List.of(event)));
+        stubOwnedNumber(FROM, FROM_ID);   // inbound 'to' our owned number FROM
+        when(smsRepo.save(any())).thenReturn(Result.err("stub"));
+
+        List<DomainEvent.IncomingSms> result = service.pollInbound();
+
+        assertThat(result).containsExactly(event);
+        verify(smsRepo).save(any());
+        verify(settings).setSmsLastPolledAt(sentAt);
     }
 
     @Test
-    void stopReceiving_disconnectsRelay() {
-        service.stopReceiving();
-        verify(relay).disconnect();
+    void pollInbound_apiError_returnsEmpty_andDoesNotAdvanceWatermark() {
+        Instant since = Instant.parse("2024-01-01T00:00:00Z");
+        when(settings.getSmsLastPolledAt()).thenReturn(since);
+        when(twilio.fetchInboundSince(since)).thenReturn(Result.err("api down"));
+
+        List<DomainEvent.IncomingSms> result = service.pollInbound();
+
+        assertThat(result).isEmpty();
+        verify(smsRepo, never()).save(any());
+        verify(settings, never()).setSmsLastPolledAt(any());
+    }
+
+    @Test
+    void stopReceiving_whenNotPolling_isNoOp() {
+        service.stopReceiving();  // must not throw
     }
 
     private void stubOwnedNumber(PhoneNumber number, PhoneNumberId id) {

@@ -49,10 +49,6 @@ public final class SettingsController {
     @FXML private TextField        sipProxyField;
     @FXML private Spinner<Integer> sipProxyPortSpinner;
 
-    // SMS Relay
-    @FXML private TextField        smsRelayUrlField;
-    @FXML private PasswordField    smsRelayKeyField;
-
     // Audio
     @FXML private ComboBox<AudioDevice> audioInputCombo;
     @FXML private ComboBox<AudioDevice> audioOutputCombo;
@@ -65,9 +61,6 @@ public final class SettingsController {
     @FXML private Spinner<Integer> noAnswerTimeoutSpinner;
     @FXML private Spinner<Integer> autoAdvanceDelaySpinner;
     @FXML private CheckBox         voicemailDropCheckBox;
-
-    // Appearance
-    @FXML private ToggleGroup      themeGroup;
 
     // ── Services ──────────────────────────────────────────────────────────────
 
@@ -186,13 +179,6 @@ public final class SettingsController {
     }
 
     @FXML
-    private void onSaveSmsRelay() {
-        settingsService.setSmsRelayUrl(smsRelayUrlField.getText().strip());
-        settingsService.setSmsRelayKey(smsRelayKeyField.getText().strip());
-        showStatus("SMS Relay settings saved. Restart to apply.");
-    }
-
-    @FXML
     private void onSaveAudio() {
         final String inId  = selectedId(audioInputCombo);
         final String outId = selectedId(audioOutputCombo);
@@ -249,14 +235,6 @@ public final class SettingsController {
         showStatus("Power Dialer settings saved.");
     }
 
-    @FXML
-    private void onSaveAppearance() {
-        if (themeGroup.getSelectedToggle() != null) {
-            settingsService.setTheme((String) themeGroup.getSelectedToggle().getUserData());
-        }
-        showStatus("Appearance settings saved.");
-    }
-
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private record AllSettings(
@@ -264,11 +242,9 @@ public final class SettingsController {
             String twilioAccountSid,    String twilioAuthToken,
             String sipUsername,         String sipPassword,
             String sipDomain,           String sipProxy,    int sipProxyPort,
-            String smsRelayUrl,         String smsRelayKey,
             List<AudioDevice> inputDevices, List<AudioDevice> outputDevices,
             String audioInput,          String audioOutput, int jitterMs,
-            int noAnswerSec,            int advanceDelaySec, boolean voicemailDrop,
-            String theme) {}
+            int noAnswerSec,            int advanceDelaySec, boolean voicemailDrop) {}
 
     /** Runs on a background thread — no UI access here. */
     private AllSettings loadAll() {
@@ -282,13 +258,11 @@ public final class SettingsController {
                 settingsService.getSipUsername(),    settingsService.getSipPassword(),
                 settingsService.getSipDomain(),      settingsService.getSipProxy(),
                 settingsService.getSipProxyPort(),
-                settingsService.getSmsRelayUrl(),    settingsService.getSmsRelayKey(),
                 audioDeviceManager.inputDevices(),   audioDeviceManager.outputDevices(),
                 settingsService.getAudioInputDevice(), settingsService.getAudioOutputDevice(),
                 settingsService.getJitterBufferMs(),
                 settingsService.getNoAnswerTimeoutSec(), settingsService.getAutoAdvanceDelaySec(),
-                settingsService.isVoicemailDropEnabled(),
-                settingsService.getTheme());
+                settingsService.isVoicemailDropEnabled());
     }
 
     /** Runs on the FX Application Thread — safe to update UI fields here. */
@@ -305,9 +279,6 @@ public final class SettingsController {
         sipProxyField.setText(s.sipProxy());
         sipProxyPortSpinner.getValueFactory().setValue(s.sipProxyPort());
 
-        smsRelayUrlField.setText(s.smsRelayUrl());
-        smsRelayKeyField.setText(s.smsRelayKey());
-
         populateDevices(audioInputCombo,  s.inputDevices(),  s.audioInput());
         populateDevices(audioOutputCombo, s.outputDevices(), s.audioOutput());
         jitterBufferSpinner.getValueFactory().setValue(s.jitterMs());
@@ -315,11 +286,6 @@ public final class SettingsController {
         noAnswerTimeoutSpinner.getValueFactory().setValue(s.noAnswerSec());
         autoAdvanceDelaySpinner.getValueFactory().setValue(s.advanceDelaySec());
         voicemailDropCheckBox.setSelected(s.voicemailDrop());
-
-        themeGroup.getToggles().stream()
-                .filter(t -> s.theme().equals(t.getUserData()))
-                .findFirst()
-                .ifPresent(themeGroup::selectToggle);
 
         statusLabel.setText("");
     }

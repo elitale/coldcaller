@@ -1,5 +1,6 @@
 package com.elitale.coldbirds.coldcalling.providers.twilio;
 
+import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
@@ -12,6 +13,7 @@ import com.twilio.http.TwilioRestClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +43,18 @@ class TwilioClientTest {
               {"sid":"PN2","phone_number":"+15552222222","status":"in-use"}
             ],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":1,
             "uri":"/2010-04-01/Accounts/AC.../IncomingPhoneNumbers.json"}
+            """;
+
+    private static final String LIST_MESSAGES_SUCCESS = """
+            {"messages":[
+              {"sid":"SM1","from":"+15551112222","to":"+15559998888","body":"inbound hi",
+               "direction":"inbound","date_sent":"Mon, 01 Jan 2024 12:00:00 +0000"},
+              {"sid":"SM2","from":"+15559998888","to":"+15551112222","body":"outbound reply",
+               "direction":"outbound-reply","date_sent":"Mon, 01 Jan 2024 12:01:00 +0000"},
+              {"sid":"SM3","from":"+15551113333","to":"+15559998888","body":"too old",
+               "direction":"inbound","date_sent":"Tue, 01 Jan 2019 12:00:00 +0000"}
+            ],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":2,
+            "uri":"/2010-04-01/Accounts/AC.../Messages.json"}
             """;
 
     private TwilioConfig     config;
@@ -177,6 +191,48 @@ class TwilioClientTest {
 
         assertThat(result.isErr()).isTrue();
         assertThat(((Result.Err<List<TwilioNumberData>>) result).message()).contains("not configured");
+    }
+
+    // ── fetchInboundSince ────────────────────────────────────────────────────
+
+    @Test
+    void testFetchInboundSince_returnsOnlyInboundNewerThanSince() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(LIST_MESSAGES_SUCCESS, 200));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<List<DomainEvent.IncomingSms>> result =
+                client.fetchInboundSince(Instant.parse("2020-01-01T00:00:00Z"));
+
+        assertThat(result.isOk()).isTrue();
+        List<DomainEvent.IncomingSms> inbound = ((Result.Ok<List<DomainEvent.IncomingSms>>) result).value();
+        assertThat(inbound).hasSize(1);                              // outbound + too-old excluded
+        assertThat(inbound.get(0).from()).isEqualTo(new PhoneNumber("+15551112222"));
+        assertThat(inbound.get(0).body()).isEqualTo("inbound hi");
+    }
+
+    @Test
+    void testFetchInboundSince_apiError_returnsErr() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(API_ERROR, 401));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<List<DomainEvent.IncomingSms>> result =
+                client.fetchInboundSince(Instant.parse("2020-01-01T00:00:00Z"));
+
+        assertThat(result.isErr()).isTrue();
+    }
+
+    @Test
+    void testFetchInboundSince_notConfigured_returnsErr() {
+        TwilioConfig blank = new TwilioConfig("", "", TwilioConfig.DEFAULT_BASE_URL);
+        TwilioClient client = new TwilioClient(blank, restClient);
+
+        Result<List<DomainEvent.IncomingSms>> result =
+                client.fetchInboundSince(Instant.parse("2020-01-01T00:00:00Z"));
+
+        assertThat(result.isErr()).isTrue();
+        assertThat(((Result.Err<List<DomainEvent.IncomingSms>>) result).message()).contains("not configured");
     }
 
     // ── TwilioConfig ─────────────────────────────────────────────────────────

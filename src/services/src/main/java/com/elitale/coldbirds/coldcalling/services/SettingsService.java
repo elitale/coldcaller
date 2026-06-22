@@ -2,6 +2,8 @@ package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.storage.repository.SettingsRepository;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -21,12 +23,10 @@ public final class SettingsService {
     public static final String KEY_SIP_DOMAIN                = "sip.domain";
     public static final String KEY_SIP_PROXY                 = "sip.proxy";
     public static final String KEY_SIP_PROXY_PORT            = "sip.proxy_port";
-    public static final String KEY_SMS_RELAY_URL             = "sms.relay_url";
-    public static final String KEY_SMS_RELAY_KEY             = "sms.relay_key";
+    public static final String KEY_SMS_LAST_POLLED_AT        = "sms.last_polled_at";
     public static final String KEY_AUDIO_INPUT_DEVICE        = "audio.input_device";
     public static final String KEY_AUDIO_OUTPUT_DEVICE       = "audio.output_device";
     public static final String KEY_AUDIO_JITTER_BUFFER_MS    = "audio.jitter_buffer_ms";
-    public static final String KEY_APPEARANCE_THEME          = "appearance.theme";
     public static final String KEY_DIALER_NO_ANSWER_TIMEOUT  = "dialer.no_answer_timeout_sec";
     public static final String KEY_DIALER_AUTO_ADVANCE_DELAY = "dialer.auto_advance_delay_sec";
     public static final String KEY_DIALER_VOICEMAIL_DROP     = "dialer.voicemail_drop_enabled";
@@ -40,8 +40,9 @@ public final class SettingsService {
     private static final int    DEFAULT_JITTER_MS       = 40;
     private static final int    DEFAULT_NO_ANSWER_SEC   = 30;
     private static final int    DEFAULT_ADVANCE_SEC     = 1;
-    private static final String DEFAULT_THEME           = "system";
     private static final String DEFAULT_COUNTRY_ISO     = "US";
+    /** First-run backfill window: poll inbound SMS from this far back when no watermark exists. */
+    private static final Duration SMS_BACKFILL_WINDOW   = Duration.ofDays(7);
 
     private final SettingsRepository repo;
 
@@ -99,13 +100,19 @@ public final class SettingsService {
     }
     public void setSipProxyPort(int port) { repo.set(KEY_SIP_PROXY_PORT, String.valueOf(port)); }
 
-    // ── SMS Relay ─────────────────────────────────────────────────────────────
+    // ── SMS ───────────────────────────────────────────────────────────────────
 
-    public String getSmsRelayUrl() { return get(KEY_SMS_RELAY_URL, ""); }
-    public void   setSmsRelayUrl(String v) { repo.set(KEY_SMS_RELAY_URL, Objects.requireNonNull(v)); }
-
-    public String getSmsRelayKey() { return get(KEY_SMS_RELAY_KEY, ""); }
-    public void   setSmsRelayKey(String v) { repo.set(KEY_SMS_RELAY_KEY, Objects.requireNonNull(v)); }
+    /**
+     * Watermark for inbound SMS polling — the instant up to which inbound messages have
+     * already been fetched. Defaults to a {@value #SMS_BACKFILL_WINDOW}-day backfill on first run.
+     */
+    public Instant getSmsLastPolledAt() {
+        final long epochMs = parseLong(get(KEY_SMS_LAST_POLLED_AT, ""), -1L);
+        return epochMs < 0 ? Instant.now().minus(SMS_BACKFILL_WINDOW) : Instant.ofEpochMilli(epochMs);
+    }
+    public void setSmsLastPolledAt(Instant at) {
+        repo.set(KEY_SMS_LAST_POLLED_AT, String.valueOf(Objects.requireNonNull(at).toEpochMilli()));
+    }
 
     // ── Audio ─────────────────────────────────────────────────────────────────
 
@@ -121,10 +128,6 @@ public final class SettingsService {
     }
     public void setJitterBufferMs(int ms) { repo.set(KEY_AUDIO_JITTER_BUFFER_MS, String.valueOf(ms)); }
 
-    // ── Appearance ────────────────────────────────────────────────────────────
-
-    public String getTheme() { return get(KEY_APPEARANCE_THEME, DEFAULT_THEME); }
-    public void   setTheme(String theme) { repo.set(KEY_APPEARANCE_THEME, Objects.requireNonNull(theme)); }
 
     // ── Power Dialer ──────────────────────────────────────────────────────────
 
@@ -160,6 +163,14 @@ public final class SettingsService {
     private static int parseInt(String value, int fallback) {
         try {
             return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private static long parseLong(String value, long fallback) {
+        try {
+            return Long.parseLong(value);
         } catch (NumberFormatException e) {
             return fallback;
         }
