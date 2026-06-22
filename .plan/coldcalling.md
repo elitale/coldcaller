@@ -15,7 +15,7 @@ A native desktop application for professional cold callers. Replaces browser-bas
 - B2B SaaS SDR teams: 50–150 calls/day, CRM-connected, call recording required
 
 **Core value:**
-- 6× cheaper than Twilio/Aircall ($0.002/min via Telnyx)
+- 6× cheaper than Twilio/Aircall ($0.002/min via twilio)
 - No browser — pure SIP with < 150ms audio latency
 - Unlimited numbers, local presence built-in
 - Power dialer with automatic number rotation and DNC enforcement
@@ -29,7 +29,7 @@ coldcalling/src/
 ├── domain/        Pure domain — records, sealed interfaces, events, value objects
 ├── storage/       SQLite repositories, FlywayDB migrations
 ├── telephony/     SIP UA (JAIN-SIP), RTP (jlibrtp), G.711 audio pipeline, STUN
-├── providers/     Telnyx REST client, SMS WebSocket relay client
+├── providers/     twilio REST client, SMS WebSocket relay client
 ├── ui/            JavaFX 21 controllers, FXML layouts, AtlantaFX bindings
 ├── app/           Entry point, DI wiring, lifecycle management
 └── infra/         AWS CDK (TypeScript) — SMS relay Lambda + API Gateway
@@ -149,7 +149,7 @@ coldcalling/src/
 **Goal:** SIP UA registration, inbound/outbound call handling, RTP audio pipeline, G.711 PCMU codec.
 
 ### STUN Client
-- [ ] `StunClient` — single binding request to `stun.telnyx.com:3478`, returns public IP + port
+- [ ] `StunClient` — single binding request to `stun.twilio.com:3478`, returns public IP + port
 - [ ] `StunResponse` record — publicIp, publicPort
 - [ ] `StunClientTest` — parse STUN response bytes, handle timeout
 
@@ -180,13 +180,13 @@ coldcalling/src/
 
 ## Phase 5 — Providers Layer
 
-**Goal:** Telnyx REST client (number management + SMS outbound), SMS WebSocket relay client.
+**Goal:** twilio REST client (number management + SMS outbound), SMS WebSocket relay client.
 
-### Telnyx REST Client
-- [ ] `TelnyxClient` — Java 21 `HttpClient` wrapper, base URL, API key (from OS keychain)
-- [ ] `TelnyxNumberService` — list numbers, purchase number, release number
-- [ ] `TelnyxSmsService` — send SMS (REST POST to Telnyx)
-- [ ] `TelnyxResponse<T>` sealed interface — `Success(body) | RateLimit(retryAfter) | Error(code, message)`
+### twilio REST Client
+- [ ] `twillioClient` — Java 21 `HttpClient` wrapper, base URL, API key (from OS keychain)
+- [ ] `twillioNumberService` — list numbers, purchase number, release number
+- [ ] `twillioSmsService` — send SMS (REST POST to twilio)
+- [ ] `twillioResponse<T>` sealed interface — `Success(body) | RateLimit(retryAfter) | Error(code, message)`
 
 ### SMS WebSocket Relay Client
 - [ ] `SmsRelayClient` — connects to API Gateway WebSocket URL on startup
@@ -194,8 +194,8 @@ coldcalling/src/
 - [ ] `InboundSmsHandler` — parses relay JSON message → `DomainEvent.IncomingSms`
 
 ### Tests
-- [ ] `TelnyxClientTest` — mock `HttpClient`, verify request shape + auth header
-- [ ] `TelnyxSmsServiceTest` — POST body, E.164 formatting
+- [ ] `twillioClientTest` — mock `HttpClient`, verify request shape + auth header
+- [ ] `twillioSmsServiceTest` — POST body, E.164 formatting
 - [ ] `SmsRelayClientTest` — JSON parse, reconnect logic
 
 ---
@@ -228,11 +228,11 @@ coldcalling/src/
 ### Stack Components
 - [ ] `ColdCallingStack` (CDK TypeScript)
 - [ ] `connections` DynamoDB table — `connectionId` (PK), `userId`, `ttl`
-- [ ] `SmsInboundFunction` — POST /sms-inbound handler; validates Telnyx webhook sig; looks up connectionId; calls API GW `postToConnection`
+- [ ] `SmsInboundFunction` — POST /sms-inbound handler; validates twilio webhook sig; looks up connectionId; calls API GW `postToConnection`
 - [ ] `ConnectFunction` — WebSocket $connect handler; stores connectionId in DynamoDB
 - [ ] `DisconnectFunction` — WebSocket $disconnect handler; removes connectionId
-- [ ] `SmsOutboundFunction` — (optional v1) relay outbound SMS from desktop to Telnyx REST
-- [ ] API Gateway HTTP API — POST /sms-inbound (Telnyx webhook target)
+- [ ] `SmsOutboundFunction` — (optional v1) relay outbound SMS from desktop to twilio REST
+- [ ] API Gateway HTTP API — POST /sms-inbound (twilio webhook target)
 - [ ] API Gateway WebSocket API — desktop client connects here
 - [ ] IAM roles, Lambda env vars (via Secrets Manager), CORS config
 - [ ] `cdk deploy` verified in us-east-1

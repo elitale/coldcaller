@@ -5,7 +5,7 @@ import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * Handles outbound SMS via {@link TelnyxClient} and inbound SMS via the
+ * Handles outbound SMS via {@link TwilioClient} and inbound SMS via the
  * AWS WebSocket relay ({@link SmsRelayClient}). Persists all messages to
  * {@link SmsRepository}.
  */
@@ -29,24 +29,24 @@ public final class SmsService {
 
     private static final Logger LOG = LoggerFactory.getLogger(SmsService.class);
 
-    private final TelnyxClient          telnyx;
+    private final TwilioClient          twilio;
     private final SmsRelayClient        relay;
     private final SmsRepository         smsRepo;
     private final PhoneNumberRepository phoneNumberRepo;
 
     public SmsService(
-            TelnyxClient          telnyx,
+            TwilioClient          twilio,
             SmsRelayClient        relay,
             SmsRepository         smsRepo,
             PhoneNumberRepository phoneNumberRepo) {
-        this.telnyx          = Objects.requireNonNull(telnyx,          "telnyx must not be null");
+        this.twilio          = Objects.requireNonNull(twilio,          "twilio must not be null");
         this.relay           = Objects.requireNonNull(relay,           "relay must not be null");
         this.smsRepo         = Objects.requireNonNull(smsRepo,         "smsRepo must not be null");
         this.phoneNumberRepo = Objects.requireNonNull(phoneNumberRepo, "phoneNumberRepo must not be null");
     }
 
     /**
-     * Send an outbound SMS. Persists the message only on Telnyx API success.
+     * Send an outbound SMS. Persists the message only on Twilio API success.
      *
      * @param from local owned number
      * @param to   recipient E.164 number
@@ -64,10 +64,10 @@ public final class SmsService {
             return Result.err("from number not owned: " + from.value());
         }
 
-        final Result<String> apiResult = telnyx.sendSms(from, to, body);
+        final Result<String> apiResult = twilio.sendSms(from, to, body);
         return switch (apiResult) {
             case Result.Err<?> err -> {
-                LOG.error("Telnyx sendSms failed: {}", err.message());
+                LOG.error("Twilio sendSms failed: {}", err.message());
                 yield Result.err(err.message());
             }
             case Result.Ok<?> ignored -> {

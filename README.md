@@ -37,10 +37,10 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
 
 ## Features
 
-- **Inbound + Outbound SIP calls** via Telnyx (Twilio as fallback)
+- **Inbound + Outbound SIP calls** via Twilio (Twilio as fallback)
 - **Power dialer** — auto-advance through a call list with configurable dispositions
 - **Multi-number management** — purchase, rotate, and monitor reputation of phone numbers
-- **SMS** — inbound via AWS WebSocket relay, outbound via Telnyx REST
+- **SMS** — inbound via AWS WebSocket relay, outbound via Twilio REST
 - **Call recording** stored locally as WAV files
 - **Call history + analytics** — duration, dispositions, connect rate
 - **DNC list enforcement** — checked before every outbound dial
@@ -58,8 +58,8 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
 | SIP signaling | JAIN-SIP 1.3 |
 | RTP / Audio | jlibrtp 0.2 + javax.sound.sampled |
 | Audio codec | G.711 PCMU (8 kHz, 8-bit, mono) |
-| NAT traversal | Custom STUN client — `stun.telnyx.com:3478` |
-| Telephony provider | Telnyx REST API + SIP registration |
+| NAT traversal | Custom STUN client — `stun.twilio.com:3478` |
+| Telephony provider | Twilio REST API + SIP registration |
 | SMS relay | AWS API Gateway WebSocket + Lambda + DynamoDB |
 | Database | SQLite via sqlite-jdbc + FlywayDB migrations |
 | HTTP client | Java 21 built-in `HttpClient` |
@@ -86,7 +86,7 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
 │  JAIN-SIP · jlibrtp · G.711 · STUN     │
 ├─────────────────────────────────────────┤
 │       Providers  (External APIs)        │
-│  Telnyx REST · SMS WebSocket relay      │
+│  Twilio REST · SMS WebSocket relay      │
 ├─────────────────────────────────────────┤
 │    Repository Layer  (Data Access)      │
 │  SQLite · FlywayDB · DAO pattern        │
@@ -135,7 +135,7 @@ Cross-thread rule: always use `Platform.runLater()` to update UI from SIP or aud
 >
 > **Windows:** Set `JAVA_HOME` to your JDK 21 installation directory before running Gradle.
 
-You will also need a **Telnyx account** to make real calls. A free trial account works for testing.
+You will also need a **Twilio account** to make real calls. A free trial account works for testing.
 
 ---
 
@@ -162,12 +162,12 @@ Credentials are **never stored in files**. The app reads them from environment v
 For development, set the following environment variables in your shell profile or IDE run configuration:
 
 ```bash
-# Telnyx SIP credentials (from Telnyx Mission Control → SIP Connections)
+# Twilio SIP credentials (from Twilio Mission Control → SIP Connections)
 export COLDCALLING_SIP_USERNAME="+14155551234"
 export COLDCALLING_SIP_PASSWORD="your-sip-password"
 
-# Telnyx API key (from Telnyx Mission Control → API Keys)
-export COLDCALLING_TELNYX_API_KEY="KEY0123456789ABCDEF"
+# Twilio API key (from Twilio Mission Control → API Keys)
+export COLDCALLING_TWILIO_API_KEY="KEY0123456789ABCDEF"
 
 # AWS — only needed if you are developing the SMS relay
 export AWS_REGION="us-east-1"
@@ -175,7 +175,7 @@ export AWS_PROFILE="coldbirds-dev"          # or set AWS_ACCESS_KEY_ID / AWS_SEC
 export COLDCALLING_SMS_RELAY_URL="wss://your-api-id.execute-api.us-east-1.amazonaws.com/prod"
 ```
 
-> For a pure local build without calling, you can skip the Telnyx and AWS variables. The app starts in "offline" mode — the SIP registration will fail but the UI and database layers are fully functional.
+> For a pure local build without calling, you can skip the Twilio and AWS variables. The app starts in "offline" mode — the SIP registration will fail but the UI and database layers are fully functional.
 
 ### 4. (Optional) Set up the AWS SMS relay
 
@@ -311,17 +311,17 @@ Requires a JDK with `jpackage` included (standard in JDK 14+).
 
 ## AWS Infrastructure (SMS Relay)
 
-Inbound SMS from Telnyx flows through a small serverless relay:
+Inbound SMS from Twilio flows through a small serverless relay:
 
 ```
-Telnyx webhook
+Twilio webhook
   → POST /sms-inbound  (API Gateway HTTP)
   → Lambda             (stores to DynamoDB, looks up WebSocket connectionId)
   → WebSocket push     (API Gateway WebSocket)
   → Desktop app        (reconnects every 60s to keep the connection warm)
 ```
 
-Outbound SMS goes directly from the desktop to the Telnyx REST API — no AWS hop needed.
+Outbound SMS goes directly from the desktop to the Twilio REST API — no AWS hop needed.
 
 The CDK stack source is in `src/infra/`. To redeploy after changes:
 
@@ -370,7 +370,7 @@ coldcalling/
 │   │
 │   ├── providers/                # External API clients
 │   │   └── .../providers/
-│   │       ├── telnyx/           # TelnyxClient (REST), TelnyxSmsService
+│   │       ├── twilio/           # TwilioClient (REST), TwilioSmsService
 │   │       └── relay/            # SmsRelayClient (AWS WebSocket)
 │   │
 │   ├── ui/                       # JavaFX controllers + FXML

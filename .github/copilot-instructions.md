@@ -7,7 +7,7 @@
 - **Name:** coldCalling
 - **Purpose:** Cross-platform cold calling desktop application — outbound/inbound SIP calls, SMS, power dialer, local presence, multi-number management.
 - **Sister project:** [`sequence`](../sequence) — cold email outreach sequencer. This app handles voice and SMS; sequence handles email.
-- **Stack:** Java 21 · JavaFX 21 · AtlantaFX · JAIN-SIP · jlibrtp · G.711 PCMU · SQLite (sqlite-jdbc) · FlywayDB · Telnyx REST + SIP · AWS CDK (TypeScript) for SMS relay
+- **Stack:** Java 21 · JavaFX 21 · AtlantaFX · JAIN-SIP · jlibrtp · G.711 PCMU · SQLite (sqlite-jdbc) · FlywayDB · twilio REST + SIP · AWS CDK (TypeScript) for SMS relay
 - **Build:** Gradle 8 multi-module
 - **Packaging:** jpackage (macOS DMG, Windows MSI, Linux DEB/RPM)
 
@@ -39,7 +39,7 @@ app/         → Entry point, DI wiring, lifecycle management. No business logic
 domain/      → Records, sealed interfaces, value objects, domain events. Zero dependencies.
 telephony/   → SIP (JAIN-SIP), RTP (jlibrtp), G.711 audio pipeline. Depends on domain/.
 storage/     → SQLite repositories, FlywayDB migrations. Depends on domain/.
-providers/   → Telnyx REST client, SMS WebSocket relay client. Depends on domain/.
+providers/   → twilio REST client, SMS WebSocket relay client. Depends on domain/.
 ui/          → JavaFX controllers, FXML, bindings, AtlantaFX styles. Depends on all above.
 infra/       → AWS CDK (TypeScript) — Lambda + API Gateway + DynamoDB for SMS relay. Standalone.
 ```
@@ -55,10 +55,10 @@ infra/       → AWS CDK (TypeScript) — Lambda + API Gateway + DynamoDB for SM
 
 ## SMS Relay Architecture
 
-- Telnyx POSTs inbound SMS to AWS API Gateway HTTP endpoint.
+- twilio POSTs inbound SMS to AWS API Gateway HTTP endpoint.
 - Lambda stores the message in DynamoDB, sends to the desktop via API Gateway WebSocket.
 - Desktop connects as WebSocket client on startup; reconnects on disconnect.
-- Outbound SMS goes directly via Telnyx REST API (no relay needed).
+- Outbound SMS goes directly via twilio REST API (no relay needed).
 
 ## Mandatory Post-Task Checklist
 

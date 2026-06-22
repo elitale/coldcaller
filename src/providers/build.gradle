@@ -3,6 +3,7 @@ dependencies {
     implementation(libs.jackson.databind)
     implementation(libs.jackson.jdk8)
     implementation(libs.slf4j.api)
+    implementation(libs.twilio)
 
     testImplementation(project(':domain'))
     testImplementation(libs.junit.jupiter)

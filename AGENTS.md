@@ -12,7 +12,7 @@
 - **Type:** Native desktop application (cross-platform: Windows, macOS, Linux)
 - **Language:** Java 21 (strict mode — records, sealed interfaces, pattern matching, text blocks, virtual threads)
 - **UI:** JavaFX 21 + AtlantaFX (Apple HIG design system, light + dark mode, system auto)
-- **Telephony:** Telnyx REST + SIP (primary), Twilio (fallback). Pure SIP + RTP — no WebRTC, no browser.
+- **Telephony:** Twilio REST + SIP (primary), Twilio (fallback). Pure SIP + RTP — no WebRTC, no browser.
 - **Database:** SQLite via sqlite-jdbc + FlywayDB migrations
 - **Build:** Gradle 8 multi-module
 - **Packaging:** jpackage (macOS DMG, Windows MSI, Linux DEB/RPM)
@@ -21,7 +21,7 @@
 
 | Entity | Description |
 |---|---|
-| **PhoneNumber** | E.164 formatted number owned by the user (purchased via Telnyx). Has area code, reputation status, daily usage. |
+| **PhoneNumber** | E.164 formatted number owned by the user (purchased via Twilio). Has area code, reputation status, daily usage. |
 | **Contact** | A person to call or SMS. Has name, phone, company, tags, call history. |
 | **CallList** | An ordered collection of contacts used by the power dialer. |
 | **Call** | A single call event — direction (in/out), number used, contact, duration, disposition, recording. |
@@ -64,7 +64,7 @@
 | Telephony (RTP/Audio) | jlibrtp + javax.sound.sampled |
 | Audio Codec | G.711 PCMU (8000 Hz, 8-bit, mono) |
 | NAT Traversal | Custom STUN client (~100 lines) |
-| Telephony Provider | Telnyx REST API + SIP registration |
+| Telephony Provider | Twilio REST API + SIP registration |
 | SMS Relay (inbound) | AWS API Gateway WebSocket + Lambda + DynamoDB |
 | Database | SQLite via sqlite-jdbc |
 | Migrations | FlywayDB |
@@ -87,7 +87,7 @@ coldcalling/src/                  # Root Gradle project
 ├── domain/                   # Pure domain — records, sealed interfaces, value objects, domain events
 ├── telephony/                # SIP (JAIN-SIP), RTP (jlibrtp), G.711 audio pipeline
 ├── storage/                  # SQLite repositories, FlywayDB migrations
-├── providers/                # Telnyx REST client, SMS WebSocket relay client
+├── providers/                # Twilio REST client, SMS WebSocket relay client
 ├── ui/                       # JavaFX controllers, FXML, AtlantaFX bindings
 └── infra/                    # AWS CDK (TypeScript) — standalone; not on the Java classpath
 ```
@@ -295,7 +295,7 @@ sipStack.sendRequest(request); // network blocks
 
 ### 8.1 SIP
 
-- **SIP UA (User Agent):** JAIN-SIP stack, registered to Telnyx SIP proxy on startup.
+- **SIP UA (User Agent):** JAIN-SIP stack, registered to Twilio SIP proxy on startup.
 - **Registration:** REGISTER on startup, refresh every 60 seconds (`Expires: 60`).
 - **Inbound calls:** SIP INVITE arrives → parse → emit `DomainEvent.IncomingCall` → ring the UI.
 - **Outbound calls:** UI initiates → service builds INVITE → SIP stack sends → handle 200 OK / 4xx / timeout.
@@ -313,7 +313,7 @@ sipStack.sendRequest(request); // network blocks
 
 ### 8.3 NAT Traversal
 
-- STUN client sends binding request to `stun.telnyx.com:3478` on startup.
+- STUN client sends binding request to `stun.twilio.com:3478` on startup.
 - Result (public IP + port) is used as the `c=` line in SDP offer/answer.
 - Retry STUN if the network changes (detect via OS network change event).
 
@@ -366,7 +366,7 @@ CREATE TABLE phone_numbers (
     number          TEXT NOT NULL UNIQUE,       -- E.164 format
     friendly_name   TEXT,
     area_code       TEXT NOT NULL,
-    provider        TEXT NOT NULL DEFAULT 'telnyx',
+    provider        TEXT NOT NULL DEFAULT 'twilio',
     reputation      TEXT NOT NULL DEFAULT 'clean', -- clean | warning | flagged
     daily_calls     INTEGER NOT NULL DEFAULT 0,
     active          INTEGER NOT NULL DEFAULT 1,  -- 0/1
@@ -586,7 +586,7 @@ CREATE TABLE settings (
 | Repository | Query correctness, soft-delete filters, constraint violations | SQLite (in-memory or temp file) |
 | Service | Business logic, state transitions, error handling | Repositories, Telephony, Providers |
 | Telephony | G.711 encode/decode, SDP generation, STUN parsing | JAIN-SIP stack, jlibrtp |
-| Provider | Telnyx REST request/response mapping | Java `HttpClient` (mock) |
+| Provider | Twilio REST request/response mapping | Java `HttpClient` (mock) |
 
 ### 11.5 Running Tests
 
@@ -601,14 +601,14 @@ CREATE TABLE settings (
 
 ## 12. Security
 
-- Never store Telnyx API keys or SIP credentials in SQLite in plaintext. Use OS keychain:
+- Never store Twilio API keys or SIP credentials in SQLite in plaintext. Use OS keychain:
   - macOS: `java.security.KeyStore` (Keychain)
   - Windows: `DPAPI` via JNA
   - Linux: `libsecret` via JNA or encrypted settings file
 - Never log SIP passwords, API keys, or phone numbers at DEBUG level.
 - DNC list must be checked before every outbound dial — service-layer enforcement, not UI-layer.
 - Recording files are stored in `~/.coldcalling/src/recordings/`. Never transmitted to any server unless user explicitly enables cloud backup.
-- AWS Lambda receives raw Telnyx webhooks. Never log full webhook bodies (may contain PII).
+- AWS Lambda receives raw Twilio webhooks. Never log full webhook bodies (may contain PII).
 
 ---
 

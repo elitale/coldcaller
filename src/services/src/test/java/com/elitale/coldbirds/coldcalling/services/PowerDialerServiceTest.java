@@ -176,7 +176,7 @@ class PowerDialerServiceTest {
 
     private void stubOwnedNumber() {
         OwnedNumber on = new OwnedNumber(new PhoneNumberId(99L), LOCAL, Optional.empty(),
-                new AreaCode("202"), "telnyx", new NumberReputation.Clean(),
+                new AreaCode("202"), "twilio", new NumberReputation.Clean(),
                 0, true, Instant.now(), Instant.now());
         when(phoneNumberService.listOwned()).thenReturn(List.of(on));
     }

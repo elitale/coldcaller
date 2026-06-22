@@ -32,27 +32,33 @@ class SettingsServiceTest {
     }
 
     @Test
-    void getTelnyxApiKey_returnsEmpty_whenNotSet() {
-        when(repo.get(SettingsService.KEY_TELNYX_API_KEY)).thenReturn(Optional.empty());
-        assertThat(service.getTelnyxApiKey()).isEmpty();
+    void getTwilioAccountSid_returnsEmpty_whenNotSet() {
+        when(repo.get(SettingsService.KEY_TWILIO_ACCOUNT_SID)).thenReturn(Optional.empty());
+        assertThat(service.getTwilioAccountSid()).isEmpty();
     }
 
     @Test
-    void setTelnyxApiKey_delegates_toRepo() {
-        service.setTelnyxApiKey("tk_abc123");
-        verify(repo).set(SettingsService.KEY_TELNYX_API_KEY, "tk_abc123");
+    void setTwilioAccountSid_delegates_toRepo() {
+        service.setTwilioAccountSid("AC0123456789abcdef");
+        verify(repo).set(SettingsService.KEY_TWILIO_ACCOUNT_SID, "AC0123456789abcdef");
+    }
+
+    @Test
+    void setTwilioAuthToken_delegates_toRepo() {
+        service.setTwilioAuthToken("tok_abc123");
+        verify(repo).set(SettingsService.KEY_TWILIO_AUTH_TOKEN, "tok_abc123");
     }
 
     @Test
     void getSipDomain_returnsDefault_whenNotSet() {
         when(repo.get(SettingsService.KEY_SIP_DOMAIN)).thenReturn(Optional.empty());
-        assertThat(service.getSipDomain()).isEqualTo("sip.telnyx.com");
+        assertThat(service.getSipDomain()).isEqualTo("sip.twilio.com");
     }
 
     @Test
     void getSipProxy_returnsDefault_whenNotSet() {
         when(repo.get(SettingsService.KEY_SIP_PROXY)).thenReturn(Optional.empty());
-        assertThat(service.getSipProxy()).isEqualTo("sip.telnyx.com");
+        assertThat(service.getSipProxy()).isEqualTo("sip.twilio.com");
     }
 
     @Test

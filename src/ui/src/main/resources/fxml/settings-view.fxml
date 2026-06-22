@@ -47,19 +47,24 @@
                         </HBox>
                     </VBox>
 
-                    <!-- ── Telnyx ──────────────────────────────────────────────── -->
+                    <!-- ── Twilio ──────────────────────────────────────────────── -->
                     <VBox styleClass="bg-elevated" spacing="12">
                         <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
-                        <Label text="Telnyx" styleClass="title-2"/>
+                        <Label text="Twilio" styleClass="title-2"/>
                         <Label text="Restart required for changes to take effect" styleClass="caption"/>
 
                         <HBox spacing="12" alignment="CENTER_LEFT">
-                            <Label text="API Key" prefWidth="180"/>
-                            <PasswordField fx:id="telnyxApiKeyField" prefWidth="320"/>
+                            <Label text="Account SID" prefWidth="180"/>
+                            <TextField fx:id="twilioAccountSidField" prefWidth="320"/>
+                        </HBox>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Auth Token" prefWidth="180"/>
+                            <PasswordField fx:id="twilioAuthTokenField" prefWidth="320"/>
                         </HBox>
 
                         <HBox alignment="CENTER_RIGHT">
-                            <Button text="Save" styleClass="accent" onAction="#onSaveTelnyx"/>
+                            <Button text="Save" styleClass="accent" onAction="#onSaveTwilio"/>
                         </HBox>
                     </VBox>
 

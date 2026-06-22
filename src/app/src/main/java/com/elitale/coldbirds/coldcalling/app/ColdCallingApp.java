@@ -3,8 +3,8 @@ package com.elitale.coldbirds.coldcalling.app;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
 import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayConfig;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxClient;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxConfig;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
 import com.elitale.coldbirds.coldcalling.services.*;
 import com.elitale.coldbirds.coldcalling.storage.DatabaseManager;
 import com.elitale.coldbirds.coldcalling.storage.sqlite.*;
@@ -29,8 +29,8 @@ import java.util.function.Consumer;
  * in {@link #init()}, and hand the primary {@link Stage} to {@link MainWindow}.
  * No business logic lives here.
  * <p>
- * All credentials (Telnyx API key, SIP credentials, SMS relay URL/key) are read
- * from the SQLite {@code settings} table via {@link SettingsService}. They default
+ * All credentials (Twilio Account SID + Auth Token, SIP credentials, SMS relay URL/key)
+ * are read from the SQLite {@code settings} table via {@link SettingsService}. They default
  * to blank on first run; the user configures them through the Settings screen.
  * The SIP stack and provider clients degrade gracefully when credentials are absent.
  */
@@ -81,8 +81,9 @@ public final class ColdCallingApp extends Application {
             settingsService = new SettingsService(settingsRepo);
 
             // 4. Providers — credentials from settings table, not environment variables.
-            final TelnyxClient telnyx = new TelnyxClient(
-                    TelnyxConfig.of(settingsService.getTelnyxApiKey()));
+            final TwilioClient twilio = new TwilioClient(
+                    TwilioConfig.of(settingsService.getTwilioAccountSid(),
+                                    settingsService.getTwilioAuthToken()));
 
             final SmsRelayClient relay = new SmsRelayClient(
                     new SmsRelayConfig(settingsService.getSmsRelayUrl(),
@@ -90,8 +91,8 @@ public final class ColdCallingApp extends Application {
 
             // 5. Services
             contactService     = new ContactService(contactRepo);
-            phoneNumberService = new PhoneNumberService(phoneNumberRepo, telnyx, settingsRepo);
-            smsService         = new SmsService(telnyx, relay, smsRepo, phoneNumberRepo);
+            phoneNumberService = new PhoneNumberService(phoneNumberRepo, twilio, settingsRepo);
+            smsService         = new SmsService(twilio, relay, smsRepo, phoneNumberRepo);
 
             // 6. Telephony — callService is the TelephonyListener.
             //    Circular dependency is broken with a two-step approach:
@@ -123,8 +124,9 @@ public final class ColdCallingApp extends Application {
                 LOG.error("Telephony start failed — app will run without SIP: {}", e.getMessage());
             }
 
-            // 9. Sync owned numbers from Telnyx (best-effort, non-fatal)
-            if (!settingsService.getTelnyxApiKey().isBlank()) {
+            // 9. Sync owned numbers from Twilio (best-effort, non-fatal)
+            if (!settingsService.getTwilioAccountSid().isBlank()
+                    && !settingsService.getTwilioAuthToken().isBlank()) {
                 phoneNumberService.fetchAndSync();
             }
 

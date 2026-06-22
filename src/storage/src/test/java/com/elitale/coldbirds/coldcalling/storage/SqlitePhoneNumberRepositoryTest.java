@@ -28,7 +28,7 @@ class SqlitePhoneNumberRepositoryTest {
                 new PhoneNumber("+14155551234"),
                 Optional.of("Sales Line"),
                 new AreaCode("415"),
-                "telnyx",
+                "twilio",
                 new NumberReputation.Clean()
         );
         Result<com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber> result = repo.save(n);
@@ -46,14 +46,14 @@ class SqlitePhoneNumberRepositoryTest {
                 new PhoneNumber("+14155551111"),
                 Optional.empty(),
                 new AreaCode("415"),
-                "telnyx",
+                "twilio",
                 new NumberReputation.Clean()
         );
         var n2 = new PhoneNumberRepository.NewOwnedNumber(
                 new PhoneNumber("+14155552222"),
                 Optional.empty(),
                 new AreaCode("415"),
-                "telnyx",
+                "twilio",
                 new NumberReputation.Warning("spam")
         );
         var saved1 = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber>) repo.save(n1)).value();
@@ -75,7 +75,7 @@ class SqlitePhoneNumberRepositoryTest {
                 new PhoneNumber("+14155553333"),
                 Optional.empty(),
                 new AreaCode("415"),
-                "telnyx",
+                "twilio",
                 new NumberReputation.Clean()
         );
         var saved = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber>) repo.save(n)).value();

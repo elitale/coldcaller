@@ -145,7 +145,7 @@ class CallServiceTest {
     private void stubOwnedNumber(PhoneNumber number, PhoneNumberId id) {
         var owned = new com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber(
                 id, number, Optional.empty(),
-                new AreaCode("202"), "telnyx", new NumberReputation.Clean(),
+                new AreaCode("202"), "twilio", new NumberReputation.Clean(),
                 0, true, Instant.now(), Instant.now()
         );
         when(phoneNumberRepo.findByNumber(number)).thenReturn(Optional.of(owned));

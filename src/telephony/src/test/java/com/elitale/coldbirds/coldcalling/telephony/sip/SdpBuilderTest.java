@@ -94,32 +94,32 @@ class SdpBuilderTest {
     @Test
     void testSipCredentialsNullUsernameThrows() {
         assertThatNullPointerException()
-                .isThrownBy(() -> new SipCredentials(null, "pass", "sip.telnyx.com", "sip.telnyx.com", 5060));
+                .isThrownBy(() -> new SipCredentials(null, "pass", "sip.twilio.com", "sip.twilio.com", 5060));
     }
 
     @Test
     void testSipCredentialsNullPasswordThrows() {
         assertThatNullPointerException()
-                .isThrownBy(() -> new SipCredentials("user", null, "sip.telnyx.com", "sip.telnyx.com", 5060));
+                .isThrownBy(() -> new SipCredentials("user", null, "sip.twilio.com", "sip.twilio.com", 5060));
     }
 
     @Test
     void testSipCredentialsNullDomainThrows() {
         assertThatNullPointerException()
-                .isThrownBy(() -> new SipCredentials("user", "pass", null, "sip.telnyx.com", 5060));
+                .isThrownBy(() -> new SipCredentials("user", "pass", null, "sip.twilio.com", 5060));
     }
 
     @Test
     void testSipCredentialsInvalidPortThrows() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> new SipCredentials("user", "pass", "sip.telnyx.com", "sip.telnyx.com", 0));
+                .isThrownBy(() -> new SipCredentials("user", "pass", "sip.twilio.com", "sip.twilio.com", 0));
     }
 
     @Test
     void testSipCredentialsValid() {
-        SipCredentials creds = new SipCredentials("alice", "secret", "sip.telnyx.com", "sip.telnyx.com", 5060);
+        SipCredentials creds = new SipCredentials("alice", "secret", "sip.twilio.com", "sip.twilio.com", 5060);
         assertThat(creds.username()).isEqualTo("alice");
-        assertThat(creds.domain()).isEqualTo("sip.telnyx.com");
+        assertThat(creds.domain()).isEqualTo("sip.twilio.com");
         assertThat(creds.proxyPort()).isEqualTo(5060);
     }
 }

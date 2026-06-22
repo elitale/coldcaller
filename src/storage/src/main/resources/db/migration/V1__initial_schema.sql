@@ -6,14 +6,14 @@
 -- statements mixed with DDL in the same migration script.
 
 -- ============================================================
--- Phone numbers owned by the user (purchased via Telnyx)
+-- Phone numbers owned by the user (purchased via twilio)
 -- ============================================================
 CREATE TABLE phone_numbers (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     number          TEXT    NOT NULL UNIQUE,          -- E.164 format e.g. +14155552671
     friendly_name   TEXT,
     area_code       TEXT    NOT NULL,                 -- 3-digit string
-    provider        TEXT    NOT NULL DEFAULT 'telnyx',
+    provider        TEXT    NOT NULL DEFAULT 'twilio',
     reputation      TEXT    NOT NULL DEFAULT 'clean', -- clean | warning | flagged
     daily_calls     INTEGER NOT NULL DEFAULT 0,
     active          INTEGER NOT NULL DEFAULT 1,       -- 0 = inactive, 1 = active
@@ -97,7 +97,7 @@ CREATE INDEX idx_calls_started_at   ON calls(started_at);
 CREATE INDEX idx_calls_phone_number ON calls(phone_number_id);
 
 -- ============================================================
--- SMS messages — inbound (via AWS relay) and outbound (Telnyx REST)
+-- SMS messages — inbound (via AWS relay) and outbound (twilio REST)
 -- ============================================================
 CREATE TABLE sms_messages (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

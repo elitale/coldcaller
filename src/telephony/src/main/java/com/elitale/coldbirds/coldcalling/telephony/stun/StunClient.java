@@ -18,7 +18,7 @@ public final class StunClient {
 
     private static final Logger LOG = LoggerFactory.getLogger(StunClient.class);
 
-    public static final String  DEFAULT_SERVER = "stun.telnyx.com";
+    public static final String  DEFAULT_SERVER = "global.stun.twilio.com";
     public static final int     DEFAULT_PORT   = 3478;
     private static final int    TIMEOUT_MS     = 3_000;
     private static final int    MAX_RETRIES    = 2;

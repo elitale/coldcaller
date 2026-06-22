@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
-/** A Telnyx phone number purchased and owned by the user. */
+/** A Twilio phone number purchased and owned by the user. */
 public record OwnedNumber(
         PhoneNumberId id,
         PhoneNumber number,

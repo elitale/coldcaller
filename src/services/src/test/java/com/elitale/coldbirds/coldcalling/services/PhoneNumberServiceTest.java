@@ -2,8 +2,8 @@ package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxClient;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.dto.TelnyxNumberData;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SettingsRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +21,7 @@ import static org.mockito.Mockito.*;
 class PhoneNumberServiceTest {
 
     @Mock PhoneNumberRepository repo;
-    @Mock TelnyxClient          telnyx;
+    @Mock TwilioClient          twilio;
     @Mock SettingsRepository    settings;
 
     PhoneNumberService service;
@@ -32,7 +32,7 @@ class PhoneNumberServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new PhoneNumberService(repo, telnyx, settings);
+        service = new PhoneNumberService(repo, twilio, settings);
     }
 
     @Test
@@ -61,8 +61,8 @@ class PhoneNumberServiceTest {
 
     @Test
     void fetchAndSync_savesNewNumbers() {
-        when(telnyx.listPhoneNumbers()).thenReturn(
-                Result.ok(List.of(new TelnyxNumberData("uuid-1", NUMBER.value(), "active")))
+        when(twilio.listPhoneNumbers()).thenReturn(
+                Result.ok(List.of(new TwilioNumberData("PN1", NUMBER.value(), "in-use")))
         );
         when(repo.findByNumber(NUMBER)).thenReturn(Optional.empty());
         when(repo.save(any())).thenReturn(Result.ok(stubOwned()));
@@ -75,8 +75,8 @@ class PhoneNumberServiceTest {
 
     @Test
     void fetchAndSync_skipsExistingNumbers() {
-        when(telnyx.listPhoneNumbers()).thenReturn(
-                Result.ok(List.of(new TelnyxNumberData("uuid-1", NUMBER.value(), "active")))
+        when(twilio.listPhoneNumbers()).thenReturn(
+                Result.ok(List.of(new TwilioNumberData("PN1", NUMBER.value(), "in-use")))
         );
         when(repo.findByNumber(NUMBER)).thenReturn(Optional.of(stubOwned()));
 
@@ -86,8 +86,8 @@ class PhoneNumberServiceTest {
     }
 
     @Test
-    void fetchAndSync_telnyxError_returnsErr() {
-        when(telnyx.listPhoneNumbers()).thenReturn(Result.err("api error"));
+    void fetchAndSync_twilioError_returnsErr() {
+        when(twilio.listPhoneNumbers()).thenReturn(Result.err("api error"));
         final Result<Integer> result = service.fetchAndSync();
         assertThat(result).isInstanceOf(Result.Err.class);
     }
@@ -95,7 +95,7 @@ class PhoneNumberServiceTest {
     private OwnedNumber stubOwned() {
         return new OwnedNumber(
                 ID, NUMBER, Optional.empty(),
-                new AreaCode("202"), "telnyx", new NumberReputation.Clean(),
+                new AreaCode("202"), "twilio", new NumberReputation.Clean(),
                 0, true, Instant.now(), Instant.now()
         );
     }

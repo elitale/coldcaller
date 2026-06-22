@@ -32,8 +32,9 @@ public final class SettingsController {
     // General
     @FXML private ComboBox<String> defaultNumberCombo;
 
-    // Telnyx
-    @FXML private PasswordField    telnyxApiKeyField;
+    // Twilio
+    @FXML private TextField        twilioAccountSidField;
+    @FXML private PasswordField    twilioAuthTokenField;
 
     // SIP
     @FXML private TextField        sipUsernameField;
@@ -117,9 +118,10 @@ public final class SettingsController {
     }
 
     @FXML
-    private void onSaveTelnyx() {
-        settingsService.setTelnyxApiKey(telnyxApiKeyField.getText().strip());
-        showStatus("Telnyx settings saved. Restart to apply.");
+    private void onSaveTwilio() {
+        settingsService.setTwilioAccountSid(twilioAccountSidField.getText().strip());
+        settingsService.setTwilioAuthToken(twilioAuthTokenField.getText().strip());
+        showStatus("Twilio settings saved. Restart to apply.");
     }
 
     @FXML
@@ -169,7 +171,7 @@ public final class SettingsController {
 
     private record AllSettings(
             List<String> ownedNumbers,  String defaultNumber,
-            String telnyxApiKey,
+            String twilioAccountSid,    String twilioAuthToken,
             String sipUsername,         String sipPassword,
             String sipDomain,           String sipProxy,    int sipProxyPort,
             String smsRelayUrl,         String smsRelayKey,
@@ -188,7 +190,7 @@ public final class SettingsController {
                 .map(Mixer.Info::getName).toList();
         return new AllSettings(
                 numbers, defNum,
-                settingsService.getTelnyxApiKey(),
+                settingsService.getTwilioAccountSid(), settingsService.getTwilioAuthToken(),
                 settingsService.getSipUsername(),    settingsService.getSipPassword(),
                 settingsService.getSipDomain(),      settingsService.getSipProxy(),
                 settingsService.getSipProxyPort(),
@@ -206,7 +208,8 @@ public final class SettingsController {
         defaultNumberCombo.setItems(FXCollections.observableArrayList(s.ownedNumbers()));
         if (!s.defaultNumber().isBlank()) defaultNumberCombo.setValue(s.defaultNumber());
 
-        telnyxApiKeyField.setText(s.telnyxApiKey());
+        twilioAccountSidField.setText(s.twilioAccountSid());
+        twilioAuthTokenField.setText(s.twilioAuthToken());
 
         sipUsernameField.setText(s.sipUsername());
         sipPasswordField.setText(s.sipPassword());

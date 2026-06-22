@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.services;
 import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.providers.sms.SmsRelayClient;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +17,7 @@ import static org.mockito.Mockito.*;
 
 class SmsServiceTest {
 
-    @Mock TelnyxClient          telnyx;
+    @Mock TwilioClient          twilio;
     @Mock SmsRelayClient        relay;
     @Mock SmsRepository         smsRepo;
     @Mock PhoneNumberRepository phoneNumberRepo;
@@ -31,18 +31,18 @@ class SmsServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new SmsService(telnyx, relay, smsRepo, phoneNumberRepo);
+        service = new SmsService(twilio, relay, smsRepo, phoneNumberRepo);
     }
 
     @Test
-    void send_delegatesToTelnyxClient() {
+    void send_delegatesToTwilioClient() {
         stubOwnedNumber(FROM, FROM_ID);
-        when(telnyx.sendSms(FROM, TO, "Hello")).thenReturn(Result.ok("msg-uuid-1"));
+        when(twilio.sendSms(FROM, TO, "Hello")).thenReturn(Result.ok("msg-uuid-1"));
         when(smsRepo.save(any())).thenReturn(Result.err("stub"));
 
         service.send(FROM, TO, "Hello");
 
-        verify(telnyx).sendSms(FROM, TO, "Hello");
+        verify(twilio).sendSms(FROM, TO, "Hello");
     }
 
     @Test
@@ -51,13 +51,13 @@ class SmsServiceTest {
 
         service.send(FROM, TO, "Hello");
 
-        verify(telnyx, never()).sendSms(any(), any(), any());
+        verify(twilio, never()).sendSms(any(), any(), any());
     }
 
     @Test
-    void send_telnyxFailure_doesNotPersist() {
+    void send_twilioFailure_doesNotPersist() {
         stubOwnedNumber(FROM, FROM_ID);
-        when(telnyx.sendSms(FROM, TO, "Hello")).thenReturn(Result.err("api error"));
+        when(twilio.sendSms(FROM, TO, "Hello")).thenReturn(Result.err("api error"));
 
         service.send(FROM, TO, "Hello");
 
@@ -79,7 +79,7 @@ class SmsServiceTest {
     private void stubOwnedNumber(PhoneNumber number, PhoneNumberId id) {
         var owned = new com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber(
                 id, number, Optional.empty(),
-                new AreaCode("202"), "telnyx", new NumberReputation.Clean(),
+                new AreaCode("202"), "twilio", new NumberReputation.Clean(),
                 0, true,
                 java.time.Instant.now(), java.time.Instant.now()
         );

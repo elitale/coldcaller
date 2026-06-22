@@ -14,7 +14,8 @@ public final class SettingsService {
 
     // ── Key constants ─────────────────────────────────────────────────────────
 
-    public static final String KEY_TELNYX_API_KEY            = "telnyx.api_key";
+    public static final String KEY_TWILIO_ACCOUNT_SID       = "twilio.account_sid";
+    public static final String KEY_TWILIO_AUTH_TOKEN         = "twilio.auth_token";
     public static final String KEY_SIP_USERNAME              = "sip.username";
     public static final String KEY_SIP_PASSWORD              = "sip.password";
     public static final String KEY_SIP_DOMAIN                = "sip.domain";
@@ -33,8 +34,8 @@ public final class SettingsService {
 
     // ── Defaults ──────────────────────────────────────────────────────────────
 
-    private static final String DEFAULT_SIP_DOMAIN      = "sip.telnyx.com";
-    private static final String DEFAULT_SIP_PROXY       = "sip.telnyx.com";
+    private static final String DEFAULT_SIP_DOMAIN      = "sip.twilio.com";
+    private static final String DEFAULT_SIP_PROXY       = "sip.twilio.com";
     private static final int    DEFAULT_SIP_PROXY_PORT  = 5060;
     private static final int    DEFAULT_JITTER_MS       = 40;
     private static final int    DEFAULT_NO_ANSWER_SEC   = 30;
@@ -60,14 +61,22 @@ public final class SettingsService {
         repo.set(Objects.requireNonNull(key), Objects.requireNonNull(value));
     }
 
-    // ── Telnyx ────────────────────────────────────────────────────────────────
+    // ── Twilio ────────────────────────────────────────────────────────────────
 
-    public String getTelnyxApiKey() {
-        return get(KEY_TELNYX_API_KEY, "");
+    public String getTwilioAccountSid() {
+        return get(KEY_TWILIO_ACCOUNT_SID, "");
     }
 
-    public void setTelnyxApiKey(String apiKey) {
-        repo.set(KEY_TELNYX_API_KEY, Objects.requireNonNull(apiKey));
+    public void setTwilioAccountSid(String accountSid) {
+        repo.set(KEY_TWILIO_ACCOUNT_SID, Objects.requireNonNull(accountSid));
+    }
+
+    public String getTwilioAuthToken() {
+        return get(KEY_TWILIO_AUTH_TOKEN, "");
+    }
+
+    public void setTwilioAuthToken(String authToken) {
+        repo.set(KEY_TWILIO_AUTH_TOKEN, Objects.requireNonNull(authToken));
     }
 
     // ── SIP ───────────────────────────────────────────────────────────────────

@@ -2,8 +2,8 @@ package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.TelnyxClient;
-import com.elitale.coldbirds.coldcalling.providers.telnyx.dto.TelnyxNumberData;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository.NewOwnedNumber;
 import com.elitale.coldbirds.coldcalling.storage.repository.SettingsRepository;
@@ -15,7 +15,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Manages owned phone numbers: reads from SQLite, syncs from Telnyx API,
+ * Manages owned phone numbers: reads from SQLite, syncs from Twilio API,
  * and resolves the default number from {@link SettingsRepository}.
  */
 public final class PhoneNumberService {
@@ -25,15 +25,15 @@ public final class PhoneNumberService {
     static final String DEFAULT_NUMBER_KEY = "default_number";
 
     private final PhoneNumberRepository repo;
-    private final TelnyxClient          telnyx;
+    private final TwilioClient          twilio;
     private final SettingsRepository    settings;
 
     public PhoneNumberService(
             PhoneNumberRepository repo,
-            TelnyxClient          telnyx,
+            TwilioClient          twilio,
             SettingsRepository    settings) {
         this.repo     = Objects.requireNonNull(repo,     "repo must not be null");
-        this.telnyx   = Objects.requireNonNull(telnyx,   "telnyx must not be null");
+        this.twilio   = Objects.requireNonNull(twilio,   "twilio must not be null");
         this.settings = Objects.requireNonNull(settings, "settings must not be null");
     }
 
@@ -67,21 +67,21 @@ public final class PhoneNumberService {
     }
 
     /**
-     * Fetch all phone numbers from the Telnyx API and upsert any new ones into
+     * Fetch all phone numbers from the Twilio API and upsert any new ones into
      * local storage. Numbers already present are skipped.
      *
      * @return number of newly inserted numbers, or an error
      */
     public Result<Integer> fetchAndSync() {
-        final Result<List<TelnyxNumberData>> apiResult = telnyx.listPhoneNumbers();
+        final Result<List<TwilioNumberData>> apiResult = twilio.listPhoneNumbers();
         return switch (apiResult) {
             case Result.Err<?> err -> {
-                LOG.error("Telnyx listPhoneNumbers failed: {}", err.message());
+                LOG.error("Twilio listPhoneNumbers failed: {}", err.message());
                 yield Result.err(err.message());
             }
-            case Result.Ok<List<TelnyxNumberData>> ok -> {
+            case Result.Ok<List<TwilioNumberData>> ok -> {
                 int inserted = 0;
-                for (final TelnyxNumberData data : ok.value()) {
+                for (final TwilioNumberData data : ok.value()) {
                     inserted += syncNumber(data);
                 }
                 LOG.info("fetchAndSync complete: {} new number(s) inserted", inserted);
@@ -92,12 +92,12 @@ public final class PhoneNumberService {
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    private int syncNumber(TelnyxNumberData data) {
+    private int syncNumber(TwilioNumberData data) {
         PhoneNumber number;
         try {
             number = new PhoneNumber(data.phoneNumber());
         } catch (IllegalArgumentException e) {
-            LOG.warn("Telnyx returned invalid phone number '{}': {}", data.phoneNumber(), e.getMessage());
+            LOG.warn("Twilio returned invalid phone number '{}': {}", data.phoneNumber(), e.getMessage());
             return 0;
         }
 
@@ -113,7 +113,7 @@ public final class PhoneNumberService {
                 number,
                 Optional.empty(),
                 new AreaCode(areaCodeStr),
-                "telnyx",
+                "twilio",
                 new NumberReputation.Clean()
         );
 

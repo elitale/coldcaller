@@ -11,6 +11,7 @@ mockito       = "5.12.0"
 assertj       = "3.26.0"
 jain-sip      = "1.3.0-91"
 jlibrtp       = "0.2"
+twilio        = "12.1.1"
 
 [libraries]
 javafx-controls  = { module = "org.openjfx:javafx-controls",                            version.ref = "javafx" }
@@ -28,6 +29,7 @@ assertj-core     = { module = "org.assertj:assertj-core",                       
 jain-sip-api     = { module = "javax.sip:jain-sip-api",                                 version = "1.2.1.4" }
 jain-sip-ri      = { module = "javax.sip:jain-sip-ri",                                  version.ref = "jain-sip" }
 jlibrtp          = { module = "org.jvoicexml:org.jlibrtp",                              version.ref = "jlibrtp" }
+twilio           = { module = "com.twilio.sdk:twilio",                                  version.ref = "twilio" }
 
 [plugins]
 javafx = { id = "org.openjfx.javafxplugin", version = "0.1.0" }
