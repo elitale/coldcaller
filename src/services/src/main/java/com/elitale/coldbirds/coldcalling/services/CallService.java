@@ -183,6 +183,60 @@ public final class CallService implements TelephonyService.TelephonyListener {
     }
 
     /**
+     * Retroactively set the disposition on an already-persisted call record.
+     * Read-modify-writes the {@link Call} and bumps its {@code updatedAt}.
+     * Safe to call from a background thread.
+     *
+     * @param id          the persisted call's id
+     * @param disposition the outcome to record
+     * @return the updated call, or an error if the call is not found
+     */
+    public Result<Call> updateDisposition(CallId id, CallDisposition disposition) {
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(disposition, "disposition must not be null");
+        final Optional<Call> existing = callRepo.findById(id);
+        if (existing.isEmpty()) {
+            return Result.err("Call not found: " + id.value());
+        }
+        return callRepo.update(withDisposition(existing.get(), disposition));
+    }
+
+    /**
+     * Retroactively set the notes on an already-persisted call record.
+     * A blank value clears the notes. Bumps {@code updatedAt}.
+     * Safe to call from a background thread.
+     *
+     * @param id    the persisted call's id
+     * @param notes free-text notes; blank clears them
+     * @return the updated call, or an error if the call is not found
+     */
+    public Result<Call> updateNotes(CallId id, String notes) {
+        Objects.requireNonNull(id, "id must not be null");
+        final Optional<Call> existing = callRepo.findById(id);
+        if (existing.isEmpty()) {
+            return Result.err("Call not found: " + id.value());
+        }
+        final Optional<String> trimmed = (notes == null || notes.isBlank())
+                ? Optional.empty()
+                : Optional.of(notes.strip());
+        return callRepo.update(withNotes(existing.get(), trimmed));
+    }
+
+    private static Call withDisposition(Call c, CallDisposition disposition) {
+        return new Call(
+                c.id(), c.direction(), c.phoneNumberId(), c.contactId(), c.remoteNumber(),
+                Optional.of(disposition), c.startedAt(), c.answeredAt(), c.endedAt(),
+                c.durationMs(), c.recordingPath(), c.notes(), c.createdAt(), Instant.now());
+    }
+
+    private static Call withNotes(Call c, Optional<String> notes) {
+        return new Call(
+                c.id(), c.direction(), c.phoneNumberId(), c.contactId(), c.remoteNumber(),
+                c.disposition(), c.startedAt(), c.answeredAt(), c.endedAt(),
+                c.durationMs(), c.recordingPath(), notes, c.createdAt(), Instant.now());
+    }
+
+    /**
      * Return the most recent call records, up to {@code limit} rows, newest first.
      * Does not block — safe to call from a background thread.
      *

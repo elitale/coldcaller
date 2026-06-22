@@ -133,11 +133,12 @@ public final class SqliteSmsRepository implements SmsRepository {
 
     private static SmsMessage map(ResultSet rs) throws SQLException {
         long contactIdRaw = rs.getLong("contact_id");
+        boolean contactIsNull = rs.wasNull();
         return new SmsMessage(
                 new SmsId(rs.getLong("id")),
                 CallDirection.valueOf(rs.getString("direction").toUpperCase()),
                 new PhoneNumberId(rs.getLong("phone_number_id")),
-                rs.wasNull() ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
+                contactIsNull ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
                 new PhoneNumber(rs.getString("remote_number")),
                 rs.getString("body"),
                 DomainMappers.smsStatusFromString(rs.getString("status")),

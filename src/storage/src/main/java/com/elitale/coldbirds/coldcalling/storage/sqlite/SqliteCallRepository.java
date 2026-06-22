@@ -184,25 +184,29 @@ public final class SqliteCallRepository implements CallRepository {
 
     private static Call map(ResultSet rs) throws SQLException {
         long contactIdRaw = rs.getLong("contact_id");
+        boolean contactIsNull = rs.wasNull();
         String dispositionStr = rs.getString("disposition");
         long answeredAtRaw = rs.getLong("answered_at");
+        boolean answeredIsNull = rs.wasNull();
         long endedAtRaw = rs.getLong("ended_at");
+        boolean endedIsNull = rs.wasNull();
         long durationMsRaw = rs.getLong("duration_ms");
+        boolean durationIsNull = rs.wasNull();
         return new Call(
                 new CallId(rs.getLong("id")),
                 CallDirection.valueOf(rs.getString("direction").toUpperCase()),
                 new PhoneNumberId(rs.getLong("phone_number_id")),
-                rs.wasNull() ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
+                contactIsNull ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
                 new PhoneNumber(rs.getString("remote_number")),
                 dispositionStr != null
                         ? Optional.of(DomainMappers.dispositionFromString(dispositionStr))
                         : Optional.empty(),
                 Instant.ofEpochMilli(rs.getLong("started_at")),
-                answeredAtRaw == 0 && rs.wasNull() ? Optional.empty()
+                answeredIsNull ? Optional.empty()
                         : Optional.of(Instant.ofEpochMilli(answeredAtRaw)),
-                endedAtRaw == 0 && rs.wasNull() ? Optional.empty()
+                endedIsNull ? Optional.empty()
                         : Optional.of(Instant.ofEpochMilli(endedAtRaw)),
-                durationMsRaw == 0 && rs.wasNull() ? Optional.empty()
+                durationIsNull ? Optional.empty()
                         : Optional.of(durationMsRaw),
                 Optional.ofNullable(rs.getString("recording_path")),
                 Optional.ofNullable(rs.getString("notes")),

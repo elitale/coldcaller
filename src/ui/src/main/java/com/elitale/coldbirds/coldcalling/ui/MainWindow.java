@@ -98,6 +98,9 @@ public final class MainWindow {
     private PowerDialerController  powerDialerController;
     private SettingsController     settingsController;
 
+    /** Non-blocking right-docked detail panel (built lazily on first open). */
+    private NumberDetailPanel     numberDetailPanel;
+
     // Loaded FXML roots
     private Parent dialerView;
     private Parent incomingCallView;
@@ -203,9 +206,23 @@ public final class MainWindow {
                 .toList();
     }
 
-    /** Open the number-detail dialog (contact/lead + call history + recordings). */
+    /** Open the number-detail panel (contact/lead + call history + recordings). */
     private void openNumberDetail(String number) {
-        NumberDetailDialog.show(stage, number, callService, contactService, CountryCatalog.ALL);
+        if (numberDetailPanel == null) {
+            numberDetailPanel = new NumberDetailPanel(
+                    callService, contactService, smsService, CountryCatalog.ALL,
+                    onDial, this::openMessageThread, this::closeNumberDetail, this::refreshRecentCalls);
+        }
+        numberDetailPanel.show(number);
+        root.setRight(numberDetailPanel.getRoot());
+    }
+
+    /** Hide and stop the number-detail panel. */
+    private void closeNumberDetail() {
+        if (numberDetailPanel != null) {
+            numberDetailPanel.stopPlayback();
+        }
+        root.setRight(null);
     }
 
     /** Switch to the Messages screen and open the conversation for {@code number}. */
@@ -359,6 +376,7 @@ public final class MainWindow {
     /** Swap the centre pane, stopping any live mic test left running in Settings. */
     private void showCenter(Parent view) {
         settingsController.dispose();
+        closeNumberDetail();
         root.setCenter(view);
     }
 

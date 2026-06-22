@@ -75,11 +75,20 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
         countryLabel.getStyleClass().add("caption");
         timeLabel.getStyleClass().add("caption");
 
+        // Allow the long text labels to shrink and ellipsize when the panel
+        // narrows the dialer, so the action buttons are never clipped.
+        primaryLabel.setMinWidth(0);
+        numberLabel.setMinWidth(0);
+        countryLabel.setMinWidth(0);
+        timeLabel.setMinWidth(0);
+
         flagView.setFitHeight(FLAG_HEIGHT);
         flagView.setPreserveRatio(true);
 
         callButton.getStyleClass().addAll("accent", "recent-action");
         messageButton.getStyleClass().addAll("flat", "recent-action");
+        callButton.setMinWidth(Region.USE_PREF_SIZE);
+        messageButton.setMinWidth(Region.USE_PREF_SIZE);
         callButton.setOnAction(e -> onCall.accept(currentNumber));
         messageButton.setOnAction(e -> onMessage.accept(currentNumber));
 
@@ -92,10 +101,17 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
         HBox.setHgrow(bottomSpacer, Priority.ALWAYS);
         final HBox actions = new HBox(8, callButton, messageButton);
         actions.setAlignment(Pos.CENTER_RIGHT);
+        actions.setMinWidth(Region.USE_PREF_SIZE);
         final HBox line2 = new HBox(6, flagView, countryLabel, timeLabel, bottomSpacer, actions);
         line2.setAlignment(Pos.CENTER_LEFT);
 
         root = new VBox(4, line1, line2);
+        // Clamp the cell to the list viewport width so content shrinks instead
+        // of overflowing (which previously clipped the Call/Message buttons).
+        setMaxWidth(Double.MAX_VALUE);
+        setPrefWidth(0);
+        root.setMinWidth(0);
+        root.setMaxWidth(Double.MAX_VALUE);
         setGraphic(root);
     }
 

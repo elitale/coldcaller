@@ -127,7 +127,69 @@ class CallServiceTest {
         verify(telephony).hangUp();
     }
 
+    // ── updateDisposition / updateNotes ─────────────────────────────────────────
+
+    @Test
+    void updateDisposition_persistsNewDispositionAndBumpsUpdatedAt() {
+        final Instant oldUpdatedAt = Instant.parse("2020-01-01T00:00:00Z");
+        final Call existing = aCall(Optional.of(new CallDisposition.NoAnswer()), Optional.empty(), oldUpdatedAt);
+        when(callRepo.findById(new CallId(7L))).thenReturn(Optional.of(existing));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        final Result<Call> result = callService.updateDisposition(new CallId(7L), new CallDisposition.Interested());
+
+        final ArgumentCaptor<Call> saved = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo).update(saved.capture());
+        assertThat(saved.getValue().disposition()).contains(new CallDisposition.Interested());
+        assertThat(saved.getValue().updatedAt()).isAfter(oldUpdatedAt);
+        assertThat(result.isOk()).isTrue();
+    }
+
+    @Test
+    void updateDisposition_callNotFound_returnsErr() {
+        when(callRepo.findById(new CallId(9L))).thenReturn(Optional.empty());
+
+        final Result<Call> result = callService.updateDisposition(new CallId(9L), new CallDisposition.Busy());
+
+        assertThat(result.isErr()).isTrue();
+        verify(callRepo, never()).update(any());
+    }
+
+    @Test
+    void updateNotes_persistsNotes() {
+        final Call existing = aCall(Optional.empty(), Optional.empty(), Instant.parse("2020-01-01T00:00:00Z"));
+        when(callRepo.findById(new CallId(3L))).thenReturn(Optional.of(existing));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        callService.updateNotes(new CallId(3L), "  Left a voicemail  ");
+
+        final ArgumentCaptor<Call> saved = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo).update(saved.capture());
+        assertThat(saved.getValue().notes()).contains("Left a voicemail");
+    }
+
+    @Test
+    void updateNotes_blank_clearsNotes() {
+        final Call existing = aCall(Optional.empty(), Optional.of("old"), Instant.parse("2020-01-01T00:00:00Z"));
+        when(callRepo.findById(new CallId(3L))).thenReturn(Optional.of(existing));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        callService.updateNotes(new CallId(3L), "   ");
+
+        final ArgumentCaptor<Call> saved = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo).update(saved.capture());
+        assertThat(saved.getValue().notes()).isEmpty();
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static Call aCall(Optional<CallDisposition> disposition, Optional<String> notes, Instant updatedAt) {
+        final Instant started = Instant.parse("2020-01-01T00:00:00Z");
+        return new Call(
+                new CallId(7L), CallDirection.OUTBOUND, LOCAL_ID, Optional.empty(), REMOTE,
+                disposition, started, Optional.of(started), Optional.of(started),
+                Optional.of(0L), Optional.empty(), notes, started, updatedAt);
+    }
 
     private void stubContactDnc(PhoneNumber number, boolean isDnc) {
         var contact = new com.elitale.coldbirds.coldcalling.domain.model.Contact(

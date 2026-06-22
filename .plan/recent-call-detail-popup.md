@@ -1,6 +1,6 @@
 # Plan — Recent Call Detail Panel (Number Context)
 
-> Status: **Proposed — awaiting approval.** Trigger: clicking a Recent Calls row should open a rich, action-dense view of the number/contact (call history, contact details, quick actions, shortcuts).
+> Status: **Implemented** (Phases A–D). Clicking a Recent Calls row opens a non-blocking right-docked detail panel. Container changed from modal to in-window side panel via `BorderPane.setRight()`.
 > Reviewed by: `buyer` agent (6-persona ICP panel). Verdict folded in below.
 
 ---
