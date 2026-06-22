@@ -33,10 +33,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5.3.0
         with:
           distribution: temurin
           java-version: '21'
@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
 
       # github.ref_name is the tag (e.g. v1.4.0) on tag pushes; the task strips the
       # leading "v" and any pre-release suffix to satisfy jpackage's numeric --app-version.
@@ -62,7 +62,7 @@ jobs:
         run: ./gradlew :app:jpackage -PappVersion=${{ github.ref_name }} --stacktrace
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ matrix.artifact }}
           path: src/app/build/jpackage/*

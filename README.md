@@ -1,6 +1,6 @@
 # coldCalling
 
-A cross-platform desktop application for outbound and inbound cold calling. Part of the [coldBirds](https://coldbirds.io) outreach suite alongside [sequence](../sequence) (cold email).
+A cross-platform desktop application for outbound and inbound cold calling. Part of the [coldBirds](https://coldbirds.com) outreach suite alongside [sequence](../sequence) (cold email).
 
 Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships as a native installer (DMG / MSI / DEB).
 
