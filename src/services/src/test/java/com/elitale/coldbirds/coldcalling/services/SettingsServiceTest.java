@@ -111,4 +111,41 @@ class SettingsServiceTest {
         service.setVoicemailDropEnabled(true);
         verify(repo).set(SettingsService.KEY_DIALER_VOICEMAIL_DROP, "true");
     }
+
+    @Test
+    void getCallRoutingProvider_defaultsTwilio_whenNotSet() {
+        when(repo.get(SettingsService.KEY_CALL_ROUTING_PROVIDER)).thenReturn(Optional.empty());
+        assertThat(service.getCallRoutingProvider()).isEqualTo("twilio");
+    }
+
+    @Test
+    void getCallRoutingMode_defaultsNone_whenNotSet() {
+        when(repo.get(SettingsService.KEY_CALL_ROUTING_MODE)).thenReturn(Optional.empty());
+        assertThat(service.getCallRoutingMode()).isEqualTo("none");
+    }
+
+    @Test
+    void getCallRoutingVoiceUrl_defaultsEmpty_whenNotSet() {
+        when(repo.get(SettingsService.KEY_CALL_ROUTING_VOICE_URL)).thenReturn(Optional.empty());
+        assertThat(service.getCallRoutingVoiceUrl()).isEmpty();
+    }
+
+    @Test
+    void getCallRoutingCallerIdFallback_defaultsEmpty_whenNotSet() {
+        when(repo.get(SettingsService.KEY_CALL_ROUTING_CALLER_ID)).thenReturn(Optional.empty());
+        assertThat(service.getCallRoutingCallerIdFallback()).isEmpty();
+    }
+
+    @Test
+    void setCallRoutingFields_delegate_toRepo() {
+        service.setCallRoutingProvider("twilio");
+        service.setCallRoutingMode("auto");
+        service.setCallRoutingVoiceUrl("https://example.twil.io/pstn-bridge");
+        service.setCallRoutingCallerIdFallback("+12025550100");
+
+        verify(repo).set(SettingsService.KEY_CALL_ROUTING_PROVIDER, "twilio");
+        verify(repo).set(SettingsService.KEY_CALL_ROUTING_MODE, "auto");
+        verify(repo).set(SettingsService.KEY_CALL_ROUTING_VOICE_URL, "https://example.twil.io/pstn-bridge");
+        verify(repo).set(SettingsService.KEY_CALL_ROUTING_CALLER_ID, "+12025550100");
+    }
 }

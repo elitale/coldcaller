@@ -33,7 +33,10 @@
             <Label fx:id="name3" text="Connection" styleClass="step-name"/>
             <Region fx:id="rule3" styleClass="step-rule" HBox.hgrow="ALWAYS"/>
             <Label fx:id="dot4" text="4" styleClass="step-dot"/>
-            <Label fx:id="name4" text="Numbers" styleClass="step-name"/>
+            <Label fx:id="name4" text="Routing" styleClass="step-name"/>
+            <Region fx:id="rule4" styleClass="step-rule" HBox.hgrow="ALWAYS"/>
+            <Label fx:id="dot5" text="5" styleClass="step-dot"/>
+            <Label fx:id="name5" text="Numbers" styleClass="step-name"/>
         </HBox>
 
         <Separator/>
@@ -110,8 +113,47 @@
                 </VBox>
             </VBox>
 
-            <!-- Step 4: Numbers -->
+            <!-- Step 4: Call routing (PSTN bridge) -->
             <VBox fx:id="step4Pane" spacing="12">
+                <Label text="Set up call routing" styleClass="title-2"/>
+                <Label text="This connects your SIP phone to real phone numbers. Optional — you can set it up later in Settings."
+                       styleClass="caption" wrapText="true"/>
+
+                <HBox spacing="12" alignment="CENTER_LEFT" styleClass="auto-config-row">
+                    <VBox spacing="2" HBox.hgrow="ALWAYS">
+                        <Label text="Set it up for me" styleClass="help-title"/>
+                        <Label text="Use the managed bridge so outbound calls connect right away."
+                               styleClass="help-line" wrapText="true"/>
+                    </VBox>
+                    <Button fx:id="autoRoutingButton" text="Auto-configure" styleClass="accent"
+                            onAction="#onAutoConfigureRouting"/>
+                </HBox>
+
+                <Label text="Or use your own bridge" styleClass="help-title"/>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Bridge URL" prefWidth="120"/>
+                    <TextField fx:id="routingUrlField" promptText="https://…/pstn-bridge" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Label text="Caller ID" prefWidth="120"/>
+                    <TextField fx:id="routingCallerIdField" promptText="+1…  (optional fallback)" HBox.hgrow="ALWAYS"/>
+                </HBox>
+                <HBox alignment="CENTER_RIGHT">
+                    <Button fx:id="applyRoutingButton" text="Apply" styleClass="flat"
+                            onAction="#onApplyManualRouting"/>
+                </HBox>
+
+                <VBox spacing="6" styleClass="help-card">
+                    <Label text="What is this?" styleClass="help-title"/>
+                    <Label styleClass="help-line" wrapText="true"
+                           text="When your SIP phone dials a number, your provider needs a webhook that bridges the call to the phone network. Auto-configure sets this up on your Twilio SIP domain for you."/>
+                    <Label styleClass="help-line" wrapText="true"
+                           text="Already deployed your own bridge? Paste its URL above instead."/>
+                </VBox>
+            </VBox>
+
+            <!-- Step 5: Numbers -->
+            <VBox fx:id="step5Pane" spacing="12">
                 <Label text="Choose your numbers" styleClass="title-2"/>
                 <Label text="Pick the numbers you'll call and text from. You can add more later." styleClass="caption"/>
                 <HBox spacing="12" alignment="CENTER_LEFT">

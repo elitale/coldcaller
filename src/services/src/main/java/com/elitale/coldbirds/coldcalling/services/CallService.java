@@ -213,6 +213,24 @@ public final class CallService implements TelephonyService.TelephonyListener {
     }
 
     /**
+     * Live microphone level for the in-call audio meter.
+     *
+     * @return normalized RMS (0..1), or 0 when no call is active
+     */
+    public double micLevel() {
+        return telephony.micLevel();
+    }
+
+    /**
+     * Live remote-party level for the in-call audio meter.
+     *
+     * @return normalized RMS (0..1), or 0 when no call is active
+     */
+    public double remoteLevel() {
+        return telephony.remoteLevel();
+    }
+
+    /**
      * Set the disposition on the active call (called by the UI before hang-up
      * or after the call ends).
      *

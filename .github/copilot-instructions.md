@@ -53,6 +53,15 @@ infra/       → AWS CDK (TypeScript) — Lambda + API Gateway + DynamoDB for SM
 - NAT traversal: minimal STUN client to discover public IP for SDP generation.
 - Power dialer: ordered contact list → auto-dial next → advance on BYE/timeout. Pause is stateful.
 
+## Call Routing (PSTN bridge)
+
+- Outbound calls from a SIP domain need the domain's **VoiceUrl** set to a bridge webhook, or Twilio answers the INVITE with SIP 404.
+- Users configure this **in-app** (Settings → Call Routing, and the onboarding "Routing" step) — this replaces running `.scripts/setup-sip-pstn-handler.js` by hand. The script stays as an operator/CLI fallback.
+- `CallRoutingService` is the provider-agnostic seam: `AUTO` **deploys a per-account PSTN bridge into the user's own Twilio account** (via `TwilioVoiceBridgeProvisioner`) and points the SIP domain at that account-specific function URL (`https://coldcalling-sip-{suffix}-prod.twil.io/pstn-bridge`); `MANUAL` applies a user-supplied URL. Both push to Twilio (store-only would still 404). Non-Twilio providers are store-only until a provisioner ships.
+- **Why per-account:** the bridge runs with `protected` visibility, so Twilio validates the webhook signature against the *owning* account's auth token. A single shared function can't serve other tenants (signature mismatch → 403). Each bring-your-own-Twilio user gets their own deployed function.
+- `TwilioVoiceBridgeProvisioner` ports the Serverless deploy (ensure service → function → upload version → build → poll → ensure `production` env → deploy) to Java. It uses a small injectable `Transport` over `java.net.http.HttpClient` (the Twilio SDK can't do the multipart code upload), bundling `providers/.../resources/twilio/pstn-bridge.js`. `autoConfigure` runs off the FX thread (controllers use `runAsync`), so the blocking build-poll is fine.
+- `TwilioClient.setSipDomainVoiceUrl` / `readSipDomainVoiceUrl` wrap the Twilio Domain updater/reader. Keep the bridge non-public (Twilio signs webhooks) — do not weaken TLS+SRTP.
+
 ## SMS Relay Architecture
 
 - twilio POSTs inbound SMS to AWS API Gateway HTTP endpoint.

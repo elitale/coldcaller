@@ -2,6 +2,7 @@ package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.onboarding.ProviderOption;
 import com.elitale.coldbirds.coldcalling.domain.onboarding.ProviderOptions;
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.elitale.coldbirds.coldcalling.services.OnboardingDraft;
@@ -36,10 +37,10 @@ public final class OnboardingController {
 
     private static final Logger LOG = LoggerFactory.getLogger(OnboardingController.class);
 
-    @FXML private Label dot1, dot2, dot3, dot4;
-    @FXML private Label name1, name2, name3, name4;
+    @FXML private Label dot1, dot2, dot3, dot4, dot5;
+    @FXML private Label name1, name2, name3, name4, name5;
     @FXML private Label statusLabel, countLabel;
-    @FXML private VBox step1Pane, step2Pane, step3Pane, step4Pane;
+    @FXML private VBox step1Pane, step2Pane, step3Pane, step4Pane, step5Pane;
     @FXML private FlowPane providerContainer;
     @FXML private VBox numbersContainer;
 
@@ -50,6 +51,10 @@ public final class OnboardingController {
     @FXML private TextField     sipDomainField;
     @FXML private TextField     sipProxyField;
     @FXML private Spinner<Integer> sipProxyPortSpinner;
+    @FXML private TextField     routingUrlField;
+    @FXML private TextField     routingCallerIdField;
+    @FXML private Button        autoRoutingButton;
+    @FXML private Button        applyRoutingButton;
     @FXML private CheckBox      selectAllCheck;
 
     @FXML private ProgressIndicator progressIndicator;
@@ -115,6 +120,7 @@ public final class OnboardingController {
             case PROVIDER -> { model.next(); render(); }
             case TWILIO   -> testTwilio();
             case SIP      -> testSip();
+            case ROUTING  -> { model.next(); render(); }
             case NUMBERS  -> finish();
         }
     }
@@ -203,6 +209,45 @@ public final class OnboardingController {
         sipProxyPortSpinner.getValueFactory().setValue(creds.proxyPort());
     }
 
+    @FXML
+    private void onAutoConfigureRouting() {
+        if (busy) {
+            return;
+        }
+        setBusy(true, "Setting up call routing…");
+        runAsync(() -> onboardingService.autoConfigureRouting(ProviderOptions.TWILIO_ID), result -> {
+            if (result instanceof Result.Ok<CallRoutingConfig> ok) {
+                model.setRouting(ok.value());
+                routingUrlField.setText(ok.value().voiceUrl());
+                setStatus("Call routing is ready", false);
+            } else {
+                setStatus(message(result, "Couldn't set up routing automatically."), true);
+            }
+        });
+    }
+
+    @FXML
+    private void onApplyManualRouting() {
+        if (busy) {
+            return;
+        }
+        final String url = routingUrlField.getText() == null ? "" : routingUrlField.getText().trim();
+        final String callerId = routingCallerIdField.getText() == null ? "" : routingCallerIdField.getText().trim();
+        if (url.isBlank()) {
+            setStatus("Paste your bridge URL, or use Auto-configure.", true);
+            return;
+        }
+        setBusy(true, "Applying routing…");
+        runAsync(() -> onboardingService.applyManualRouting(ProviderOptions.TWILIO_ID, url, callerId), result -> {
+            if (result instanceof Result.Ok<CallRoutingConfig> ok) {
+                model.setRouting(ok.value());
+                setStatus("Call routing saved", false);
+            } else {
+                setStatus(message(result, "That bridge URL didn't work."), true);
+            }
+        });
+    }
+
     private void finish() {
         if (!model.canFinish()) {
             return;
@@ -223,18 +268,23 @@ public final class OnboardingController {
         show(step1Pane, model.current() == Step.PROVIDER);
         show(step2Pane, model.current() == Step.TWILIO);
         show(step3Pane, model.current() == Step.SIP);
-        show(step4Pane, model.current() == Step.NUMBERS);
+        show(step4Pane, model.current() == Step.ROUTING);
+        show(step5Pane, model.current() == Step.NUMBERS);
 
         styleStep(dot1, name1, 0);
         styleStep(dot2, name2, 1);
         styleStep(dot3, name3, 2);
         styleStep(dot4, name4, 3);
+        styleStep(dot5, name5, 4);
 
         backButton.setVisible(!model.isFirst());
         backButton.setManaged(!model.isFirst());
         primaryButton.setText(model.isLast() ? "Finish" : "Continue ›");
         setStatus("", false);
 
+        if (model.current() == Step.ROUTING) {
+            prepareRoutingStep();
+        }
         if (model.current() == Step.NUMBERS) {
             renderNumberRows();
             refreshNumbersFooter();
@@ -242,11 +292,21 @@ public final class OnboardingController {
         updatePrimaryEnabled();
     }
 
+    /** Gate the auto-config button by provider capability and pre-fill any saved bridge URL. */
+    private void prepareRoutingStep() {
+        autoRoutingButton.setDisable(busy || !onboardingService.supportsAutoRouting(ProviderOptions.TWILIO_ID));
+        if (routingUrlField.getText().isBlank() && model.routing().isConfigured()) {
+            routingUrlField.setText(model.routing().voiceUrl());
+            routingCallerIdField.setText(model.routing().callerIdFallback());
+        }
+    }
+
     private void updatePrimaryEnabled() {
         final boolean enabled = switch (model.current()) {
             case PROVIDER -> true;
             case TWILIO   -> model.canTestTwilio() || bothFilled(sidField, tokenField);
             case SIP      -> !sipUsernameField.getText().isBlank() && !sipPasswordField.getText().isBlank();
+            case ROUTING  -> true;
             case NUMBERS  -> model.canFinish();
         };
         primaryButton.setDisable(busy || !enabled);
@@ -376,6 +436,10 @@ public final class OnboardingController {
         sipUsernameField.setDisable(busy);
         sipPasswordField.setDisable(busy);
         autoSipButton.setDisable(busy);
+        routingUrlField.setDisable(busy);
+        routingCallerIdField.setDisable(busy);
+        autoRoutingButton.setDisable(busy);
+        applyRoutingButton.setDisable(busy);
         backButton.setDisable(busy);
         updatePrimaryEnabled();
     }

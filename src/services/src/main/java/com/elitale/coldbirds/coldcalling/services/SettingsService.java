@@ -32,6 +32,10 @@ public final class SettingsService {
     public static final String KEY_DIALER_VOICEMAIL_DROP     = "dialer.voicemail_drop_enabled";
     public static final String KEY_DIALER_DEFAULT_COUNTRY    = "dialer.default_country";
     public static final String KEY_ONBOARDING_COMPLETED      = "onboarding.completed";
+    public static final String KEY_CALL_ROUTING_PROVIDER     = "callrouting.provider";
+    public static final String KEY_CALL_ROUTING_MODE         = "callrouting.mode";
+    public static final String KEY_CALL_ROUTING_VOICE_URL    = "callrouting.voice_url";
+    public static final String KEY_CALL_ROUTING_CALLER_ID    = "callrouting.caller_id_fallback";
 
     // ── Defaults ──────────────────────────────────────────────────────────────
 
@@ -42,6 +46,8 @@ public final class SettingsService {
     private static final int    DEFAULT_NO_ANSWER_SEC   = 30;
     private static final int    DEFAULT_ADVANCE_SEC     = 1;
     private static final String DEFAULT_COUNTRY_ISO     = "US";
+    private static final String DEFAULT_ROUTING_PROVIDER = "twilio";
+    private static final String DEFAULT_ROUTING_MODE     = "none";
     /** First-run backfill window: poll inbound SMS from this far back when no watermark exists. */
     private static final Duration SMS_BACKFILL_WINDOW   = Duration.ofDays(7);
 
@@ -168,6 +174,22 @@ public final class SettingsService {
     public void setOnboardingComplete(boolean complete) {
         repo.set(KEY_ONBOARDING_COMPLETED, String.valueOf(complete));
     }
+
+    // ── Call routing (PSTN bridge) ────────────────────────────────────────
+    // Primitive accessors only; CallRoutingService assembles the CallRoutingConfig
+    // aggregate (mirrors how OnboardingService assembles SipCredentials).
+
+    public String getCallRoutingProvider() { return get(KEY_CALL_ROUTING_PROVIDER, DEFAULT_ROUTING_PROVIDER); }
+    public void   setCallRoutingProvider(String v) { repo.set(KEY_CALL_ROUTING_PROVIDER, Objects.requireNonNull(v)); }
+
+    public String getCallRoutingMode() { return get(KEY_CALL_ROUTING_MODE, DEFAULT_ROUTING_MODE); }
+    public void   setCallRoutingMode(String v) { repo.set(KEY_CALL_ROUTING_MODE, Objects.requireNonNull(v)); }
+
+    public String getCallRoutingVoiceUrl() { return get(KEY_CALL_ROUTING_VOICE_URL, ""); }
+    public void   setCallRoutingVoiceUrl(String v) { repo.set(KEY_CALL_ROUTING_VOICE_URL, Objects.requireNonNull(v)); }
+
+    public String getCallRoutingCallerIdFallback() { return get(KEY_CALL_ROUTING_CALLER_ID, ""); }
+    public void   setCallRoutingCallerIdFallback(String v) { repo.set(KEY_CALL_ROUTING_CALLER_ID, Objects.requireNonNull(v)); }
 
     // ── Private helpers ───────────────────────────────────────────────────────
 

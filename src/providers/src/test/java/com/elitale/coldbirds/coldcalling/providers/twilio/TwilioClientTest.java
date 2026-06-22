@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -344,6 +345,128 @@ class TwilioClientTest {
 
         assertThat(result.isErr()).isTrue();
         assertThat(((Result.Err<?>) result).message()).contains("not configured");
+    }
+
+    // ── SIP voice routing (PSTN bridge) ──────────────────────────────────────
+
+    private static final String DOMAINS_ONE = """
+            {"domains":[
+              {"sid":"SD9","domain_name":"coldcalling-1234.sip.twilio.com","sip_registration":true,
+               "voice_url":"https://old.example.com/in","voice_method":"POST"}
+            ],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":0,
+            "uri":"/2010-04-01/Accounts/AC.../SIP/Domains.json"}
+            """;
+
+    private static final String DOMAINS_NO_VOICE = """
+            {"domains":[
+              {"sid":"SD9","domain_name":"coldcalling-1234.sip.twilio.com","sip_registration":true}
+            ],"next_page_uri":null,"page":0,"page_size":50,"start":0,"end":0,
+            "uri":"/2010-04-01/Accounts/AC.../SIP/Domains.json"}
+            """;
+
+    private static final String DOMAIN_UPDATED = """
+            {"sid":"SD9","domain_name":"coldcalling-1234.sip.twilio.com",
+             "voice_url":"https://example.twil.io/pstn-bridge","voice_method":"POST"}
+            """;
+
+    /** Dispatch the reader (GET list) vs updater (POST to the SID resource) by URL shape. */
+    private void stubDomainReadThenUpdate(final String listJson) {
+        when(restClient.request(any(Request.class))).thenAnswer(invocation -> {
+            final Request req = invocation.getArgument(0);
+            return req.constructURL().toString().contains("/Domains/")
+                    ? new Response(DOMAIN_UPDATED, 200)   // updater — path has the domain SID
+                    : new Response(listJson, 200);        // reader — list endpoint
+        });
+    }
+
+    @Test
+    void testSetSipDomainVoiceUrl_success_returnsOk() {
+        stubDomainReadThenUpdate(DOMAINS_ONE);
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<Void> result = client.setSipDomainVoiceUrl(
+                "coldcalling-1234.sip.twilio.com", "https://example.twil.io/pstn-bridge");
+
+        assertThat(result.isOk()).isTrue();
+    }
+
+    @Test
+    void testSetSipDomainVoiceUrl_postsVoiceUrlToDomainResource() {
+        stubDomainReadThenUpdate(DOMAINS_ONE);
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        org.mockito.ArgumentCaptor<Request> captor = org.mockito.ArgumentCaptor.forClass(Request.class);
+        client.setSipDomainVoiceUrl("coldcalling-1234.sip.twilio.com", "https://example.twil.io/pstn-bridge");
+
+        org.mockito.Mockito.verify(restClient, org.mockito.Mockito.atLeastOnce()).request(captor.capture());
+        Request update = captor.getAllValues().stream()
+                .filter(r -> r.constructURL().toString().contains("/Domains/"))
+                .findFirst().orElseThrow();
+        assertThat(update.getMethod().toString()).isEqualTo("POST");
+        assertThat(update.getPostParams().toString()).contains("https://example.twil.io/pstn-bridge");
+    }
+
+    @Test
+    void testSetSipDomainVoiceUrl_domainNotFound_returnsErr() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(DOMAINS_EMPTY, 200));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<Void> result = client.setSipDomainVoiceUrl(
+                "missing.sip.twilio.com", "https://example.twil.io/pstn-bridge");
+
+        assertThat(result.isErr()).isTrue();
+        assertThat(((Result.Err<Void>) result).message()).contains("not found");
+    }
+
+    @Test
+    void testSetSipDomainVoiceUrl_notConfigured_returnsErr() {
+        TwilioConfig blank = new TwilioConfig("", "", TwilioConfig.DEFAULT_BASE_URL);
+        TwilioClient client = new TwilioClient(blank, restClient);
+
+        Result<Void> result = client.setSipDomainVoiceUrl(
+                "x.sip.twilio.com", "https://example.twil.io/pstn-bridge");
+
+        assertThat(result.isErr()).isTrue();
+        assertThat(((Result.Err<Void>) result).message()).contains("not configured");
+    }
+
+    @Test
+    void testReadSipDomainVoiceUrl_returnsUrl_whenSet() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(DOMAINS_ONE, 200));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<Optional<String>> result =
+                client.readSipDomainVoiceUrl("coldcalling-1234.sip.twilio.com");
+
+        assertThat(result.isOk()).isTrue();
+        assertThat(((Result.Ok<Optional<String>>) result).value()).contains("https://old.example.com/in");
+    }
+
+    @Test
+    void testReadSipDomainVoiceUrl_returnsEmpty_whenNoVoiceUrl() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(DOMAINS_NO_VOICE, 200));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<Optional<String>> result =
+                client.readSipDomainVoiceUrl("coldcalling-1234.sip.twilio.com");
+
+        assertThat(result.isOk()).isTrue();
+        assertThat(((Result.Ok<Optional<String>>) result).value()).isEmpty();
+    }
+
+    @Test
+    void testReadSipDomainVoiceUrl_domainNotFound_returnsErr() {
+        when(restClient.request(any(Request.class)))
+                .thenReturn(new Response(DOMAINS_EMPTY, 200));
+        TwilioClient client = new TwilioClient(config, restClient);
+
+        Result<Optional<String>> result =
+                client.readSipDomainVoiceUrl("missing.sip.twilio.com");
+
+        assertThat(result.isErr()).isTrue();
     }
 
     // ── TwilioConfig ─────────────────────────────────────────────────────────

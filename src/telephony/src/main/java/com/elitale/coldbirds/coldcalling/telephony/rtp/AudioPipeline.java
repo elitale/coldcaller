@@ -1,5 +1,6 @@
 package com.elitale.coldbirds.coldcalling.telephony.rtp;
 
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioLevels;
 import com.elitale.coldbirds.coldcalling.telephony.codec.G711Codec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +39,9 @@ public final class AudioPipeline implements AutoCloseable {
     private static final int BUFFER_FRAMES  = G711Codec.SAMPLES_PER_PACKET; // 160 frames = 20 ms
     private static final int BUFFER_BYTES   = BUFFER_FRAMES * FORMAT.getFrameSize(); // 320 bytes
 
+    /** Normalized RMS below which a mic frame is treated as silence (≈0.6% amplitude). */
+    private static final double SILENCE_LEVEL = 200.0 / 32768.0;
+
     private final RtpTransport  rtpSession;
     private final Mixer.Info    inputDevice;  // null = system default
     private final Mixer.Info    outputDevice; // null = system default
@@ -48,6 +52,10 @@ public final class AudioPipeline implements AutoCloseable {
 
     /** Optional call recorder; when set, both audio directions are tapped. */
     private volatile CallRecorder recorder;
+
+    /** Live normalized RMS levels (0..1), polled by the UI meter; reset to 0 on close. */
+    private volatile double micLevel;
+    private volatile double remoteLevel;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
@@ -75,6 +83,24 @@ public final class AudioPipeline implements AutoCloseable {
      */
     public void setRecorder(final CallRecorder recorder) {
         this.recorder = recorder;
+    }
+
+    /**
+     * Live microphone level for the UI meter.
+     *
+     * @return normalized RMS (0..1) of the most recent captured frame, or 0 when idle
+     */
+    public double micLevel() {
+        return micLevel;
+    }
+
+    /**
+     * Live remote-party level for the UI meter.
+     *
+     * @return normalized RMS (0..1) of the most recent received frame, or 0 when idle
+     */
+    public double remoteLevel() {
+        return remoteLevel;
     }
 
     // ------------------------------------------------------------------
@@ -120,6 +146,9 @@ public final class AudioPipeline implements AutoCloseable {
             speakerLine.close();
         }
 
+        micLevel = 0.0;
+        remoteLevel = 0.0;
+
         LOG.debug("Audio pipeline closed");
     }
 
@@ -131,6 +160,8 @@ public final class AudioPipeline implements AutoCloseable {
      */
     public void receiveAudio(final short[] pcm) {
         if (!running.get() || speakerLine == null) return;
+
+        remoteLevel = AudioLevels.rms(pcm);
 
         final CallRecorder rec = recorder;
         if (rec != null) {
@@ -154,6 +185,8 @@ public final class AudioPipeline implements AutoCloseable {
             if (read < BUFFER_BYTES) continue;
 
             final short[] pcm = bytesToShorts(buffer);
+            final double level = AudioLevels.rms(pcm);
+            micLevel = level;
 
             // Record every captured frame so the recording timeline is continuous,
             // independent of silence suppression on the outbound RTP stream.
@@ -162,7 +195,7 @@ public final class AudioPipeline implements AutoCloseable {
                 rec.onMicFrame(pcm);
             }
 
-            if (!isSilent(pcm)) {
+            if (level >= SILENCE_LEVEL) {
                 rtpSession.sendAudio(pcm);
             }
         }
@@ -241,18 +274,6 @@ public final class AudioPipeline implements AutoCloseable {
     @FunctionalInterface
     interface LineFactory<T> {
         T open() throws LineUnavailableException;
-    }
-
-    // ------------------------------------------------------------------
-    // Private — silence detection
-    // ------------------------------------------------------------------
-
-    /** Suppress RTP transmission if signal RMS is below threshold. */
-    private static boolean isSilent(final short[] pcm) {
-        long sum = 0;
-        for (final short s : pcm) { sum += (long) s * s; }
-        final double rms = Math.sqrt((double) sum / pcm.length);
-        return rms < 200.0; // ~200/32767 ≈ 0.6% amplitude threshold
     }
 
     // ------------------------------------------------------------------

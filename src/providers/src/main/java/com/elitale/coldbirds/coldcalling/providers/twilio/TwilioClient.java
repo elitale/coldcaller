@@ -6,6 +6,7 @@ import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.SipProvisioning;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.twilio.exception.TwilioException;
+import com.twilio.http.HttpMethod;
 import com.twilio.http.TwilioRestClient;
 import com.twilio.rest.api.v2010.account.IncomingPhoneNumber;
 import com.twilio.rest.api.v2010.account.Message;
@@ -18,12 +19,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
+import java.net.URI;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Client for the Twilio REST API, backed by the official Twilio Java SDK.
@@ -282,6 +285,85 @@ public final class TwilioClient {
             sb.append(all.charAt(RANDOM.nextInt(all.length())));
         }
         return sb.toString();
+    }
+
+    // ── SIP voice routing (PSTN bridge) ───────────────────────────────────────
+
+    /**
+     * Point a SIP domain's Voice webhook (the "A call comes in" URL) at {@code voiceUrl}
+     * using HTTP POST. This is what lets a registered SIP client place outbound calls that
+     * bridge to the PSTN: Twilio invokes this URL per outbound call to fetch the TwiML that
+     * dials the destination number.
+     *
+     * @param domainName the SIP domain (e.g. {@code coldcalling-1234.sip.twilio.com})
+     * @param voiceUrl   the https webhook URL Twilio invokes per outbound call
+     * @return {@link Result.Ok} on success, {@link Result.Err} if the domain is unknown or the API fails.
+     */
+    public Result<Void> setSipDomainVoiceUrl(String domainName, String voiceUrl) {
+        Objects.requireNonNull(domainName, "domainName must not be null");
+        Objects.requireNonNull(voiceUrl,   "voiceUrl must not be null");
+        if (!config.isConfigured()) {
+            return Result.err("Twilio not configured: set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
+        }
+        try {
+            final String domainSid = findDomainSid(domainName);
+            if (domainSid == null) {
+                return Result.err("SIP domain not found: " + domainName);
+            }
+            Domain.updater(domainSid)
+                    .setVoiceUrl(URI.create(voiceUrl))
+                    .setVoiceMethod(HttpMethod.POST)
+                    .update(restClient);
+            log.info("Set SIP domain {} voice URL", domainName);
+            return Result.ok(null);
+
+        } catch (TwilioException e) {
+            log.warn("Twilio setSipDomainVoiceUrl failed: {}", e.getMessage());
+            return Result.err("Twilio setSipDomainVoiceUrl failed: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Twilio setSipDomainVoiceUrl error", e);
+            return Result.err("Twilio setSipDomainVoiceUrl error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Read the Voice webhook URL currently configured on a SIP domain.
+     *
+     * @return {@link Result.Ok} holding the URL when set (empty when the domain has none),
+     *         or {@link Result.Err} if the domain is unknown or the API fails.
+     */
+    public Result<Optional<String>> readSipDomainVoiceUrl(String domainName) {
+        Objects.requireNonNull(domainName, "domainName must not be null");
+        if (!config.isConfigured()) {
+            return Result.err("Twilio not configured: set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN");
+        }
+        try {
+            for (final Domain domain : Domain.reader().read(restClient)) {
+                if (domainName.equals(domain.getDomainName())) {
+                    final URI url = domain.getVoiceUrl();
+                    return Result.ok(url == null || url.toString().isBlank()
+                            ? Optional.empty()
+                            : Optional.of(url.toString()));
+                }
+            }
+            return Result.err("SIP domain not found: " + domainName);
+
+        } catch (TwilioException e) {
+            log.warn("Twilio readSipDomainVoiceUrl failed: {}", e.getMessage());
+            return Result.err("Twilio readSipDomainVoiceUrl failed: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            log.error("Twilio readSipDomainVoiceUrl error", e);
+            return Result.err("Twilio readSipDomainVoiceUrl error: " + e.getMessage(), e);
+        }
+    }
+
+    private String findDomainSid(final String domainName) {
+        for (final Domain domain : Domain.reader().read(restClient)) {
+            if (domainName.equals(domain.getDomainName())) {
+                return domain.getSid();
+            }
+        }
+        return null;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

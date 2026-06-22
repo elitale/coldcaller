@@ -2,6 +2,7 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.control.*?>
 <?import javafx.geometry.*?>
+<?import com.elitale.coldbirds.coldcalling.ui.support.AudioWaveform?>
 
 <!--
   In-window calling screen — header (•••), pulsing avatar + identity (name,
@@ -27,6 +28,8 @@
     <StackPane maxWidth="150" maxHeight="150" prefWidth="150" prefHeight="150">
         <Region fx:id="haloCircle" styleClass="call-halo" maxWidth="120" maxHeight="120"
                 prefWidth="120" prefHeight="120" mouseTransparent="true" visible="false"/>
+        <Region fx:id="rippleCircle" styleClass="call-ripple" maxWidth="120" maxHeight="120"
+                prefWidth="120" prefHeight="120" mouseTransparent="true" visible="false"/>
         <StackPane fx:id="avatarRing" styleClass="call-ring" maxWidth="104" maxHeight="104"
                    prefWidth="104" prefHeight="104">
             <Label fx:id="avatarLabel" text="?" styleClass="call-avatar"/>
@@ -45,6 +48,13 @@
 
     <Label fx:id="statusLabel" text="" styleClass="call-status"
            alignment="CENTER" maxWidth="Infinity"/>
+
+    <!-- Live mic meter — visible only while connected -->
+    <HBox fx:id="micMeterRow" spacing="9" alignment="CENTER" maxWidth="Infinity"
+          visible="false" managed="false">
+        <Label fx:id="micStateIcon"/>
+        <AudioWaveform fx:id="micMeter" width="240" height="38"/>
+    </HBox>
 
     <!-- Primary controls -->
     <HBox spacing="18" alignment="CENTER">

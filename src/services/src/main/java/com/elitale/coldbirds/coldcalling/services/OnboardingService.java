@@ -1,5 +1,6 @@
 package com.elitale.coldbirds.coldcalling.services;
 
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
@@ -34,6 +35,7 @@ public final class OnboardingService {
     private final PhoneNumberService phoneNumbers;
     private final SipTester sipTester;
     private final Function<TwilioConfig, TwilioClient> twilioFactory;
+    private final CallRoutingService callRouting;
 
     /** Production constructor — builds real Twilio clients on demand. */
     public OnboardingService(
@@ -43,16 +45,28 @@ public final class OnboardingService {
         this(settings, phoneNumbers, sipTester, TwilioClient::new);
     }
 
-    /** Test constructor — inject the Twilio client factory. */
+    /** Convenience constructor — inject the Twilio factory; routing shares it. */
     public OnboardingService(
             final SettingsService settings,
             final PhoneNumberService phoneNumbers,
             final SipTester sipTester,
             final Function<TwilioConfig, TwilioClient> twilioFactory) {
+        this(settings, phoneNumbers, sipTester, twilioFactory,
+                new CallRoutingService(settings, twilioFactory));
+    }
+
+    /** Full constructor — inject every collaborator (used by tests). */
+    public OnboardingService(
+            final SettingsService settings,
+            final PhoneNumberService phoneNumbers,
+            final SipTester sipTester,
+            final Function<TwilioConfig, TwilioClient> twilioFactory,
+            final CallRoutingService callRouting) {
         this.settings      = Objects.requireNonNull(settings, "settings must not be null");
         this.phoneNumbers  = Objects.requireNonNull(phoneNumbers, "phoneNumbers must not be null");
         this.sipTester     = Objects.requireNonNull(sipTester, "sipTester must not be null");
         this.twilioFactory = Objects.requireNonNull(twilioFactory, "twilioFactory must not be null");
+        this.callRouting   = Objects.requireNonNull(callRouting, "callRouting must not be null");
     }
 
     /** Whether onboarding has already been completed. */
@@ -134,6 +148,29 @@ public final class OnboardingService {
         };
     }
 
+    // ── Call routing (PSTN bridge) ───────────────────────────────────────
+
+    /** Current persisted routing config, used to pre-fill the wizard's routing step. */
+    public CallRoutingConfig loadRouting() {
+        return callRouting.load();
+    }
+
+    /** Whether the provider supports one-click AUTO routing today. */
+    public boolean supportsAutoRouting(final String providerId) {
+        return callRouting.supportsAutoRouting(providerId);
+    }
+
+    /** Deploy a per-account PSTN bridge for a provider and persist the AUTO config. */
+    public Result<CallRoutingConfig> autoConfigureRouting(final String providerId) {
+        return callRouting.autoConfigure(providerId);
+    }
+
+    /** Apply a user-supplied bridge URL and persist the MANUAL config. */
+    public Result<CallRoutingConfig> applyManualRouting(
+            final String providerId, final String voiceUrl, final String callerIdFallback) {
+        return callRouting.applyManual(providerId, voiceUrl, callerIdFallback);
+    }
+
     /**
      * Persist the onboarding outcome. Phone numbers are written first, the
      * default number is set, and the completion flag is set <em>last</em> so an
@@ -161,6 +198,8 @@ public final class OnboardingService {
         }
 
         setDefaultNumber(result.selectedNumbers());
+
+        callRouting.save(result.routing());
 
         settings.setOnboardingComplete(true);
         LOG.info("Onboarding complete: {} number(s) imported", ((Result.Ok<Integer>) saved).value());

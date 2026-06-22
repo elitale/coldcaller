@@ -97,6 +97,39 @@
                         </HBox>
                     </VBox>
 
+                    <!-- ── Call Routing ────────────────────────────────────────── -->
+                    <VBox styleClass="bg-elevated" spacing="12">
+                        <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
+                        <Label text="Call Routing" styleClass="title-2"/>
+                        <Label text="Bridges your SIP phone to the phone network for outbound calls." styleClass="caption"/>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Status" prefWidth="180"/>
+                            <Label fx:id="routingCurrentLabel" styleClass="caption"/>
+                        </HBox>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Managed bridge" prefWidth="180"/>
+                            <Button fx:id="routingAutoButton" text="Auto-configure" styleClass="accent"
+                                    onAction="#onAutoConfigureRouting"/>
+                            <Button fx:id="routingVerifyButton" text="Verify on Twilio"
+                                    onAction="#onVerifyRouting"/>
+                        </HBox>
+
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Bridge URL" prefWidth="180"/>
+                            <TextField fx:id="routingUrlField" prefWidth="320" promptText="https://…/pstn-bridge"/>
+                        </HBox>
+                        <HBox spacing="12" alignment="CENTER_LEFT">
+                            <Label text="Caller ID fallback" prefWidth="180"/>
+                            <TextField fx:id="routingCallerIdField" prefWidth="240" promptText="+1…  (optional)"/>
+                        </HBox>
+
+                        <HBox alignment="CENTER_RIGHT">
+                            <Button text="Save" styleClass="accent" onAction="#onSaveRouting"/>
+                        </HBox>
+                    </VBox>
+
                     <!-- ── Audio ───────────────────────────────────────────────── -->
                     <VBox styleClass="bg-elevated" spacing="12">
                         <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>

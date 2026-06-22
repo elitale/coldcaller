@@ -109,8 +109,8 @@ public final class TelephonyService implements SipListener, AutoCloseable {
     private SipRegistrar sipRegistrar;
     private String       publicIp;
 
-    private RtpTransport activeRtp;
-    private AudioPipeline activePipeline;
+    private volatile RtpTransport activeRtp;
+    private volatile AudioPipeline activePipeline;
     private String        activeCallId;
     private volatile Dialog        activeDialog;
     private volatile CallRecorder  activeRecorder;
@@ -201,6 +201,61 @@ public final class TelephonyService implements SipListener, AutoCloseable {
     public void setAudioDevices(final Mixer.Info inputDevice, final Mixer.Info outputDevice) {
         this.inputDevice  = inputDevice;
         this.outputDevice = outputDevice;
+    }
+
+    /**
+     * Switch the audio devices for the <em>current</em> call live, rebuilding only the
+     * local microphone/speaker pipeline. The RTP session and any in-progress recording
+     * continue uninterrupted. When no call is active this simply updates the devices used
+     * for the next call (like {@link #setAudioDevices}).
+     *
+     * <p><strong>Blocking:</strong> opens audio lines — never call on the FX thread.
+     *
+     * @param inputDevice  microphone to use, or null for system default
+     * @param outputDevice speaker to use, or null for system default
+     */
+    public synchronized void switchAudioDevices(final Mixer.Info inputDevice, final Mixer.Info outputDevice) {
+        this.inputDevice  = inputDevice;
+        this.outputDevice = outputDevice;
+
+        final RtpTransport  rtp     = activeRtp;
+        final AudioPipeline current = activePipeline;
+        if (rtp == null || current == null) {
+            return; // no live call — the new devices apply to the next one
+        }
+
+        current.close(); // stops mic/speaker lines; leaves the RTP session + recorder open
+        final AudioPipeline next = new AudioPipeline(rtp, inputDevice, outputDevice);
+        final CallRecorder rec = activeRecorder;
+        if (rec != null) {
+            next.setRecorder(rec); // keep recording to the same file, uninterrupted
+        }
+        try {
+            next.start();
+        } catch (final LineUnavailableException e) {
+            LOG.error("Cannot open audio devices on switch: {}", e.getMessage(), e);
+        }
+        activePipeline = next;
+    }
+
+    /**
+     * Live microphone level for the active call's UI meter.
+     *
+     * @return normalized RMS (0..1) of the most recent captured frame, or 0 when no call is active
+     */
+    public double micLevel() {
+        final AudioPipeline pipeline = activePipeline;
+        return pipeline != null ? pipeline.micLevel() : 0.0;
+    }
+
+    /**
+     * Live remote-party level for the active call's UI meter.
+     *
+     * @return normalized RMS (0..1) of the most recent received frame, or 0 when no call is active
+     */
+    public double remoteLevel() {
+        final AudioPipeline pipeline = activePipeline;
+        return pipeline != null ? pipeline.remoteLevel() : 0.0;
     }
 
     /**

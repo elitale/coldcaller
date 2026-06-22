@@ -1,5 +1,7 @@
 package com.elitale.coldbirds.coldcalling.services;
 
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingMode;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
@@ -29,6 +31,7 @@ class OnboardingServiceTest {
     @Mock private PhoneNumberService phoneNumbers;
     @Mock private SipTester sipTester;
     @Mock private TwilioClient twilioClient;
+    @Mock private CallRoutingService callRouting;
 
     private OnboardingService service;
 
@@ -36,12 +39,13 @@ class OnboardingServiceTest {
             new SipCredentials("user", "pass", "sip.twilio.com", "sip.twilio.com", 5060);
     private static final TwilioNumberData NUMBER =
             new TwilioNumberData("PN1", "+12025551001", "in-use");
+    private static final CallRoutingConfig ROUTING = CallRoutingConfig.none("twilio");
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         final Function<TwilioConfig, TwilioClient> factory = config -> twilioClient;
-        service = new OnboardingService(settings, phoneNumbers, sipTester, factory);
+        service = new OnboardingService(settings, phoneNumbers, sipTester, factory, callRouting);
     }
 
     @Test
@@ -105,7 +109,7 @@ class OnboardingServiceTest {
         when(phoneNumbers.saveSelected(any())).thenReturn(Result.ok(1));
 
         final OnboardingResult result =
-                new OnboardingResult("AC123", "tok", SIP, List.of(NUMBER));
+                new OnboardingResult("AC123", "tok", SIP, List.of(NUMBER), ROUTING);
         final Result<Integer> outcome = service.completeOnboarding(result);
 
         assertThat(outcome).isInstanceOf(Result.Ok.class);
@@ -115,6 +119,7 @@ class OnboardingServiceTest {
         verify(settings).setSipProxyPort(5060);
         verify(phoneNumbers).saveSelected(List.of(NUMBER));
         verify(phoneNumbers).setDefault(new PhoneNumber("+12025551001"));
+        verify(callRouting).save(ROUTING);
         verify(settings).setOnboardingComplete(true);
     }
 
@@ -123,7 +128,7 @@ class OnboardingServiceTest {
         when(phoneNumbers.saveSelected(any())).thenReturn(Result.err("db error"));
 
         final OnboardingResult result =
-                new OnboardingResult("AC123", "tok", SIP, List.of(NUMBER));
+                new OnboardingResult("AC123", "tok", SIP, List.of(NUMBER), ROUTING);
         final Result<Integer> outcome = service.completeOnboarding(result);
 
         assertThat(outcome).isInstanceOf(Result.Err.class);
@@ -174,5 +179,42 @@ class OnboardingServiceTest {
         verify(settings).setSipProxy("sip.twilio.com");
         verify(settings).setSipProxyPort(5060);
         verify(settings, never()).setOnboardingComplete(true);
+    }
+
+    @Test
+    void autoConfigureRouting_delegatesToCallRouting() {
+        final CallRoutingConfig auto =
+                new CallRoutingConfig("twilio", CallRoutingMode.AUTO, "https://b.twil.io/x", "");
+        when(callRouting.autoConfigure("twilio")).thenReturn(Result.ok(auto));
+
+        final Result<CallRoutingConfig> result = service.autoConfigureRouting("twilio");
+
+        assertThat(result).isInstanceOf(Result.Ok.class);
+        verify(callRouting).autoConfigure("twilio");
+    }
+
+    @Test
+    void applyManualRouting_delegatesToCallRouting() {
+        final CallRoutingConfig manual =
+                new CallRoutingConfig("twilio", CallRoutingMode.MANUAL, "https://b.twil.io/x", "");
+        when(callRouting.applyManual("twilio", "https://b.twil.io/x", "")).thenReturn(Result.ok(manual));
+
+        final Result<CallRoutingConfig> result =
+                service.applyManualRouting("twilio", "https://b.twil.io/x", "");
+
+        assertThat(result).isInstanceOf(Result.Ok.class);
+        verify(callRouting).applyManual("twilio", "https://b.twil.io/x", "");
+    }
+
+    @Test
+    void loadRouting_delegatesToCallRouting() {
+        when(callRouting.load()).thenReturn(ROUTING);
+        assertThat(service.loadRouting()).isEqualTo(ROUTING);
+    }
+
+    @Test
+    void supportsAutoRouting_delegatesToCallRouting() {
+        when(callRouting.supportsAutoRouting("twilio")).thenReturn(true);
+        assertThat(service.supportsAutoRouting("twilio")).isTrue();
     }
 }

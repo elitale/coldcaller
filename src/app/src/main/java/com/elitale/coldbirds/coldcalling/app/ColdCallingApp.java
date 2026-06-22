@@ -218,7 +218,9 @@ public final class ColdCallingApp extends Application {
         mainWindow = new MainWindow(stage, new MainWindow.Dependencies(
                 contactService, callService, smsService, phoneNumberService,
                 onDial, powerDialerService, settingsService,
-                audioDeviceManager, audioDeviceTester, applyAudioDevices()));
+                new CallRoutingService(settingsService),
+                audioDeviceManager, audioDeviceTester, applyAudioDevices(),
+                switchAudioDevices()));
 
         // Wire call events → MainWindow + PowerDialerService (composed lambdas)
         callService.setOnIncomingCall((callId, caller, called) -> {
@@ -333,6 +335,22 @@ public final class ColdCallingApp extends Application {
         return (inputId, outputId) -> telephonyService.setAudioDevices(
                 audioDeviceManager.resolveInput(inputId).orElse(null),
                 audioDeviceManager.resolveOutput(outputId).orElse(null));
+    }
+
+    /**
+     * Callback the in-call audio menu invokes to switch devices mid-call: resolves the
+     * ids and applies them to the live call on a background thread (opening audio lines
+     * blocks the caller), then writes them through to settings so they persist for future
+     * calls.
+     */
+    private BiConsumer<String, String> switchAudioDevices() {
+        return (inputId, outputId) -> CompletableFuture.runAsync(() -> {
+            telephonyService.switchAudioDevices(
+                    audioDeviceManager.resolveInput(inputId).orElse(null),
+                    audioDeviceManager.resolveOutput(outputId).orElse(null));
+            settingsService.setAudioInputDevice(inputId);
+            settingsService.setAudioOutputDevice(outputId);
+        });
     }
 
     @Override

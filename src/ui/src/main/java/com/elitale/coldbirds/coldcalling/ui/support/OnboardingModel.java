@@ -1,5 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
+import com.elitale.coldbirds.coldcalling.domain.onboarding.ProviderOptions;
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
 import com.elitale.coldbirds.coldcalling.providers.twilio.dto.TwilioNumberData;
 import com.elitale.coldbirds.coldcalling.services.OnboardingResult;
 import com.elitale.coldbirds.coldcalling.telephony.sip.SipCredentials;
@@ -20,7 +22,7 @@ import java.util.Objects;
 public final class OnboardingModel {
 
     /** Linear wizard steps in order. */
-    public enum Step { PROVIDER, TWILIO, SIP, NUMBERS }
+    public enum Step { PROVIDER, TWILIO, SIP, ROUTING, NUMBERS }
 
     private static final Step[] STEPS = Step.values();
 
@@ -29,6 +31,7 @@ public final class OnboardingModel {
     private String sid = "";
     private String token = "";
     private SipCredentials sip;
+    private CallRoutingConfig routing = CallRoutingConfig.none(ProviderOptions.TWILIO_ID);
 
     private List<TwilioNumberData> available = List.of();
     private final LinkedHashSet<Integer> selected = new LinkedHashSet<>();
@@ -95,6 +98,17 @@ public final class OnboardingModel {
 
     public SipCredentials sip() {
         return sip;
+    }
+
+    // ── Routing step ───────────────────────────────────────────────────
+
+    /** Record the chosen routing config (auto, manual, or {@link CallRoutingConfig#none} when skipped). */
+    public void setRouting(final CallRoutingConfig routing) {
+        this.routing = Objects.requireNonNull(routing, "routing must not be null");
+    }
+
+    public CallRoutingConfig routing() {
+        return routing;
     }
 
     // ── Numbers step ────────────────────────────────────────────────────────────
@@ -168,6 +182,6 @@ public final class OnboardingModel {
                 .sorted()
                 .map(available::get)
                 .toList();
-        return new OnboardingResult(sid, token, sip, chosen);
+        return new OnboardingResult(sid, token, sip, chosen, routing);
     }
 }

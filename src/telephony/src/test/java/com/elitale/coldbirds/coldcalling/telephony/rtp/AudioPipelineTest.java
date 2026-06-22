@@ -90,4 +90,29 @@ class AudioPipelineTest {
                 msg -> { }))
                 .isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    void levels_areZero_onAFreshPipeline() {
+        final AudioPipeline pipeline = new AudioPipeline(new SilentTransport(), null, null);
+
+        assertThat(pipeline.micLevel()).isZero();
+        assertThat(pipeline.remoteLevel()).isZero();
+    }
+
+    @Test
+    void close_resetsLevelsToZero() {
+        final AudioPipeline pipeline = new AudioPipeline(new SilentTransport(), null, null);
+
+        pipeline.close(); // never started → no devices to release, levels remain 0
+
+        assertThat(pipeline.micLevel()).isZero();
+        assertThat(pipeline.remoteLevel()).isZero();
+    }
+
+    /** No-op transport so the pipeline can be constructed without opening sockets. */
+    private static final class SilentTransport implements RtpTransport {
+        @Override public void start(final String remoteIp, final int remotePort) { }
+        @Override public void sendAudio(final short[] pcmSamples) { }
+        @Override public void close() { }
+    }
 }

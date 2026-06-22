@@ -1,6 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
 import com.elitale.coldbirds.coldcalling.services.CallService;
+import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
 import com.elitale.coldbirds.coldcalling.services.ContactService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
@@ -71,9 +72,11 @@ public final class MainWindow {
             Consumer<String>   onDial,
             PowerDialerService powerDialerService,
             SettingsService    settingsService,
+            CallRoutingService callRoutingService,
             AudioDeviceManager audioDeviceManager,
             AudioDeviceTester  audioDeviceTester,
-            BiConsumer<String, String> onApplyAudioDevices) {}
+            BiConsumer<String, String> onApplyAudioDevices,
+            BiConsumer<String, String> onSwitchAudioDevices) {}
 
     private static final double SIDEBAR_WIDTH  = 190;
     private static final double MIN_WINDOW_W   = 960;
@@ -89,9 +92,11 @@ public final class MainWindow {
     private final Consumer<String>   onDial;
     private final PowerDialerService powerDialerService;
     private final SettingsService    settingsService;
+    private final CallRoutingService callRoutingService;
     private final AudioDeviceManager audioDeviceManager;
     private final AudioDeviceTester  audioDeviceTester;
     private final BiConsumer<String, String> onApplyAudioDevices;
+    private final BiConsumer<String, String> onSwitchAudioDevices;
 
     // Controllers
     private DialerController       dialerController;
@@ -144,9 +149,11 @@ public final class MainWindow {
         this.onDial             = Objects.requireNonNull(deps.onDial(),             "onDial");
         this.powerDialerService = Objects.requireNonNull(deps.powerDialerService(), "powerDialerService");
         this.settingsService    = Objects.requireNonNull(deps.settingsService(),    "settingsService");
+        this.callRoutingService = Objects.requireNonNull(deps.callRoutingService(), "callRoutingService");
         this.audioDeviceManager = Objects.requireNonNull(deps.audioDeviceManager(), "audioDeviceManager");
         this.audioDeviceTester  = Objects.requireNonNull(deps.audioDeviceTester(),  "audioDeviceTester");
         this.onApplyAudioDevices = Objects.requireNonNull(deps.onApplyAudioDevices(), "onApplyAudioDevices");
+        this.onSwitchAudioDevices = Objects.requireNonNull(deps.onSwitchAudioDevices(), "onSwitchAudioDevices");
     }
 
     // ── Thread-safe public API ────────────────────────────────────────────────
@@ -399,6 +406,7 @@ public final class MainWindow {
         settingsController = new SettingsController();
         settingsController.setSettingsService(settingsService);
         settingsController.setPhoneNumberService(phoneNumberService);
+        settingsController.setCallRoutingService(callRoutingService);
         settingsController.setAudioDeviceManager(audioDeviceManager);
         settingsController.setAudioDeviceTester(audioDeviceTester);
         settingsController.setOnApplyAudioDevices(onApplyAudioDevices);
@@ -435,6 +443,12 @@ public final class MainWindow {
                 onDial.accept(number);
             }
         });
+
+        // Live audio levels drive the avatar halo (remote voice) + the mic waveform.
+        activeCallController.setAudioLevels(callService::micLevel, callService::remoteLevel);
+        // In-call ••• menu switches mic/speaker live and writes the choice through to settings.
+        activeCallController.setAudioDevices(audioDeviceManager, onSwitchAudioDevices,
+                settingsService::getAudioInputDevice, settingsService::getAudioOutputDevice);
 
         root = new BorderPane();
         root.setLeft(buildSidebar());

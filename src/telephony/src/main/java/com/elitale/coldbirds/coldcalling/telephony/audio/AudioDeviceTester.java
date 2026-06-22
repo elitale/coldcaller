@@ -18,8 +18,8 @@ import java.util.function.DoubleConsumer;
  * Google-Meet-style audio device testing: a live microphone level meter and a
  * speaker test tone. All device I/O runs on virtual threads; never call on the FX thread.
  *
- * <p>The pure helpers {@link #generateTone(int, int)} and {@link #rms(short[])} carry the
- * signal-processing logic and are unit-tested without hardware.
+ * <p>The pure helper {@link #generateTone(int, int)} carries the tone-generation logic and is
+ * unit-tested without hardware; level math lives in {@link AudioLevels}.
  */
 public final class AudioDeviceTester {
 
@@ -64,7 +64,7 @@ public final class AudioDeviceTester {
                 if (read <= 0) {
                     continue;
                 }
-                onLevel.accept(rms(bytesToShorts(buffer, read)));
+                onLevel.accept(AudioLevels.rms(bytesToShorts(buffer, read)));
             }
         });
 
@@ -141,24 +141,6 @@ public final class AudioDeviceTester {
             samples[i] = (short) Math.round(Math.sin(angle) * amplitude * gain);
         }
         return samples;
-    }
-
-    /**
-     * Root-mean-square level of a PCM frame, normalized to [0,1].
-     *
-     * @param frame signed 16-bit samples
-     * @return normalized RMS; 0 for silence, ≈1 for full-scale
-     */
-    public static double rms(final short[] frame) {
-        if (frame == null || frame.length == 0) {
-            return 0.0;
-        }
-        double sumSquares = 0.0;
-        for (final short sample : frame) {
-            final double normalized = sample / FULL_SCALE;
-            sumSquares += normalized * normalized;
-        }
-        return Math.min(1.0, Math.sqrt(sumSquares / frame.length));
     }
 
     // ── Byte/short conversion (little-endian) ─────────────────────────────────────

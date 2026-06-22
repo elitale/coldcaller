@@ -34,29 +34,4 @@ class AudioDeviceTesterTest {
         final short[] tone = AudioDeviceTester.generateTone(440, 200);
         assertThat(tone[0]).isEqualTo((short) 0);
     }
-
-    @Test
-    void rms_ofSilence_isZero() {
-        assertThat(AudioDeviceTester.rms(new short[160])).isEqualTo(0.0);
-    }
-
-    @Test
-    void rms_ofNullOrEmpty_isZero() {
-        assertThat(AudioDeviceTester.rms(null)).isEqualTo(0.0);
-        assertThat(AudioDeviceTester.rms(new short[0])).isEqualTo(0.0);
-    }
-
-    @Test
-    void rms_ofFullScale_isApproximatelyOne() {
-        final short[] frame = new short[160];
-        java.util.Arrays.fill(frame, Short.MAX_VALUE);
-        assertThat(AudioDeviceTester.rms(frame)).isCloseTo(1.0, org.assertj.core.data.Offset.offset(0.001));
-    }
-
-    @Test
-    void rms_isWithinUnitRange_forArbitrarySignal() {
-        final short[] tone = AudioDeviceTester.generateTone(440, 100);
-        final double level = AudioDeviceTester.rms(tone);
-        assertThat(level).isBetween(0.0, 1.0);
-    }
 }

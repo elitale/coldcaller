@@ -2,11 +2,15 @@ package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDevice;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
+import com.elitale.coldbirds.coldcalling.ui.support.AudioWaveform;
 import com.elitale.coldbirds.coldcalling.ui.support.CallDurationFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallTones;
 import com.elitale.coldbirds.coldcalling.ui.support.DispositionCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.LocalTimeFormatter;
+import javafx.animation.AnimationTimer;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -15,9 +19,13 @@ import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.geometry.Side;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContentDisplay;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.RadioMenuItem;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
@@ -27,17 +35,22 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.util.Duration;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
+import java.util.function.Supplier;
 
 /**
  * Controller for the in-window calling screen (active-call-view.fxml).
@@ -53,6 +66,11 @@ import java.util.function.Consumer;
 public final class ActiveCallController {
 
     private enum Phase { RINGING, ACTIVE, HOLD, WRAPUP, FAILED }
+
+    private static final double RIPPLE_THRESHOLD = 0.16;
+    private static final double RIPPLE_SECONDS   = 0.75;
+    private static final Color  MIC_ON_COLOR  = Color.web("#34C759"); // success green
+    private static final Color  MIC_OFF_COLOR = Color.web("#98989D"); // muted / idle grey
 
     @FXML private VBox      callingScreen;
     @FXML private Button    closeButton;
@@ -75,6 +93,10 @@ public final class ActiveCallController {
     @FXML private FlowPane  dispositionChips;
     @FXML private TextArea  notesArea;
     @FXML private Label     notesStatus;
+    @FXML private Region    rippleCircle;
+    @FXML private HBox      micMeterRow;
+    @FXML private Label     micStateIcon;
+    @FXML private AudioWaveform micMeter;
 
     private final ToggleGroup dispositionGroup = new ToggleGroup();
     private final CallTones   tones = new CallTones();
@@ -88,6 +110,21 @@ public final class ActiveCallController {
     private boolean  muted = false;
     private Optional<Country> country = Optional.empty();
     private String   subtitle = "";
+
+    private AnimationTimer levelTimer;
+    private DoubleSupplier micLevelSupplier    = () -> 0.0;
+    private DoubleSupplier remoteLevelSupplier = () -> 0.0;
+    private double   remoteSmoothed = 0.0;
+    private double   micSmoothed    = 0.0;
+    private double   ripplePhase    = 1.0; // ≥1 = idle
+    private long     lastFrameNanos = 0L;
+
+    private AudioDeviceManager audioDeviceManager;
+    private BiConsumer<String, String> onSwitchAudioDevices = (in, out) -> {};
+    private Supplier<String> currentInputId  = () -> "";
+    private Supplier<String> currentOutputId = () -> "";
+    private String selectedInputId  = "";
+    private String selectedOutputId = "";
 
     // Callbacks
     private Runnable          onHangUpCb = () -> {};
@@ -105,6 +142,34 @@ public final class ActiveCallController {
     public void setOnMute(Consumer<Boolean> cb) { this.onMuteCb   = Objects.requireNonNull(cb); }
     public void setOnHold(Consumer<Boolean> cb) { this.onHoldCb   = Objects.requireNonNull(cb); }
     public void setOnDtmf(Consumer<String> cb)  { this.onDtmfCb   = Objects.requireNonNull(cb); }
+
+    /**
+     * Inject the live audio-level sources that drive the avatar halo (remote
+     * voice) and the mic waveform. Polled ~60fps by an AnimationTimer while the
+     * call is connected; suppliers must be cheap and non-blocking.
+     *
+     * @param micLevel    supplies the normalized mic level (0..1)
+     * @param remoteLevel supplies the normalized remote-party level (0..1)
+     */
+    public void setAudioLevels(DoubleSupplier micLevel, DoubleSupplier remoteLevel) {
+        this.micLevelSupplier    = Objects.requireNonNull(micLevel,    "micLevel must not be null");
+        this.remoteLevelSupplier = Objects.requireNonNull(remoteLevel, "remoteLevel must not be null");
+    }
+
+    /**
+     * Wire the in-call audio-device menu (the ••• button). Devices are listed from
+     * {@code manager}; picking one applies it live via {@code onSwitch} as
+     * (inputId, outputId) and the caller persists it. The current ids seed the ticks.
+     */
+    public void setAudioDevices(AudioDeviceManager manager,
+                                BiConsumer<String, String> onSwitch,
+                                Supplier<String> currentInputId,
+                                Supplier<String> currentOutputId) {
+        this.audioDeviceManager   = Objects.requireNonNull(manager, "manager must not be null");
+        this.onSwitchAudioDevices = Objects.requireNonNull(onSwitch, "onSwitch must not be null");
+        this.currentInputId       = Objects.requireNonNull(currentInputId, "currentInputId must not be null");
+        this.currentOutputId      = Objects.requireNonNull(currentOutputId, "currentOutputId must not be null");
+    }
 
     /**
      * Register the auto-save sink. Fired (debounced for notes, immediately for a
@@ -125,14 +190,16 @@ public final class ActiveCallController {
         applyIcon(voicemailButton, "bi-soundwave",        "Voicemail");
         applyIcon(hangUpButton,    "bi-telephone-x-fill", "Hang Up");
         applyIcon(redialButton,    "bi-telephone-outbound-fill", "Redial");
-        applyIcon(closeButton,     "bi-x",                null);
+        applyIcon(closeButton,     "bi-sliders",          null);
 
         voicemailButton.setDisable(true);
         voicemailButton.setTooltip(new Tooltip("Voicemail drop — coming soon"));
         redialButton.setTooltip(new Tooltip("Call this number again"));
         showRedial(false);
-        closeButton.setTooltip(new Tooltip("Close"));
-        closeButton.setOnAction(e -> onHangUp());
+        closeButton.setTooltip(new Tooltip("Audio devices"));
+        closeButton.setOnAction(e -> showAudioMenu());
+        closeButton.setVisible(false);
+        closeButton.setManaged(false);
 
         buildKeypad();
         buildDispositionChips();
@@ -140,6 +207,12 @@ public final class ActiveCallController {
         tickTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> onTick()));
         tickTimer.setCycleCount(Timeline.INDEFINITE);
         pulseTimer = buildPulse();
+        levelTimer = buildLevelTimer();
+
+        FontIcon micGlyph = new FontIcon("bi-mic");
+        micGlyph.setIconSize(15);
+        micGlyph.setIconColor(MIC_OFF_COLOR);
+        micStateIcon.setGraphic(micGlyph);
 
         // Auto-save: debounce note typing, persist a disposition pick immediately.
         notesDebounce = new PauseTransition(Duration.millis(500));
@@ -175,6 +248,129 @@ public final class ActiveCallController {
                         new KeyValue(haloCircle.opacityProperty(), 0.0, Interpolator.EASE_OUT)));
         pulse.setCycleCount(Timeline.INDEFINITE);
         return pulse;
+    }
+
+    /**
+     * ~60fps timer that polls the live audio levels while connected and drives
+     * the adaptive avatar halo (remote voice), loud-speech ripples, and the mic
+     * waveform. Runs only between {@link #startLevelMeter()} and
+     * {@link #stopLevelMeter()}.
+     */
+    private AnimationTimer buildLevelTimer() {
+        return new AnimationTimer() {
+            @Override public void handle(long now) {
+                if (lastFrameNanos == 0L) { lastFrameNanos = now; return; }
+                double dt = Math.min(0.05, (now - lastFrameNanos) / 1_000_000_000.0);
+                lastFrameNanos = now;
+                onLevelFrame(dt);
+            }
+        };
+    }
+
+    private void onLevelFrame(double dt) {
+        // Remote voice → adaptive halo: calm when quiet, energetic + ripples when loud.
+        double rawRemote = clamp01(remoteLevelSupplier.getAsDouble());
+        double attack = rawRemote > remoteSmoothed ? 0.55 : 0.10; // fast rise, slow fall
+        remoteSmoothed += (rawRemote - remoteSmoothed) * attack;
+        double haloScale = 0.9 + remoteSmoothed * 1.05;
+        haloCircle.setVisible(true);
+        haloCircle.setScaleX(haloScale);
+        haloCircle.setScaleY(haloScale);
+        haloCircle.setOpacity(Math.min(0.62, remoteSmoothed * 1.5));
+
+        if (ripplePhase >= 1.0 && rawRemote >= RIPPLE_THRESHOLD) {
+            ripplePhase = 0.0;
+            rippleCircle.setVisible(true);
+        }
+        if (ripplePhase < 1.0) {
+            ripplePhase = Math.min(1.0, ripplePhase + dt / RIPPLE_SECONDS);
+            double rippleScale = 0.9 + ripplePhase * 1.25;
+            rippleCircle.setScaleX(rippleScale);
+            rippleCircle.setScaleY(rippleScale);
+            rippleCircle.setOpacity((1.0 - ripplePhase) * 0.5);
+            if (ripplePhase >= 1.0) rippleCircle.setVisible(false);
+        }
+
+        // Mic level → waveform (flat when muted).
+        double rawMic = muted ? 0.0 : clamp01(micLevelSupplier.getAsDouble());
+        double micK = rawMic > micSmoothed ? 0.6 : 0.25;
+        micSmoothed += (rawMic - micSmoothed) * micK;
+        micMeter.push(micSmoothed);
+    }
+
+    private static double clamp01(double v) {
+        if (v < 0.0) return 0.0;
+        if (v > 1.0) return 1.0;
+        return v;
+    }
+
+    private void startLevelMeter() {
+        remoteSmoothed = 0.0;
+        micSmoothed    = 0.0;
+        ripplePhase    = 1.0;
+        lastFrameNanos = 0L;
+        selectedInputId  = currentInputId.get();
+        selectedOutputId = currentOutputId.get();
+        closeButton.setVisible(true);
+        closeButton.setManaged(true);
+        micMeter.clear();
+        micMeterRow.setVisible(true);
+        micMeterRow.setManaged(true);
+        updateMicIndicator();
+        levelTimer.start();
+    }
+
+    private void stopLevelMeter() {
+        levelTimer.stop();
+        haloCircle.setScaleX(1.0);
+        haloCircle.setScaleY(1.0);
+        haloCircle.setOpacity(0.0);
+        haloCircle.setVisible(false);
+        rippleCircle.setVisible(false);
+        rippleCircle.setOpacity(0.0);
+        micMeter.clear();
+        micMeterRow.setVisible(false);
+        micMeterRow.setManaged(false);
+        closeButton.setVisible(false);
+        closeButton.setManaged(false);
+    }
+
+    private void updateMicIndicator() {
+        FontIcon glyph = (FontIcon) micStateIcon.getGraphic();
+        if (glyph == null) return;
+        glyph.setIconLiteral(muted ? "bi-mic-mute-fill" : "bi-mic");
+        glyph.setIconColor(muted ? MIC_OFF_COLOR : MIC_ON_COLOR);
+    }
+
+    private void showAudioMenu() {
+        if (audioDeviceManager == null) return;
+        ContextMenu menu = new ContextMenu();
+        menu.getItems().add(buildDeviceMenu("Microphone", audioDeviceManager.inputDevices(), true));
+        menu.getItems().add(buildDeviceMenu("Speaker", audioDeviceManager.outputDevices(), false));
+        menu.show(closeButton, Side.BOTTOM, 0, 4);
+    }
+
+    private Menu buildDeviceMenu(String title, List<AudioDevice> devices, boolean input) {
+        Menu menu = new Menu(title);
+        String selected = input ? selectedInputId : selectedOutputId;
+        ToggleGroup group = new ToggleGroup();
+        for (AudioDevice device : devices) {
+            RadioMenuItem item = new RadioMenuItem(device.name());
+            item.setToggleGroup(group);
+            item.setSelected(device.id().equals(selected));
+            item.setOnAction(e -> chooseDevice(input, device.id()));
+            menu.getItems().add(item);
+        }
+        return menu;
+    }
+
+    private void chooseDevice(boolean input, String id) {
+        if (input) {
+            selectedInputId = id;
+        } else {
+            selectedOutputId = id;
+        }
+        onSwitchAudioDevices.accept(selectedInputId, selectedOutputId);
     }
 
     private void buildKeypad() {
@@ -248,6 +444,7 @@ public final class ActiveCallController {
             notesArea.requestFocus();
             refreshDuration();
             tickTimer.playFromStart();
+            startLevelMeter();
         });
     }
 
@@ -271,6 +468,7 @@ public final class ActiveCallController {
         Objects.requireNonNull(endedAt, "endedAt must not be null");
         runOnFx(() -> {
             stopPulse();
+            stopLevelMeter();
             tones.stopRingback();
             tones.hangup();
             phase = Phase.WRAPUP;
@@ -291,6 +489,7 @@ public final class ActiveCallController {
         Objects.requireNonNull(reason, "reason must not be null");
         runOnFx(() -> {
             stopPulse();
+            stopLevelMeter();
             tones.stopRingback();
             tones.hangup();
             phase = Phase.FAILED;
@@ -324,6 +523,7 @@ public final class ActiveCallController {
             tickTimer.stop();
             if (notesDebounce != null) notesDebounce.stop();
             stopPulse();
+            stopLevelMeter();
             tones.stopRingback();
         });
     }
@@ -382,7 +582,8 @@ public final class ActiveCallController {
         muted = !muted;
         ((FontIcon) muteButton.getGraphic()).setIconLiteral(muted ? "bi-mic-mute-fill" : "bi-mic");
         muteButton.setText(muted ? "Unmute" : "Mute");
-        toggleStyle(muteButton, "call-control--on", muted);
+        toggleStyle(muteButton, "call-control--muted", muted);
+        updateMicIndicator();
         onMuteCb.accept(muted);
     }
 
@@ -392,7 +593,7 @@ public final class ActiveCallController {
         phase = held ? Phase.HOLD : Phase.ACTIVE;
         ((FontIcon) holdButton.getGraphic()).setIconLiteral(held ? "bi-play-fill" : "bi-pause-fill");
         holdButton.setText(held ? "Resume" : "Hold");
-        toggleStyle(holdButton, "call-control--on", held);
+        toggleStyle(holdButton, "call-control--hold", held);
         setRingStyle(held ? "call-ring--hold" : "call-ring--active");
         if (held) statusLabel.setText("On hold");
         onHoldCb.accept(held);
@@ -426,6 +627,7 @@ public final class ActiveCallController {
     private void reset(CallParticipant party) {
         suppressAutoSave = true;
         if (notesDebounce != null) notesDebounce.stop();
+        stopLevelMeter();
         remotePartyLabel.setText(party.headline());
         avatarLabel.setText(party.initials());
         boolean named = party.name().isPresent();
@@ -445,9 +647,9 @@ public final class ActiveCallController {
         muted = false;
         ((FontIcon) muteButton.getGraphic()).setIconLiteral("bi-mic");
         muteButton.setText("Mute");
-        muteButton.getStyleClass().remove("call-control--on");
+        muteButton.getStyleClass().remove("call-control--muted");
         holdButton.setText("Hold");
-        holdButton.getStyleClass().remove("call-control--on");
+        holdButton.getStyleClass().remove("call-control--hold");
         ((FontIcon) holdButton.getGraphic()).setIconLiteral("bi-pause-fill");
         hangUpButton.setText("Hang Up");
         hangUpButton.setDisable(false);

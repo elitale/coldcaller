@@ -1,7 +1,10 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
+import com.elitale.coldbirds.coldcalling.domain.onboarding.ProviderOptions;
+import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDevice;
@@ -17,6 +20,7 @@ import javafx.util.StringConverter;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 
@@ -51,6 +55,13 @@ public final class SettingsController {
     @FXML private TextField        sipProxyField;
     @FXML private Spinner<Integer> sipProxyPortSpinner;
 
+    // Call Routing
+    @FXML private Label     routingCurrentLabel;
+    @FXML private Button    routingAutoButton;
+    @FXML private Button    routingVerifyButton;
+    @FXML private TextField routingUrlField;
+    @FXML private TextField routingCallerIdField;
+
     // Audio
     @FXML private ComboBox<AudioDevice> audioInputCombo;
     @FXML private ComboBox<AudioDevice> audioOutputCombo;
@@ -68,6 +79,7 @@ public final class SettingsController {
 
     private SettingsService    settingsService;
     private PhoneNumberService phoneNumberService;
+    private CallRoutingService callRoutingService;
     private AudioDeviceManager audioDeviceManager;
     private AudioDeviceTester  audioDeviceTester;
     private BiConsumer<String, String> onApplyAudioDevices;
@@ -90,6 +102,10 @@ public final class SettingsController {
 
     public void setPhoneNumberService(PhoneNumberService service) {
         this.phoneNumberService = Objects.requireNonNull(service, "phoneNumberService must not be null");
+    }
+
+    public void setCallRoutingService(CallRoutingService service) {
+        this.callRoutingService = Objects.requireNonNull(service, "callRoutingService must not be null");
     }
 
     public void setAudioDeviceManager(AudioDeviceManager manager) {
@@ -200,6 +216,84 @@ public final class SettingsController {
         showStatus("SIP settings saved. Restart to apply.");
     }
 
+    /** Save the manual bridge URL and push it to the provider (Twilio: sets the SIP domain VoiceUrl). */
+    @FXML
+    private void onSaveRouting() {
+        final String url = routingUrlField.getText() == null ? "" : routingUrlField.getText().strip();
+        final String callerId = routingCallerIdField.getText() == null ? "" : routingCallerIdField.getText().strip();
+        if (url.isBlank()) {
+            showStatus("Enter a bridge URL, or use Auto-configure.");
+            return;
+        }
+        showStatus("Applying routing\u2026");
+        CompletableFuture
+                .supplyAsync(() -> callRoutingService.applyManual(ProviderOptions.TWILIO_ID, url, callerId))
+                .thenAcceptAsync(result -> {
+                    if (result instanceof Result.Ok<CallRoutingConfig> ok) {
+                        routingCurrentLabel.setText(describeRouting(ok.value()));
+                        showStatus("Call routing saved.");
+                    } else {
+                        showStatus(routingError(result, "That bridge URL didn\u2019t work."));
+                    }
+                }, Platform::runLater)
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> showStatus("Couldn\u2019t save routing."));
+                    return null;
+                });
+    }
+
+    /** Set the managed bridge URL on the provider automatically (Twilio only). */
+    @FXML
+    private void onAutoConfigureRouting() {
+        routingAutoButton.setDisable(true);
+        showStatus("Setting up call routing\u2026");
+        CompletableFuture
+                .supplyAsync(() -> callRoutingService.autoConfigure(ProviderOptions.TWILIO_ID))
+                .thenAcceptAsync(result -> {
+                    routingAutoButton.setDisable(false);
+                    if (result instanceof Result.Ok<CallRoutingConfig> ok) {
+                        routingUrlField.setText(ok.value().voiceUrl());
+                        routingCurrentLabel.setText(describeRouting(ok.value()));
+                        showStatus("Call routing is ready.");
+                    } else {
+                        showStatus(routingError(result, "Couldn\u2019t set up routing automatically."));
+                    }
+                }, Platform::runLater)
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> {
+                        routingAutoButton.setDisable(false);
+                        showStatus("Couldn\u2019t set up routing.");
+                    });
+                    return null;
+                });
+    }
+
+    /** Read the live VoiceUrl back from Twilio so the user can confirm it took effect. */
+    @FXML
+    private void onVerifyRouting() {
+        routingVerifyButton.setDisable(true);
+        showStatus("Checking Twilio\u2026");
+        CompletableFuture
+                .supplyAsync(() -> callRoutingService.currentVoiceUrl(ProviderOptions.TWILIO_ID))
+                .thenAcceptAsync(result -> {
+                    routingVerifyButton.setDisable(false);
+                    if (result instanceof Result.Ok<Optional<String>> ok) {
+                        showStatus(ok.value()
+                                .map(u -> "Live bridge: " + u)
+                                .orElse("No bridge URL is set on Twilio yet."));
+                    } else {
+                        showStatus(routingError(result, "Couldn\u2019t read routing from Twilio."));
+                    }
+                }, Platform::runLater)
+                .exceptionally(ex -> {
+                    Platform.runLater(() -> {
+                        routingVerifyButton.setDisable(false);
+                        showStatus("Couldn\u2019t reach Twilio.");
+                    });
+                    return null;
+                });
+    }
+
     @FXML
     private void onSaveAudio() {
         final String inId  = selectedId(audioInputCombo);
@@ -264,6 +358,7 @@ public final class SettingsController {
             String twilioAccountSid,    String twilioAuthToken,
             String sipUsername,         String sipPassword,
             String sipDomain,           String sipProxy,    int sipProxyPort,
+            CallRoutingConfig routing,
             List<AudioDevice> inputDevices, List<AudioDevice> outputDevices,
             String audioInput,          String audioOutput, int jitterMs,
             int noAnswerSec,            int advanceDelaySec, boolean voicemailDrop) {}
@@ -280,6 +375,7 @@ public final class SettingsController {
                 settingsService.getSipUsername(),    settingsService.getSipPassword(),
                 settingsService.getSipDomain(),      settingsService.getSipProxy(),
                 settingsService.getSipProxyPort(),
+                callRoutingService.load(),
                 audioDeviceManager.inputDevices(),   audioDeviceManager.outputDevices(),
                 settingsService.getAudioInputDevice(), settingsService.getAudioOutputDevice(),
                 settingsService.getJitterBufferMs(),
@@ -300,6 +396,10 @@ public final class SettingsController {
         sipDomainField.setText(s.sipDomain());
         sipProxyField.setText(s.sipProxy());
         sipProxyPortSpinner.getValueFactory().setValue(s.sipProxyPort());
+
+        routingUrlField.setText(s.routing().voiceUrl());
+        routingCallerIdField.setText(s.routing().callerIdFallback());
+        routingCurrentLabel.setText(describeRouting(s.routing()));
 
         populateDevices(audioInputCombo,  s.inputDevices(),  s.audioInput());
         populateDevices(audioOutputCombo, s.outputDevices(), s.audioOutput());
@@ -356,6 +456,22 @@ public final class SettingsController {
     private static String selectedId(ComboBox<AudioDevice> combo) {
         final AudioDevice device = combo.getValue();
         return device == null ? AudioDevice.SYSTEM_DEFAULT_ID : device.id();
+    }
+
+    /** Human-readable summary of the current routing state for the status label. */
+    private static String describeRouting(CallRoutingConfig config) {
+        return switch (config.mode()) {
+            case NONE   -> "Off — outbound calls won\u2019t connect to the phone network.";
+            case AUTO   -> "Managed bridge \u00b7 " + config.voiceUrl();
+            case MANUAL -> "Custom bridge \u00b7 " + config.voiceUrl();
+        };
+    }
+
+    /** Prefer the service's error message, falling back to a friendly default. */
+    private static String routingError(Result<?> result, String fallback) {
+        return result instanceof Result.Err<?> err && err.message() != null && !err.message().isBlank()
+                ? err.message()
+                : fallback;
     }
 
     private void stopMicTest() {

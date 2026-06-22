@@ -1305,6 +1305,16 @@
     -fx-effect: gaussianblur(8);
 }
 
+/* Expanding ring emitted on loud remote speech (scaled/faded in the controller) */
+.call-ripple {
+    -fx-background-radius: 999px;
+    -fx-border-radius: 999px;
+    -fx-border-width: 2.5px;
+    -fx-border-color: -cc-accent;
+    -fx-background-color: transparent;
+    -fx-opacity: 0;
+}
+
 /* Avatar with a coloured state ring */
 .call-ring {
     -fx-background-radius: 999px;
@@ -1371,11 +1381,31 @@
     -fx-content-display: top;
     -fx-cursor: hand;
     -fx-effect: dropshadow(gaussian, rgba(20, 40, 80, 0.08), 10, 0, 0, 3);
+    /* Kill Modena's default focus halo — we draw an on-brand border ring instead */
+    -fx-faint-focus-color: transparent;
+    -fx-focus-color: transparent;
+}
+/* Pin the glyph colour at rest so it never washes out on hover / press / focus */
+.call-control .ikonli-font-icon {
+    -fx-icon-color: -cc-text-secondary;
+    -fx-fill: -cc-text-secondary;
 }
 .call-control:hover {
     -fx-background-color: derive(-cc-bg-elevated, -3%);
     -fx-border-color: -cc-text-tertiary;
     -fx-effect: dropshadow(gaussian, rgba(20, 40, 80, 0.14), 14, 0, 0, 4);
+}
+/* Keep the circular fill on focus; swap Modena's blue ring for an on-brand border */
+.call-control:focused {
+    -fx-border-color: -cc-accent;
+    -fx-effect: dropshadow(gaussian, rgba(20, 40, 80, 0.14), 14, 0, 0, 4);
+}
+/* Pressed / armed: darken in place — never change shape or revert to the theme default */
+.call-control:armed,
+.call-control:pressed,
+.call-control:focused:armed {
+    -fx-background-color: derive(-cc-bg-elevated, -8%);
+    -fx-border-color: -cc-text-tertiary;
 }
 .call-control:disabled { -fx-opacity: 0.4; }
 .call-control--on {
@@ -1384,6 +1414,53 @@
     -fx-text-fill: white;
 }
 .call-control--on .ikonli-font-icon { -fx-icon-color: white; -fx-fill: white; }
+.call-control--on:hover {
+    -fx-background-color: derive(-cc-accent, -4%);
+    -fx-border-color: derive(-cc-accent, -4%);
+}
+.call-control--on:focused { -fx-border-color: derive(-cc-accent, -22%); }
+.call-control--on:armed,
+.call-control--on:pressed,
+.call-control--on:focused:armed {
+    -fx-background-color: derive(-cc-accent, -12%);
+    -fx-border-color: derive(-cc-accent, -12%);
+}
+/* Engaged Mute — red tint */
+.call-control--muted {
+    -fx-background-color: -cc-error;
+    -fx-border-color: -cc-error;
+    -fx-text-fill: white;
+}
+.call-control--muted .ikonli-font-icon { -fx-icon-color: white; -fx-fill: white; }
+.call-control--muted:hover {
+    -fx-background-color: derive(-cc-error, -4%);
+    -fx-border-color: derive(-cc-error, -4%);
+}
+.call-control--muted:focused { -fx-border-color: derive(-cc-error, -22%); }
+.call-control--muted:armed,
+.call-control--muted:pressed,
+.call-control--muted:focused:armed {
+    -fx-background-color: derive(-cc-error, -12%);
+    -fx-border-color: derive(-cc-error, -12%);
+}
+/* Engaged Hold — amber tint (dark glyph for legibility on amber) */
+.call-control--hold {
+    -fx-background-color: -cc-warning;
+    -fx-border-color: -cc-warning;
+    -fx-text-fill: -cc-text-primary;
+}
+.call-control--hold .ikonli-font-icon { -fx-icon-color: -cc-text-primary; -fx-fill: -cc-text-primary; }
+.call-control--hold:hover {
+    -fx-background-color: derive(-cc-warning, -5%);
+    -fx-border-color: derive(-cc-warning, -5%);
+}
+.call-control--hold:focused { -fx-border-color: derive(-cc-warning, -25%); }
+.call-control--hold:armed,
+.call-control--hold:pressed,
+.call-control--hold:focused:armed {
+    -fx-background-color: derive(-cc-warning, -12%);
+    -fx-border-color: derive(-cc-warning, -12%);
+}
 .call-control--danger {
     -fx-min-width: 66px;
     -fx-min-height: 66px;
@@ -1395,6 +1472,15 @@
 }
 .call-control--danger .ikonli-font-icon { -fx-icon-color: white; -fx-fill: white; }
 .call-control--danger:hover { -fx-background-color: derive(-cc-error, -6%); }
+.call-control--danger:focused {
+    -fx-border-color: derive(-cc-error, -22%);
+    -fx-effect: dropshadow(gaussian, rgba(20, 40, 80, 0.14), 14, 0, 0, 4);
+}
+.call-control--danger:armed,
+.call-control--danger:pressed,
+.call-control--danger:focused:armed {
+    -fx-background-color: derive(-cc-error, -14%);
+}
 
 /* DTMF keypad overlay */
 .keypad-overlay {

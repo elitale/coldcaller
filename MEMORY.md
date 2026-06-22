@@ -32,6 +32,8 @@ Sister project: [`sequence`](../sequence) handles cold email campaigns. These tw
 | 2026-06-21 | OS keychain for secrets (macOS Keychain / Windows DPAPI / Linux libsecret) | Twilio API keys and SIP credentials never touch SQLite plaintext |
 | 2026-06-21 | SIP REGISTER on startup with 60s refresh | Twilio routes inbound calls to the registered desktop SIP UA |
 | 2026-06-21 | 8pt grid system + Apple HIG corner radii | 8px (cards), 6px (buttons), 4px (inputs); all padding multiples of 4px |
+| 2026-06-23 | In-app call routing (PSTN bridge VoiceUrl) configured from Settings + onboarding | A SIP domain with no VoiceUrl answers outbound INVITEs with SIP 404. `CallRoutingService` lets users set it from the app (AUTO = deploy a per-account bridge into the user's own Twilio account via `TwilioVoiceBridgeProvisioner`, MANUAL = own URL), replacing the manual `setup-sip-pstn-handler.js` script for end-users. Both modes push the URL to Twilio (store-only would still 404). Non-Twilio = store-only seam (YAGNI) |
+| 2026-06-23 | AUTO deploys a **per-account** PSTN bridge, not a shared one | The bridge function is `protected`, so Twilio validates the webhook signature against the owning account's auth token — a shared function 403s for other tenants. `TwilioVoiceBridgeProvisioner` ports the Serverless deploy to Java (injectable `Transport` over `java.net.http`, since the Twilio SDK can't do the multipart upload) and bundles `pstn-bridge.js` as a provider resource. |
 
 ---
 
@@ -46,6 +48,8 @@ Sister project: [`sequence`](../sequence) handles cold email campaigns. These tw
 - [x] **Services layer** — 26 tests PASS: `CallService`, `ContactService`, `SmsService`, `PhoneNumberService`
 - [x] **UI layer** — `./gradlew build` green: `MainWindow`, `DialerController`, `IncomingCallController`, `ActiveCallController`, bespoke Cupertino Light CSS (~550 lines)
 - [x] **`app/` module** — `ColdCallingApp` fully wired: DB → repos → providers → services → telephony → UI
+- [x] **Call routing (PSTN bridge)** — 2026-06-23: `CallRoutingMode`/`CallRoutingConfig` (domain), `SettingsService` routing keys, `TwilioClient.setSipDomainVoiceUrl`/`readSipDomainVoiceUrl`, `CallRoutingService` (load/applyManual/autoConfigure/currentVoiceUrl), onboarding 5th "Routing" step, Settings "Call Routing" section, wired through `MainWindow.Dependencies` + `ColdCallingApp`. In-app config replaces the manual `.scripts/setup-sip-pstn-handler.js` for end-users (script kept as operator fallback). Full build + test green.
+- [x] **Per-account AUTO bridge** — 2026-06-23: `TwilioVoiceBridgeProvisioner` (providers) deploys the `pstn-bridge` Serverless function into the user's own Twilio account and returns the per-account URL; `CallRoutingService.autoConfigure` now provisions-then-applies (retired the hardcoded `AUTO_BRIDGE_URL`/`managedBridgeUrl`). Bundles `providers/.../resources/twilio/pstn-bridge.js`. Injectable `Transport`/`Sleeper` seams (no Mockito in providers — hand-rolled scripted fake). 8 provisioner tests + rewritten CallRouting AUTO tests. Full build + test green.
 
 ---
 
@@ -198,6 +202,7 @@ Algorithm:
 | 2026-06-21 | Project planning session. Defined architecture (Java 21 + JavaFX + JAIN-SIP + jlibrtp + SQLite + Twilio + AWS CDK). Designed complete SQLite schema. Designed all 8 JavaFX screens (Apple HIG). Chose color tokens, typography scale, spacing system. Created all 7 scaffold files. |
 | 2026-06-21 | Built domain layer (17 tests), storage layer (15 tests), telephony layer (38 tests), providers layer (28 tests), bespoke Cupertino Light CSS, UI layer (DialerController, IncomingCallController, ActiveCallController + FXML). |
 | 2026-06-21 | Added `services/` module (CallService, ContactService, SmsService, PhoneNumberService — 26 tests). Rewired `ColdCallingApp`. Fixed all blocked issues: circular dependency (TelephonyService.setListener), `var` lambda syntax, `PhoneNumberId(0)` domain invariant violation, `NumberReputation`/`SmsStatus` record instantiation, JAIN-SIP compile classpath. Build: GREEN. 64 tests, 0 failures. |
+| 2026-06-22 | Active-call audio UX (`.plan/active-call-audio-visualization.md`), 3 phases, build GREEN. P1: call-control icon hover/click CSS + mute-red/hold-amber tints. P2: pull-model audio levels — `AudioLevels.rms` (shared), volatile mic/remote levels on `AudioPipeline`, `TelephonyService`/`CallService` getters, new `WaveformBuffer` (6 tests) + `AudioWaveform` Canvas, controller `AnimationTimer` driving adaptive avatar halo + threshold ripple + live mic waveform + mic-on/off glyph. P3: mid-call device switch — `TelephonyService.switchAudioDevices` (volatile `activeRtp`, rebuilds pipeline keeping RTP+recorder), in-call `bi-sliders` ContextMenu (mic/speaker radio submenus), write-through to Settings via app `switchAudioDevices()` `BiConsumer`. |
 
 ---
 

@@ -263,6 +263,20 @@ class CallServiceTest {
         verify(telephony).hangUp();
     }
 
+    // ── audio levels ────────────────────────────────────────────────────────────
+
+    @Test
+    void micLevel_delegatesToTelephony() {
+        when(telephony.micLevel()).thenReturn(0.42);
+        assertThat(callService.micLevel()).isEqualTo(0.42);
+    }
+
+    @Test
+    void remoteLevel_delegatesToTelephony() {
+        when(telephony.remoteLevel()).thenReturn(0.73);
+        assertThat(callService.remoteLevel()).isEqualTo(0.73);
+    }
+
     // ── updateDisposition / updateNotes ─────────────────────────────────────────
 
     @Test
