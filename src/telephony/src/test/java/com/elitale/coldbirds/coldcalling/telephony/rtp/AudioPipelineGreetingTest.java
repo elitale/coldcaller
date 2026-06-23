@@ -65,6 +65,40 @@ class AudioPipelineGreetingTest {
         assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isSameAs(first);
     }
 
+    @Test
+    void muted_suppressesLiveMic() {
+        pipeline.setMuted(true);
+        assertThat(pipeline.isMuted()).isTrue();
+        assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isNull();
+    }
+
+    @Test
+    void unmuted_restoresLiveMic() {
+        pipeline.setMuted(true);
+        pipeline.setMuted(false);
+        assertThat(pipeline.isMuted()).isFalse();
+        assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isSameAs(loudMic);
+    }
+
+    @Test
+    void held_suppressesLiveMic() {
+        pipeline.setHeld(true);
+        assertThat(pipeline.isHeld()).isTrue();
+        assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isNull();
+    }
+
+    @Test
+    void greetingTakesPrecedenceOverMute() {
+        final short[] greeting = frameOf((short) 7);
+        pipeline.playGreeting(List.of(greeting));
+        pipeline.setMuted(true);
+
+        // A deliberately dropped greeting still plays even while muted.
+        assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isSameAs(greeting);
+        // Once the greeting is exhausted, mute resumes suppressing the live mic.
+        assertThat(pipeline.selectOutboundFrame(loudMic, 0.5)).isNull();
+    }
+
     private static short[] frameOf(final short value) {
         final short[] frame = new short[160];
         java.util.Arrays.fill(frame, value);

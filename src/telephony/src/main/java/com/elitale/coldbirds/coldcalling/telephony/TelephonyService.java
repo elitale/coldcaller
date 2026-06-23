@@ -229,6 +229,8 @@ public final class TelephonyService implements SipListener, AutoCloseable {
 
         current.close(); // stops mic/speaker lines; leaves the RTP session + recorder open
         final AudioPipeline next = new AudioPipeline(rtp, inputDevice, outputDevice);
+        next.setMuted(current.isMuted()); // carry mute/hold across the device swap
+        next.setHeld(current.isHeld());
         final CallRecorder rec = activeRecorder;
         if (rec != null) {
             next.setRecorder(rec); // keep recording to the same file, uninterrupted
@@ -268,6 +270,31 @@ public final class TelephonyService implements SipListener, AutoCloseable {
      */
     public boolean isRecording() {
         return activeRecorder != null;
+    }
+
+    /**
+     * Mute or unmute the active call's outbound microphone. No-ops when no call is active.
+     *
+     * @param muted {@code true} to stop transmitting mic audio to the remote party
+     */
+    public void setMuted(final boolean muted) {
+        final AudioPipeline pipeline = activePipeline;
+        if (pipeline != null) {
+            pipeline.setMuted(muted);
+        }
+    }
+
+    /**
+     * Place the active call on local hold, or resume it. While held neither party hears
+     * the other. No-ops when no call is active.
+     *
+     * @param held {@code true} to hold, {@code false} to resume
+     */
+    public void setHold(final boolean held) {
+        final AudioPipeline pipeline = activePipeline;
+        if (pipeline != null) {
+            pipeline.setHeld(held);
+        }
     }
 
     /**

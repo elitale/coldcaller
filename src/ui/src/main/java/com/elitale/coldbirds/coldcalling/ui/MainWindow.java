@@ -546,6 +546,10 @@ public final class MainWindow {
         activeCallController.setAudioLevels(callService::micLevel, callService::remoteLevel);
         // Live recording state drives the in-call REC indicator.
         activeCallController.setRecordingState(callService::isRecording);
+        // Mute + Hold must reach the telephony layer so the remote party is actually
+        // muted / held — not just the button icon.
+        activeCallController.setOnMute(callService::setMuted);
+        activeCallController.setOnHold(callService::setHold);
         // In-call ••• menu switches mic/speaker live and writes the choice through to settings.
         activeCallController.setAudioDevices(audioDeviceManager, onSwitchAudioDevices,
                 settingsService::getAudioInputDevice, settingsService::getAudioOutputDevice);

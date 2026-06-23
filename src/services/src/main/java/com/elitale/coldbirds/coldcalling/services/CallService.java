@@ -245,6 +245,25 @@ public final class CallService implements TelephonyService.TelephonyListener {
     }
 
     /**
+     * Mute or unmute the active call's microphone, so the remote party stops/starts
+     * hearing the rep.
+     *
+     * @param muted {@code true} to stop transmitting mic audio
+     */
+    public void setMuted(final boolean muted) {
+        telephony.setMuted(muted);
+    }
+
+    /**
+     * Place the active call on hold, or resume it. While held neither party hears the other.
+     *
+     * @param held {@code true} to hold, {@code false} to resume
+     */
+    public void setHold(final boolean held) {
+        telephony.setHold(held);
+    }
+
+    /**
      * Drop the configured voicemail greeting into the active call.
      *
      * <p>No-ops (returns empty) when voicemail drop is disabled in settings, no

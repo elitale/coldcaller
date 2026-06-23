@@ -65,6 +65,12 @@ public final class AudioPipeline implements AutoCloseable {
     private final Queue<short[]> greetingFrames = new ConcurrentLinkedQueue<>();
     private volatile boolean greetingActive = false;
 
+    /** When true the live mic is suppressed on the outbound stream (user pressed Mute). */
+    private volatile boolean muted = false;
+
+    /** When true both directions are suppressed locally (user pressed Hold). */
+    private volatile boolean held = false;
+
     /** Live normalized RMS levels (0..1), polled by the UI meter; reset to 0 on close. */
     private volatile double micLevel;
     private volatile double remoteLevel;
@@ -141,6 +147,38 @@ public final class AudioPipeline implements AutoCloseable {
     }
 
     /**
+     * Mute or unmute the outbound microphone. While muted no live mic audio is sent
+     * to the remote party; a queued voicemail greeting still plays, and the mic level
+     * meter and recorder are unaffected.
+     *
+     * @param muted {@code true} to stop transmitting live mic audio
+     */
+    public void setMuted(final boolean muted) {
+        this.muted = muted;
+    }
+
+    /** @return {@code true} while the outbound mic is muted */
+    public boolean isMuted() {
+        return muted;
+    }
+
+    /**
+     * Place the call on local hold, or resume it. While held the mic is not
+     * transmitted and received audio is not played, so neither party hears the
+     * other. Clearing hold resumes both directions.
+     *
+     * @param held {@code true} to hold the call, {@code false} to resume
+     */
+    public void setHeld(final boolean held) {
+        this.held = held;
+    }
+
+    /** @return {@code true} while the call is on local hold */
+    public boolean isHeld() {
+        return held;
+    }
+
+    /**
      * Decide which frame to push to RTP for one 20 ms capture tick. While a
      * greeting is active its frames take precedence over the mic; once exhausted
      * the mic resumes (with silence suppression). Package-private so the
@@ -157,6 +195,9 @@ public final class AudioPipeline implements AutoCloseable {
                 return frame;
             }
             greetingActive = false; // exhausted → restore live mic
+        }
+        if (muted || held) {
+            return null; // suppress live mic while muted or on hold
         }
         return level >= SILENCE_LEVEL ? micPcm : null;
     }
@@ -229,6 +270,8 @@ public final class AudioPipeline implements AutoCloseable {
             rec.onRemoteFrame(pcm);
         }
 
+        if (held) return; // on hold → record continuity is kept, but don't play the remote party
+
         final byte[] bytes = shortsToBytes(pcm);
         speakerLine.write(bytes, 0, bytes.length);
     }
@@ -240,8 +283,29 @@ public final class AudioPipeline implements AutoCloseable {
     private void captureLoop() {
         final byte[] buffer = new byte[BUFFER_BYTES];
         micLine.start();
+        boolean micActive = true;
 
         while (running.get() && !Thread.currentThread().isInterrupted()) {
+            // Mute / hold physically release the mic line: the OS "microphone in use"
+            // indicator goes off and the level meter falls to zero — not just silent
+            // RTP. A queued voicemail greeting still needs the loop running, so it
+            // overrides the release.
+            final boolean releaseMic = (muted || held) && !greetingActive;
+            if (releaseMic) {
+                if (micActive) {
+                    micLine.stop();
+                    micLine.flush();
+                    micActive = false;
+                    micLevel = 0.0;
+                }
+                sleepQuietly();
+                continue;
+            }
+            if (!micActive) {
+                micLine.start(); // resume after unmute / off-hold
+                micActive = true;
+            }
+
             final int read = micLine.read(buffer, 0, buffer.length);
             if (read < BUFFER_BYTES) continue;
 
@@ -260,6 +324,15 @@ public final class AudioPipeline implements AutoCloseable {
             if (outbound != null) {
                 rtpSession.sendAudio(outbound);
             }
+        }
+    }
+
+    /** Idle one frame interval while the mic line is released (muted / on hold). */
+    private static void sleepQuietly() {
+        try {
+            Thread.sleep(20L); // one 20 ms frame; cheap on the audio virtual thread
+        } catch (final InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 
