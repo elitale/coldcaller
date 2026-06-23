@@ -22,10 +22,10 @@
 | Entity | Description |
 |---|---|
 | **PhoneNumber** | E.164 formatted number owned by the user (purchased via Twilio). Has area code, reputation status, daily usage. |
-| **Contact** | A person to call or SMS. Has name, phone, company, tags, call history. |
-| **CallList** | An ordered collection of contacts used by the power dialer. |
-| **Call** | A single call event — direction (in/out), number used, contact, duration, disposition, recording. |
-| **SMS** | An inbound or outbound SMS message, tied to a PhoneNumber and Contact. |
+| **Lead** | A person to call or SMS. Has name, phone, company, tags, call history. |
+| **CallList** | An ordered collection of leads used by the power dialer. |
+| **Call** | A single call event — direction (in/out), number used, lead, duration, disposition, recording. |
+| **SMS** | An inbound or outbound SMS message, tied to a PhoneNumber and Lead. |
 | **PowerDialerSession** | A running power dialer job: current position in list, call count, connect count, state. |
 | **Settings** | User preferences: default number, audio device, voicemail recordings, SIP credentials. |
 
@@ -124,7 +124,7 @@ com.elitale.coldbirds.coldcalling.app.*          # Application wiring
 ### 5.1 Core Rules
 
 - **No nulls in public APIs.** Return `Optional<T>` for nullable single values. Use sealed `Result<T, E>` for operations that can fail. Never return `null` from a public method.
-- **No raw types.** `List<String>` not `List`. `Optional<Contact>` not `Optional`.
+- **No raw types.** `List<String>` not `List`. `Optional<Lead>` not `Optional`.
 - **No unchecked casts** without a comment explaining why it is safe.
 - **No `var`** when the inferred type is not immediately obvious at the call site.
 - **Records for all value objects.** Records are immutable by default — prefer them for domain data.
@@ -148,9 +148,9 @@ public record PhoneNumber(String value) {
     }
 }
 
-public record ContactId(long value) {
-    public ContactId {
-        if (value <= 0) throw new IllegalArgumentException("ContactId must be positive");
+public record LeadId(long value) {
+    public LeadId {
+        if (value <= 0) throw new IllegalArgumentException("LeadId must be positive");
     }
 }
 ```
@@ -203,7 +203,7 @@ public sealed interface Result<T> permits Result.Ok, Result.Err {
 |---|---|---|
 | Files | `PascalCase.java` | `CallRepository.java` |
 | Classes / Records / Interfaces | `PascalCase` | `PhoneNumber`, `CallState` |
-| Methods / Variables | `camelCase` | `findContactById`, `callDuration` |
+| Methods / Variables | `camelCase` | `findLeadById`, `callDuration` |
 | Constants | `UPPER_SNAKE_CASE` | `MAX_CONCURRENT_CALLS` |
 | Packages | `lowercase.dotted` | `com.elitale.coldbirds.coldcalling.domain` |
 | FXML files | `kebab-case.fxml` | `dialer-view.fxml` |
@@ -229,7 +229,7 @@ public sealed interface Result<T> permits Result.Ok, Result.Err {
 ├─────────────────────────────────────────┤
 │         Service Layer (Business)        │
 │  Call management · Power dialer         │
-│  Contact management · SMS handling      │
+│  Lead management · SMS handling         │
 ├─────────────────────────────────────────┤
 │    Telephony Layer (SIP/RTP/Audio)      │
 │  SIP UA · RTP session · G.711 codec     │
@@ -273,13 +273,13 @@ public sealed interface Result<T> permits Result.Ok, Result.Err {
 Platform.runLater(() -> controller.updateCallState(newState));
 
 // ✅ Correct — run blocking I/O off FX thread
-CompletableFuture.runAsync(() -> contactService.importCsv(file))
+CompletableFuture.runAsync(() -> leadService.importCsv(file))
     .thenRunAsync(() -> Platform.runLater(this::refreshTable));
 
 // ❌ Wrong — blocking the FX thread
 // Never do this inside a JavaFX event handler:
 Thread.sleep(1000);
-contactRepository.findAll(); // JDBC blocks
+leadRepository.findAll(); // JDBC blocks
 sipStack.sendRequest(request); // network blocks
 ```
 
@@ -324,7 +324,7 @@ State:    STOPPED → RUNNING → PAUSED → RUNNING → STOPPED
 Trigger:  user start → user pause → user resume → list exhausted / user stop
 
 Algorithm per call:
-1. Get next contact from ordered CallList (by position index).
+1. Get next lead from ordered CallList (by position index).
 2. Dial using configured rotation number (round-robin across assigned numbers).
 3. Wait for SIP response:
    - 200 OK + RTP → call is ACTIVE. Pause auto-advance. User must manually advance or dispose.
@@ -355,7 +355,7 @@ Use `System.getProperty("os.name")` to resolve the correct path.
 - Every table has `updated_at INTEGER NOT NULL`.
 - Use `TEXT` for strings, `INTEGER` for booleans (0/1), `INTEGER` for timestamps (epoch ms), `REAL` for decimals.
 - Foreign keys are always enabled: `PRAGMA foreign_keys = ON` on every connection.
-- Soft deletes: `deleted_at INTEGER` on contacts and call lists. Filter at repository layer.
+- Soft deletes: `deleted_at INTEGER` on leads and call lists. Filter at repository layer.
 
 ### 9.3 Complete Schema
 
@@ -374,8 +374,8 @@ CREATE TABLE phone_numbers (
     updated_at      INTEGER NOT NULL
 );
 
--- Contacts
-CREATE TABLE contacts (
+-- Leads
+CREATE TABLE leads (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     first_name      TEXT,
     last_name       TEXT,
@@ -390,8 +390,8 @@ CREATE TABLE contacts (
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
 );
-CREATE INDEX idx_contacts_phone ON contacts(phone);
-CREATE INDEX idx_contacts_deleted_at ON contacts(deleted_at);
+CREATE INDEX idx_leads_phone ON leads(phone);
+CREATE INDEX idx_leads_deleted_at ON leads(deleted_at);
 
 -- Call lists (power dialer input)
 CREATE TABLE call_lists (
@@ -404,24 +404,24 @@ CREATE TABLE call_lists (
 );
 
 -- Call list membership (ordered)
-CREATE TABLE call_list_contacts (
+CREATE TABLE call_list_leads (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     list_id         INTEGER NOT NULL REFERENCES call_lists(id) ON DELETE CASCADE,
-    contact_id      INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    lead_id         INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
     position        INTEGER NOT NULL,           -- sort order in dialer
     status          TEXT NOT NULL DEFAULT 'pending', -- pending | dialed | skipped
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL,
-    UNIQUE(list_id, contact_id)
+    UNIQUE(list_id, lead_id)
 );
-CREATE INDEX idx_call_list_contacts_list ON call_list_contacts(list_id, position);
+CREATE INDEX idx_call_list_leads_list ON call_list_leads(list_id, position);
 
 -- Call records
 CREATE TABLE calls (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     direction       TEXT NOT NULL,              -- inbound | outbound
     phone_number_id INTEGER NOT NULL REFERENCES phone_numbers(id),
-    contact_id      INTEGER REFERENCES contacts(id),
+    lead_id         INTEGER REFERENCES leads(id),
     remote_number   TEXT NOT NULL,              -- E.164
     status          TEXT NOT NULL,              -- ringing | active | ended | missed | failed
     disposition     TEXT,                       -- interested | not_interested | callback | voicemail | no_answer | busy | dnc
@@ -434,7 +434,7 @@ CREATE TABLE calls (
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
 );
-CREATE INDEX idx_calls_contact ON calls(contact_id);
+CREATE INDEX idx_calls_lead ON calls(lead_id);
 CREATE INDEX idx_calls_started_at ON calls(started_at);
 CREATE INDEX idx_calls_phone_number ON calls(phone_number_id);
 
@@ -443,7 +443,7 @@ CREATE TABLE sms_messages (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     direction       TEXT NOT NULL,              -- inbound | outbound
     phone_number_id INTEGER NOT NULL REFERENCES phone_numbers(id),
-    contact_id      INTEGER REFERENCES contacts(id),
+    lead_id         INTEGER REFERENCES leads(id),
     remote_number   TEXT NOT NULL,              -- E.164
     body            TEXT NOT NULL,
     status          TEXT NOT NULL DEFAULT 'delivered', -- delivered | failed | pending
@@ -451,7 +451,7 @@ CREATE TABLE sms_messages (
     created_at      INTEGER NOT NULL,
     updated_at      INTEGER NOT NULL
 );
-CREATE INDEX idx_sms_contact ON sms_messages(contact_id);
+CREATE INDEX idx_sms_lead ON sms_messages(lead_id);
 CREATE INDEX idx_sms_sent_at ON sms_messages(sent_at);
 
 -- Settings (key-value)
@@ -524,7 +524,7 @@ CREATE TABLE settings (
 | Dialer | `DialerController` | Manual dial pad + recent calls |
 | Incoming Call | `IncomingCallController` | Full-screen ring overlay |
 | Active Call | `ActiveCallController` | Live call controls + notes |
-| Contacts | `ContactsController` | Contact list + search + detail |
+| Leads | `LeadsController` | Lead list + search + detail |
 | Call History | `CallHistoryController` | Full call log with filters |
 | Messages | `MessagesController` | SMS inbox + conversation thread |
 | Power Dialer | `PowerDialerController` | List selection + session control |
@@ -548,7 +548,7 @@ CREATE TABLE settings (
 | Drop voicemail | `V` (during no-answer) | `V` |
 | Add call note | `N` | `N` |
 | Open dialer | `Cmd+D` | `Ctrl+D` |
-| Open contacts | `Cmd+K` | `Ctrl+K` |
+| Open leads | `Cmd+K` | `Ctrl+K` |
 
 ---
 

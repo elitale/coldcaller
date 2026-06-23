@@ -148,7 +148,7 @@ public final class DialerController {
         this.onRecentMessage = Objects.requireNonNull(callback, "callback must not be null");
     }
 
-    /** Pre-fill the number field — e.g. when clicking a number in Contacts. */
+    /** Pre-fill the number field — e.g. when clicking a number in Leads. */
     public void prefillNumber(String number) {
         Objects.requireNonNull(number, "number must not be null");
         numberField.setText(number);

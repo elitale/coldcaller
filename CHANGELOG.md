@@ -33,8 +33,8 @@ Linux.
 - Live Dialed / Connected / Remaining counters and a "next up" queue preview.
 - Configurable no-answer and auto-advance timeouts.
 
-#### Contacts, History & SMS
-- Contact management with company, tags, notes, and per-contact call history.
+#### Leads, History & SMS
+- Lead management with company, tags, notes, and per-lead call history.
 - Non-blocking number-detail side panel with quick actions.
 - Full call history with duration, disposition, and direction filters.
 - Two-way SMS threads per number — outbound via Twilio REST, inbound polled in

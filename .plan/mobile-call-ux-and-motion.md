@@ -28,7 +28,7 @@ The panel was blunt on two of the three asks:
 | 12 | **Big speaker/headset toggle** | **NICE** | Promote from the ••• menu; mid-shift device swaps are common (Alex). |
 | 10 | Voicemail detection / AMD | **NICE (risky)** | Big lift *if accurate*; false positives clip live humans and tank connect rate (Lisa). Prove first. |
 | 11 | Call waiting / 2nd inbound | **NICE** | Real for inbound-heavy teams; edge case for solos (Jake yes; Priya/Carlos meh). |
-| 3 | Avatar on incoming | **NICE (initials only)** | Initials fine; a contact-photo pipeline is wasted on cold prospects (Lisa, Alex indifferent). |
+| 3 | Avatar on incoming | **NICE (initials only)** | Initials fine; a lead-photo pipeline is wasted on cold prospects (Lisa, Alex indifferent). |
 | 4 | Smooth screen transitions | **SKIP-ish** | Keep the existing 220ms active-view fade; **never** extend a transition in front of "dial/talk" (Alex, Carlos). |
 | 2 | Slide-to-answer / decline | **SKIP** | Slower, misfire-prone; solves a touchscreen problem you don't have (4 of 6 reject). |
 | 13 | "Motion everywhere" | **SKIP** | Fatigue + accessibility liability; replaced by the §1 doctrine (all six). |
@@ -53,7 +53,7 @@ This is how we satisfy "add as much motion as possible" responsibly — we **max
 | Pulsing recording dot (§4.2) | "you are being recorded" | Gratuitous crossfades between screens |
 | Dial-pad press flash ≤80ms (§4.3) | "the digit registered" | Any motion >150ms between rep and next action |
 | Connect bloom + ring blue→green (§4.5) | "connected — start talking" | Looping/pulsing that isn't a live state |
-| Power-dialer advance slide ≤200ms (§4.1) | "next contact loaded" | Decorative spinners where a state pill would do |
+| Power-dialer advance slide ≤200ms (§4.1) | "next lead loaded" | Decorative spinners where a state pill would do |
 
 **Accessibility:** add a `KEY_UI_REDUCE_MOTION` setting (Settings → Appearance) + read OS hint. When on: halo/ripple/waveform freeze to a static state, recording dot becomes a static dot, transitions become instant. This is a one-time gate consulted by the existing `AnimationTimer`/`Timeline` start points in [ActiveCallController.java](src/ui/src/main/java/com/elitale/coldbirds/coldcalling/ui/controller/ActiveCallController.java).
 
@@ -71,7 +71,7 @@ Grounded in the current code. "Seam" = where the work attaches.
 | **Mini Call HUD** | Not built. The one floating element allowed by the 6–0 veto ([calling-screen.md §0.5](.plan/calling-screen.md)) | a small always-on-top `Stage` + window focus listener | **MUST — Phase 3** |
 | **Dial-pad press feedback** | Pad buttons are flat, no press motion ([dialer-view.fxml#L33-L64](src/ui/src/main/resources/fxml/dialer-view.fxml#L33)) | CSS `:pressed` + ≤80ms scale on `onDigitPressed` ([DialerController.java#L324](src/ui/src/main/java/com/elitale/coldbirds/coldcalling/ui/controller/DialerController.java#L324)) | **NICE — Phase 1** |
 | **Speaker/headset toggle** | Demoted to the ••• menu (shipped); no primary control | promote a primary "Audio output" control on the call card | **NICE — Phase 3** |
-| **Queue preview** | Power dialer shows only the *current* contact; next-N invisible | new `PowerDialerService.upcoming(int n)` query + a list panel | **NICE — Phase 1/2** |
+| **Queue preview** | Power dialer shows only the *current* lead; next-N invisible | new `PowerDialerService.upcoming(int n)` query + a list panel | **NICE — Phase 1/2** |
 | **Number field = Label + fake caret** | Flagged in [dialer-ux-fixes.md](.plan/dialer-ux-fixes.md) Phase 1 (real `TextField`) | pre-existing plan | **Track separately (dialer-ux-fixes)** |
 | **Country selector bugs** (Up/Down, Enter, stale text) | Flagged in [dialer-ux-fixes.md](.plan/dialer-ux-fixes.md) Phase 2 | pre-existing plan | **Track separately (dialer-ux-fixes)** |
 | **Settings constants vs keys** | `PowerDialerService` hardcodes `NO_ANSWER_MS`/`AUTO_ADVANCE_MS` though `KEY_DIALER_NO_ANSWER_TIMEOUT` / `KEY_DIALER_AUTO_ADVANCE_DELAY` exist | read settings in the service | **Tidy-up — fold into Phase 1** |
@@ -91,7 +91,7 @@ Grounded in the current code. "Seam" = where the work attaches.
 | **Initials avatar** on incoming | **Adapt (initials only)** | Fine as a tiny touch; a *photo pipeline* is wasted on cold prospects. |
 | **Slide-to-answer / decline** | **Reject** | Slower than Space/Esc, mouse-misfire-prone on hot leads; solves a touchscreen-only problem. |
 | **Heavy crossfade/slide** between every screen | **Reject** | Any transition in front of dial/talk is a regression at volume. |
-| Contact photos, video/FaceTime, master volume slider | **Reject (YAGNI)** | Not used by the ICP. |
+| Lead photos, video/FaceTime, master volume slider | **Reject (YAGNI)** | Not used by the ICP. |
 
 ---
 
@@ -101,10 +101,10 @@ Each feature lists **behavior · motion (per §1) · layers · seams · TDD**. B
 
 ### 4.1 Power-dialer disposition → auto-advance (MUST #8) — Phase 1
 
-- **Behavior:** During an **answered** power-dialer call, the rep picks a disposition (chip click or one-key `1–8`, already wired in [ActiveCallController](src/ui/src/main/java/com/elitale/coldbirds/coldcalling/ui/controller/ActiveCallController.java)). When a session is active, that selection **persists the disposition AND advances to the next contact in one action** — *non-blocking*: the note/disposition save runs async ([CallService.updateDisposition] by Call-ID) while `PowerDialerService.advance()` loads the next contact immediately. Closes the dead gap Alex loses ~1 hr/day to.
+- **Behavior:** During an **answered** power-dialer call, the rep picks a disposition (chip click or one-key `1–8`, already wired in [ActiveCallController](src/ui/src/main/java/com/elitale/coldbirds/coldcalling/ui/controller/ActiveCallController.java)). When a session is active, that selection **persists the disposition AND advances to the next lead in one action** — *non-blocking*: the note/disposition save runs async ([CallService.updateDisposition] by Call-ID) while `PowerDialerService.advance()` loads the next lead immediately. Closes the dead gap Alex loses ~1 hr/day to.
 - A small **"Disposition required to advance"** guard is optional (Jake wants tempo, not a nag) → **default off**; advancing without a chip logs the existing reason-based status (today's behavior).
 - **Mobile-likeness:** none — this is the cold-caller-specific superpower mobile phones don't have.
-- **Motion:** the current-contact card **cross-slides** (old card slides up + fades, new slides in from below) in **≤200ms**, once per advance; the Dialed/Connected/Remaining tiles **count-tick** to their new value. Cosmetic only — the dial fires immediately underneath.
+- **Motion:** the current-lead card **cross-slides** (old card slides up + fades, new slides in from below) in **≤200ms**, once per advance; the Dialed/Connected/Remaining tiles **count-tick** to their new value. Cosmetic only — the dial fires immediately underneath.
 - **Layers:** `services` (orchestration seam already exists), `ui` (PowerDialer + ActiveCall controllers), `app` (wire the disposition→advance composition, mirroring how `notifyCallAnswered/Ended` are already composed).
 - **Seams:** [PowerDialerService.advance()](src/services/src/main/java/com/elitale/coldbirds/coldcalling/services/PowerDialerService.java); `CallService.updateDisposition`; the app already composes power-dialer notifications.
 - **Also fold in (tidy-up):** make `PowerDialerService` read `KEY_DIALER_NO_ANSWER_TIMEOUT` / `KEY_DIALER_AUTO_ADVANCE_DELAY` instead of the hardcoded constants.
@@ -130,7 +130,7 @@ Each feature lists **behavior · motion (per §1) · layers · seams · TDD**. B
 
 ### 4.4 Mini Call HUD (MUST #7) — Phase 3
 
-- **Behavior:** A small **always-on-top, frameless, rounded** window appears **only when the main window loses focus during an active call**. Contents: contact name · live timer · **recording dot** · **Mute** · **Hang up** — nothing else. Draggable. Dismisses on refocus or call end. This is the **only** floating element (per the 6–0 veto).
+- **Behavior:** A small **always-on-top, frameless, rounded** window appears **only when the main window loses focus during an active call**. Contents: lead name · live timer · **recording dot** · **Mute** · **Hang up** — nothing else. Draggable. Dismisses on refocus or call end. This is the **only** floating element (per the 6–0 veto).
 - **Mobile-likeness:** adopt — the PiP call pill, the most-justified mobile metaphor for this ICP.
 - **Motion:** fade+scale-in **150ms** on appear; fade-out on dismiss. The recording dot reuses §4.2's pulse.
 - **Layers:** `ui` (new `CallHudWindow` — a secondary `Stage`, `StageStyle.TRANSPARENT`, `setAlwaysOnTop(true)`), `app`/`MainWindow` (focus listener on the primary `Stage`, show/hide while a call is active; reuse the existing mute/hangup callbacks).
@@ -166,8 +166,8 @@ The biggest dependency. Sequenced so the UI degrades gracefully until each piece
 
 ### 4.8 Queue preview (NICE #9) — Phase 1/2
 
-- **Behavior:** In the power dialer, show the **next N contacts** (name + company) below the current-contact card so reps can mentally prep (Jake's pacing ask).
-- **Motion:** the imminent contact subtly highlights; on advance the list scrolls up one (rides §4.1's ≤200ms slide).
+- **Behavior:** In the power dialer, show the **next N leads** (name + company) below the current-lead card so reps can mentally prep (Jake's pacing ask).
+- **Motion:** the imminent lead subtly highlights; on advance the list scrolls up one (rides §4.1's ≤200ms slide).
 - **Layers:** `services` (new `PowerDialerService.upcoming(int n)` read), `ui` (a compact list in [power-dialer-view.fxml](src/ui/src/main/resources/fxml/power-dialer-view.fxml)).
 - **TDD:** `PowerDialerServiceTest` — `upcoming(n)` returns the next n entries, clamps at end, empty when exhausted/idle.
 
@@ -224,7 +224,7 @@ Mini Call HUD (#7, recording dot lives here too) · promote speaker/headset togg
 - **Slide-to-answer / slide-to-decline** — vetoed 4–6; slower and misfire-prone vs Space/Esc.
 - **"Motion everywhere" / ambient animation** — replaced by the §1 signal-only doctrine; fatigue + accessibility liability.
 - **Heavy crossfade/slide between every screen** — keep the existing instant swap + 220ms active-view fade; never gate dial/talk behind animation.
-- **Contact-photo pipeline** — initials only; photos are wasted on cold prospects.
+- **Lead-photo pipeline** — initials only; photos are wasted on cold prospects.
 - **3-way / conference merge, blind/attended transfer, video/FaceTime, master-volume slider** — not used by the ICP.
 - **Recording on/off per-call toggle** — leave recording behavior as-is; only *surface* it (§4.2).
 - **AMD shipped blind** — gate behind accuracy proof.

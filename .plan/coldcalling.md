@@ -93,7 +93,7 @@ coldcalling/src/
 
 ### Value Objects (Records)
 - [ ] `PhoneNumber` — E.164 validated string wrapper
-- [ ] `ContactId`, `PhoneNumberId`, `CallId`, `SmsId`, `CallListId` — positive-long ID wrappers
+- [ ] `LeadId`, `PhoneNumberId`, `CallId`, `SmsId`, `CallListId` — positive-long ID wrappers
 - [ ] `AreaCode` — 3-digit string wrapper
 - [ ] `E164PhoneNumber` (alias for `PhoneNumber` if needed for clarity)
 
@@ -112,18 +112,18 @@ coldcalling/src/
 - [ ] `DomainEvent` sealed interface — `IncomingCall | CallAnswered | CallEnded | IncomingSms | NumberReputationChanged`
 
 ### Domain Entities (Records)
-- [ ] `Contact` — id, firstName, lastName, phone, company, title, email, tags, notes, dnc, createdAt
+- [ ] `Lead` — id, firstName, lastName, phone, company, title, email, tags, notes, dnc, createdAt
 - [ ] `PhoneNumberRecord` — id, number, friendlyName, areaCode, reputation, dailyCalls, active
-- [ ] `Call` — id, direction, phoneNumberId, contactId, remoteNumber, state, disposition, startedAt, answeredAt, endedAt, durationMs, recordingPath, notes
-- [ ] `SmsMessage` — id, direction, phoneNumberId, contactId, remoteNumber, body, status, sentAt
-- [ ] `CallList` — id, name, description, contacts (ordered)
+- [ ] `Call` — id, direction, phoneNumberId, leadId, remoteNumber, state, disposition, startedAt, answeredAt, endedAt, durationMs, recordingPath, notes
+- [ ] `SmsMessage` — id, direction, phoneNumberId, leadId, remoteNumber, body, status, sentAt
+- [ ] `CallList` — id, name, description, leads (ordered)
 - [ ] `PowerDialerSession` — id, callListId, currentPosition, state, dialedCount, connectedCount, startedAt
 
 ### Tests
 - [ ] `PhoneNumberTest` — valid E.164, invalid formats, null rejection
 - [ ] `CallStateTest` — transition logic, switch exhaustiveness
 - [ ] `ResultTest` — Ok/Err construction, mapping
-- [ ] `ContactTest` — record construction, tag parsing
+- [ ] `LeadTest` — record construction, tag parsing
 
 ---
 
@@ -134,11 +134,11 @@ coldcalling/src/
 ### Tasks
 - [ ] `DatabaseManager` — connection pool (single connection for SQLite), WAL mode, foreign keys ON
 - [ ] FlywayDB migration `V1__initial_schema.sql` — all tables from AGENTS.md §9.3
-- [ ] `ContactRepository` — CRUD + search + soft-delete + DNC query
+- [ ] `LeadRepository` — CRUD + search + soft-delete + DNC query
 - [ ] `PhoneNumberRepository` — CRUD + active filter + daily call count update
-- [ ] `CallRepository` — insert + find by contact + find by date range + disposition update
-- [ ] `SmsRepository` — insert + find by contact + thread query
-- [ ] `CallListRepository` — CRUD + contact membership + position reorder
+- [ ] `CallRepository` — insert + find by lead + find by date range + disposition update
+- [ ] `SmsRepository` — insert + find by lead + thread query
+- [ ] `CallListRepository` — CRUD + lead membership + position reorder
 - [ ] `SettingsRepository` — key-value get/put
 - [ ] Tests for all repositories (in-memory SQLite, not mock)
 
@@ -206,7 +206,7 @@ coldcalling/src/
 
 ### Services
 - [ ] `CallService` — `dial()`, `answer()`, `hangup()`, `hold()`, `resume()`, `addNote()`; enforces DNC
-- [ ] `ContactService` — CRUD + import CSV + DNC management + search
+- [ ] `LeadService` — CRUD + import CSV + DNC management + search
 - [ ] `PhoneNumberService` — provision number, release, rotation algorithm
 - [ ] `SmsService` — send + thread query + mark read
 - [ ] `PowerDialerService` — start/pause/resume/stop session; advance algorithm; call record write
@@ -248,7 +248,7 @@ coldcalling/src/
 - [ ] `DialerController` + `dialer-view.fxml` — dial pad, recent calls list, call button
 - [ ] `IncomingCallController` + `incoming-call-view.fxml` — full-screen overlay, answer/reject, caller ID
 - [ ] `ActiveCallController` + `active-call-view.fxml` — timer, mute, hold, hang up, notes field
-- [ ] `ContactsController` + `contacts-view.fxml` — list + search + contact detail panel
+- [ ] `LeadsController` + `leads-view.fxml` — list + search + lead detail panel
 - [ ] `CallHistoryController` + `call-history-view.fxml` — sortable table, filters, export
 - [ ] `MessagesController` + `messages-view.fxml` — inbox list + conversation thread
 - [ ] `PowerDialerController` + `power-dialer-view.fxml` — list selection, session progress, advance/pause/stop
@@ -257,7 +257,7 @@ coldcalling/src/
 ### Shared UI Components
 - [ ] `PhoneNumberPicker` — dropdown of owned numbers
 - [ ] `CallTimer` — live elapsed time label (updates every second, off FX thread)
-- [ ] `ContactCell` — custom `ListCell<Contact>` with avatar, name, number
+- [ ] `LeadCell` — custom `ListCell<Lead>` with avatar, name, number
 - [ ] `StatusBadge` — colored pill for call disposition / number reputation
 - [ ] `EmptyStatePane` — reusable empty state with icon + message + CTA button
 - [ ] `LoadingOverlay` — spinner overlay for async operations
@@ -269,7 +269,7 @@ coldcalling/src/
 - [ ] V → drop voicemail
 - [ ] N → open note on active call
 - [ ] Cmd+D / Ctrl+D → focus dialer
-- [ ] Cmd+K / Ctrl+K → focus contacts
+- [ ] Cmd+K / Ctrl+K → focus leads
 
 ---
 
@@ -281,7 +281,7 @@ coldcalling/src/
 - [ ] Call recording: write WAV file as RTP streams
 - [ ] Voicemail drop: pre-record → detect no-answer → play via RTP
 - [ ] Number reputation polling: background job every 6h, update reputation badge
-- [ ] CSV import for contacts (drag-and-drop, mapping UI)
+- [ ] CSV import for leads (drag-and-drop, mapping UI)
 - [ ] Session summary modal after power dialer completes
 - [ ] Notification: macOS native notification on incoming call (when app is not focused)
 - [ ] Updater: check GitHub Releases on startup, prompt if newer version found

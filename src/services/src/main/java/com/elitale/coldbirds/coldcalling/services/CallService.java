@@ -5,7 +5,7 @@ import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallRepository.NewCall;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
 import org.slf4j.Logger;
@@ -46,7 +46,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
         final String              sipCallId;
         final PhoneNumber         remoteNumber;
         final Optional<PhoneNumberId> localNumberId;
-        final Optional<ContactId> contactId;
+        final Optional<LeadId>    leadId;
         final CallDirection       direction;
         final Instant             startedAt;
         volatile Instant          answeredAt;
@@ -54,12 +54,12 @@ public final class CallService implements TelephonyService.TelephonyListener {
         volatile String           notes = "";
 
         ActiveCall(String sipCallId, PhoneNumber remoteNumber,
-                   Optional<PhoneNumberId> localNumberId, Optional<ContactId> contactId,
+                   Optional<PhoneNumberId> localNumberId, Optional<LeadId> leadId,
                    CallDirection direction, Instant startedAt) {
             this.sipCallId     = sipCallId;
             this.remoteNumber  = remoteNumber;
             this.localNumberId = localNumberId;
-            this.contactId     = contactId;
+            this.leadId        = leadId;
             this.direction     = direction;
             this.startedAt     = startedAt;
         }
@@ -67,7 +67,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     private final TelephonyService      telephony;
     private final CallRepository        callRepo;
-    private final ContactRepository     contactRepo;
+    private final LeadRepository        leadRepo;
     private final PhoneNumberRepository phoneNumberRepo;
     private final SettingsService       settings;
 
@@ -93,12 +93,12 @@ public final class CallService implements TelephonyService.TelephonyListener {
     public CallService(
             TelephonyService      telephony,
             CallRepository        callRepo,
-            ContactRepository     contactRepo,
+            LeadRepository        leadRepo,
             PhoneNumberRepository phoneNumberRepo,
             SettingsService       settings) {
         this.telephony       = Objects.requireNonNull(telephony,       "telephony must not be null");
         this.callRepo        = Objects.requireNonNull(callRepo,        "callRepo must not be null");
-        this.contactRepo     = Objects.requireNonNull(contactRepo,     "contactRepo must not be null");
+        this.leadRepo        = Objects.requireNonNull(leadRepo,        "leadRepo must not be null");
         this.phoneNumberRepo = Objects.requireNonNull(phoneNumberRepo, "phoneNumberRepo must not be null");
         this.settings        = Objects.requireNonNull(settings,        "settings must not be null");
     }
@@ -193,11 +193,11 @@ public final class CallService implements TelephonyService.TelephonyListener {
             return;
         }
 
-        final Optional<ContactId> contactId = contactRepo.findByPhone(remote)
+        final Optional<LeadId> leadId = leadRepo.findByPhone(remote)
                 .map(c -> c.id());
 
         activeCalls.put(sipCallId, new ActiveCall(
-                sipCallId, remote, Optional.of(owned.get().id()), contactId,
+                sipCallId, remote, Optional.of(owned.get().id()), leadId,
                 CallDirection.OUTBOUND, Instant.now()
         ));
         LOG.info("Outbound call {} started → {}", sipCallId, remote.value());
@@ -407,14 +407,14 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     private static Call withDisposition(Call c, CallDisposition disposition) {
         return new Call(
-                c.id(), c.direction(), c.phoneNumberId(), c.contactId(), c.remoteNumber(),
+                c.id(), c.direction(), c.phoneNumberId(), c.leadId(), c.remoteNumber(),
                 Optional.of(disposition), c.startedAt(), c.answeredAt(), c.endedAt(),
                 c.durationMs(), c.recordingPath(), c.notes(), c.createdAt(), Instant.now());
     }
 
     private static Call withNotes(Call c, Optional<String> notes) {
         return new Call(
-                c.id(), c.direction(), c.phoneNumberId(), c.contactId(), c.remoteNumber(),
+                c.id(), c.direction(), c.phoneNumberId(), c.leadId(), c.remoteNumber(),
                 c.disposition(), c.startedAt(), c.answeredAt(), c.endedAt(),
                 c.durationMs(), c.recordingPath(), notes, c.createdAt(), Instant.now());
     }
@@ -472,11 +472,11 @@ public final class CallService implements TelephonyService.TelephonyListener {
             LOG.warn("Inbound call {} arrived on unrecognised local number {}", callId, calledNumber.value());
         }
 
-        final Optional<ContactId> contactId = contactRepo.findByPhone(callerNumber)
+        final Optional<LeadId> leadId = leadRepo.findByPhone(callerNumber)
                 .map(c -> c.id());
 
         activeCalls.put(callId, new ActiveCall(
-                callId, callerNumber, localId, contactId,
+                callId, callerNumber, localId, leadId,
                 CallDirection.INBOUND, Instant.now()
         ));
         onIncomingCallCb.onIncomingCall(callId, callerNumber, calledNumber);
@@ -506,7 +506,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
     // ── Private ───────────────────────────────────────────────────────────────
 
     private boolean isDnc(PhoneNumber number) {
-        return contactRepo.findByPhone(number)
+        return leadRepo.findByPhone(number)
                 .map(c -> c.dnc())
                 .orElse(false);
     }
@@ -530,7 +530,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
         final NewCall newCall = new NewCall(
                 call.direction,
                 call.localNumberId.get(),
-                call.contactId,
+                call.leadId,
                 call.remoteNumber,
                 Optional.of(disposition),
                 call.startedAt,

@@ -142,10 +142,10 @@ public final class CallHudWindow {
      * Show (or refresh) the pill for a live call. Fades + scales in on first appearance;
      * subsequent calls just refresh the name, timer anchor, and mute glyph.
      */
-    public void showFor(final String contactName, final Instant connectedAt, final boolean muted) {
-        Objects.requireNonNull(contactName, "contactName must not be null");
+    public void showFor(final String leadName, final Instant connectedAt, final boolean muted) {
+        Objects.requireNonNull(leadName, "leadName must not be null");
         Objects.requireNonNull(connectedAt, "connectedAt must not be null");
-        nameLabel.setText(contactName);
+        nameLabel.setText(leadName);
         connectedAtMillis = connectedAt.toEpochMilli();
         syncMuted(muted);
         refreshTimer();

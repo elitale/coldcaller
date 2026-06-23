@@ -4,15 +4,15 @@
 <?import javafx.geometry.*?>
 
 <!--
-  Contacts view — searchable contact list with add / call / delete actions.
-  Controller: ContactsController (set via FXMLLoader.setController before load).
+  Leads view — searchable lead list with add / call / delete actions.
+  Controller: LeadsController (set via FXMLLoader.setController before load).
 -->
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
     <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
     <top>
         <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
-            <Label text="Contacts" styleClass="view-title"/>
+            <Label text="Leads" styleClass="view-title"/>
 
             <Region HBox.hgrow="ALWAYS"/>
 
@@ -21,11 +21,11 @@
                        prefWidth="280"
                        styleClass="search-field"/>
 
-            <Button text="Add Contact" onAction="#onAdd" styleClass="accent"/>
+            <Button text="Add Lead" onAction="#onAdd" styleClass="accent"/>
         </HBox>
     </top>
 
-    <!-- ── Contact table ───────────────────────────────────────────────────── -->
+    <!-- ── Lead table ──────────────────────────────────────────────────────── -->
     <center>
         <TableView fx:id="table" styleClass="data-table">
             <BorderPane.margin><Insets left="32" right="32" bottom="0"/></BorderPane.margin>

@@ -1,7 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
@@ -11,10 +11,10 @@ import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.services.CallService;
-import com.elitale.coldbirds.coldcalling.services.ContactService;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
-import com.elitale.coldbirds.coldcalling.ui.support.ContactEditForm;
+import com.elitale.coldbirds.coldcalling.ui.support.LeadEditForm;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.RecordingPlayer;
@@ -61,9 +61,9 @@ import java.util.function.Supplier;
 
 /**
  * Non-blocking, in-window side panel showing everything known about one phone
- * number: quick actions (call, message, add/edit contact, copy), inline
+ * number: quick actions (call, message, add/edit lead, copy), inline
  * disposition + note editing on the latest call, a slim stats strip, the
- * contact card, and a merged call + SMS timeline with recording playback.
+ * lead card, and a merged call + SMS timeline with recording playback.
  *
  * <p>Docked via {@code BorderPane.setRight(panel.getRoot())} so it never blocks
  * the dialer. Dismissed with {@code Esc} or the close button. Keyboard:
@@ -83,7 +83,7 @@ public final class NumberDetailPanel {
             DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
 
     private final CallService callService;
-    private final ContactService contactService;
+    private final LeadService leadService;
     private final SmsService smsService;
     private final PhoneNumberService phoneNumberService;
     private final List<Country> catalog;
@@ -103,11 +103,11 @@ public final class NumberDetailPanel {
     private String currentRaw = "";
     private Optional<PhoneNumber> currentNumber = Optional.empty();
     private Optional<Call> latestCall = Optional.empty();
-    private boolean editingContact = false;
+    private boolean editingLead = false;
 
     public NumberDetailPanel(
             final CallService callService,
-            final ContactService contactService,
+            final LeadService leadService,
             final SmsService smsService,
             final PhoneNumberService phoneNumberService,
             final List<Country> catalog,
@@ -117,7 +117,7 @@ public final class NumberDetailPanel {
             final Runnable onChanged) {
 
         this.callService = Objects.requireNonNull(callService, "callService");
-        this.contactService = Objects.requireNonNull(contactService, "contactService");
+        this.leadService = Objects.requireNonNull(leadService, "leadService");
         this.smsService = Objects.requireNonNull(smsService, "smsService");
         this.phoneNumberService = Objects.requireNonNull(phoneNumberService, "phoneNumberService");
         this.catalog = List.copyOf(Objects.requireNonNull(catalog, "catalog"));
@@ -153,7 +153,7 @@ public final class NumberDetailPanel {
         // Only drop edit mode when switching to a different number; re-showing the
         // same number (e.g. after pressing Edit) must preserve the editing flag.
         if (!rawNumber.equals(this.currentRaw)) {
-            this.editingContact = false;
+            this.editingLead = false;
         }
         this.currentRaw = rawNumber;
         body.getChildren().setAll(muted("Loading…"));
@@ -174,7 +174,7 @@ public final class NumberDetailPanel {
         final PhoneNumber number = parsed.get();
         CompletableFuture
                 .supplyAsync(() -> new Loaded(
-                        contactService.findByPhone(number),
+                        leadService.findByPhone(number),
                         callService.findByRemoteNumber(number),
                         smsService.findThread(number),
                         ownedNumbersById()))
@@ -212,7 +212,7 @@ public final class NumberDetailPanel {
         return byId;
     }
 
-    private record Loaded(Optional<Contact> contact, List<Call> calls, List<SmsMessage> sms,
+    private record Loaded(Optional<Lead> lead, List<Call> calls, List<SmsMessage> sms,
                           Map<PhoneNumberId, String> ownedNumbers) {}
 
     // ── Rendering ───────────────────────────────────────────────────────────────
@@ -242,22 +242,22 @@ public final class NumberDetailPanel {
         playButtons.clear();
         latestCall = data.calls().isEmpty() ? Optional.empty() : Optional.of(data.calls().get(0));
 
-        final String primary = data.contact()
-                .map(Contact::displayName)
+        final String primary = data.lead()
+                .map(Lead::displayName)
                 .filter(s -> !s.equals(currentRaw))
                 .orElse(currentRaw);
 
         body.getChildren().setAll(
                 headerBar(primary),
                 subHeader(),
-                actionBar(data.contact()),
+                actionBar(data.lead()),
                 new Separator());
 
-        if (editingContact) {
-            body.getChildren().add(new ContactEditForm(
-                    contactService, currentNumber.orElseThrow(), data.contact(),
-                    () -> { editingContact = false; onChanged.run(); show(currentRaw); },
-                    () -> { editingContact = false; show(currentRaw); }).getRoot());
+        if (editingLead) {
+            body.getChildren().add(new LeadEditForm(
+                    leadService, currentNumber.orElseThrow(), data.lead(),
+                    () -> { editingLead = false; onChanged.run(); show(currentRaw); },
+                    () -> { editingLead = false; show(currentRaw); }).getRoot());
             return;
         }
 
@@ -266,7 +266,7 @@ public final class NumberDetailPanel {
                 noteZone(),
                 new Separator(),
                 statsStrip(data.calls()),
-                contactCard(data.contact()),
+                leadCard(data.lead()),
                 new Separator(),
                 timeline(data.calls(), data.sms(), data.ownedNumbers()));
         refreshPlayButtons();
@@ -324,7 +324,7 @@ public final class NumberDetailPanel {
         return new VBox(4, numberRow, locRow);
     }
 
-    private HBox actionBar(final Optional<Contact> contact) {
+    private HBox actionBar(final Optional<Lead> lead) {
         final boolean valid = currentNumber.isPresent();
         final Button call = new Button("Call");
         call.getStyleClass().addAll("accent", "detail-action");
@@ -336,9 +336,9 @@ public final class NumberDetailPanel {
         message.setOnAction(e -> onMessage.accept(currentRaw));
         message.setDisable(!valid);
 
-        final Button edit = new Button(contact.isPresent() ? "Edit" : "+ Add");
+        final Button edit = new Button(lead.isPresent() ? "Edit" : "+ Add");
         edit.getStyleClass().addAll("flat", "detail-action");
-        edit.setOnAction(e -> openContactEditor());
+        edit.setOnAction(e -> openLeadEditor());
         edit.setDisable(!valid);
 
         final HBox bar = new HBox(8, call, message, edit);
@@ -413,15 +413,15 @@ public final class NumberDetailPanel {
         return new VBox(6, strip);
     }
 
-    private VBox contactCard(final Optional<Contact> contact) {
-        final VBox box = new VBox(4, sectionTitle("Lead / Contact"));
-        if (contact.isEmpty()) {
-            box.getChildren().add(muted("No contact saved for this number."));
+    private VBox leadCard(final Optional<Lead> lead) {
+        final VBox box = new VBox(4, sectionTitle("Lead"));
+        if (lead.isEmpty()) {
+            box.getChildren().add(muted("No lead saved for this number."));
             return box;
         }
-        final Contact c = contact.get();
+        final Lead c = lead.get();
         final Label name = new Label(c.displayName() + (c.dnc() ? "   • DNC" : ""));
-        name.getStyleClass().add("detail-contact-name");
+        name.getStyleClass().add("detail-lead-name");
         box.getChildren().add(name);
 
         final String org = List.of(c.company().orElse(""), c.title().orElse("")).stream()
@@ -537,9 +537,9 @@ public final class NumberDetailPanel {
         status.setManaged(show);
     }
 
-    private void openContactEditor() {
+    private void openLeadEditor() {
         if (currentNumber.isEmpty()) return;
-        editingContact = true;
+        editingLead = true;
         show(currentRaw);
     }
 
@@ -571,7 +571,7 @@ public final class NumberDetailPanel {
         final boolean handled = switch (event.getCode()) {
             case C -> { onCall.accept(currentRaw); yield currentNumber.isPresent(); }
             case M -> { onMessage.accept(currentRaw); yield currentNumber.isPresent(); }
-            case E -> { openContactEditor(); yield currentNumber.isPresent(); }
+            case E -> { openLeadEditor(); yield currentNumber.isPresent(); }
             case I -> applyHotkeyDisposition(new CallDisposition.Interested());
             case X -> applyHotkeyDisposition(new CallDisposition.NotInterested());
             case V -> applyHotkeyDisposition(new CallDisposition.Voicemail());

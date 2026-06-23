@@ -2,28 +2,28 @@ package com.elitale.coldbirds.coldcalling.storage;
 
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
-import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteLeadRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class SqliteContactRepositoryTest {
+class SqliteLeadRepositoryTest {
 
     private DatabaseManager db;
-    private ContactRepository repo;
+    private LeadRepository repo;
 
     @BeforeEach
     void setUp() throws Exception {
         db = DatabaseManager.inMemory();
-        repo = new SqliteContactRepository(db.connection());
+        repo = new SqliteLeadRepository(db.connection());
     }
 
     @Test
     void saveAndFindById() {
-        var nc = new ContactRepository.NewContact(
+        var nc = new LeadRepository.NewLead(
                 Optional.of("Alice"),
                 Optional.of("Smith"),
                 new PhoneNumber("+14155550001"),
@@ -35,16 +35,16 @@ class SqliteContactRepositoryTest {
         );
         var result = repo.save(nc);
         assertThat(result.isOk()).isTrue();
-        var c = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.Contact>) result).value();
+        var c = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.Lead>) result).value();
         assertThat(c.firstName()).contains("Alice");
         assertThat(c.tags()).containsExactly("vip", "warm");
         assertThat(repo.findById(c.id())).isPresent();
     }
 
     @Test
-    void findByPhoneReturnsContact() {
+    void findByPhoneReturnsLead() {
         var phone = new PhoneNumber("+14155550002");
-        var nc = new ContactRepository.NewContact(
+        var nc = new LeadRepository.NewLead(
                 Optional.of("Bob"), Optional.empty(), phone,
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty()
@@ -55,13 +55,13 @@ class SqliteContactRepositoryTest {
     }
 
     @Test
-    void softDeleteHidesContact() {
-        var nc = new ContactRepository.NewContact(
+    void softDeleteHidesLead() {
+        var nc = new LeadRepository.NewLead(
                 Optional.of("Del"), Optional.empty(), new PhoneNumber("+14155550003"),
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty()
         );
-        var c = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.Contact>) repo.save(nc)).value();
+        var c = ((Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.Lead>) repo.save(nc)).value();
         assertThat(repo.delete(c.id()).isOk()).isTrue();
         assertThat(repo.findById(c.id())).isEmpty();
         assertThat(repo.findAll()).isEmpty();
@@ -69,12 +69,12 @@ class SqliteContactRepositoryTest {
 
     @Test
     void searchMatchesNameAndPhone() {
-        var nc1 = new ContactRepository.NewContact(
+        var nc1 = new LeadRepository.NewLead(
                 Optional.of("Charlie"), Optional.of("Brown"), new PhoneNumber("+14155550004"),
                 Optional.of("Brown Inc"), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty()
         );
-        var nc2 = new ContactRepository.NewContact(
+        var nc2 = new LeadRepository.NewLead(
                 Optional.of("Dana"), Optional.empty(), new PhoneNumber("+14155550005"),
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty()

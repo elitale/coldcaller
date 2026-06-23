@@ -45,7 +45,7 @@ So the panel's **top zone = action zone**, keyboard-reachable, completable in <2
 ### P0 — build first
 1. **Container → non-blocking side panel.** Highest leverage. Without it the rest is lipstick. **Cost note:** `MainWindow` today only swaps the *center* pane via `showCenter(Parent)`; there is **no right-dock region yet**. Phase A's real work is the layout refactor to host a right slide-over, not the contents.
 2. **Inline disposition set/edit on historical calls.** #1 post-call action. **Correction (verified in code):** the repository plumbing already exists — `CallRepository.findById(CallId)` + `CallRepository.update(Call)` are present. We only need new **service** methods (`CallService.updateDisposition(CallId, …)`, `updateNotes(CallId, …)`) that read-modify-write the `Call` record and bump its existing `updatedAt`. **No new repo method and no migration are required for the basic edit.** A dedicated audit trail (`changed_by` / `disposition_changed_at`) is a *multi-seat* concern and is **deferred** (see §7 Q3 and §8 Edge cases) — it carries a large blast radius (new `Call` fields → `NewCall` → row mapper → update SQL → every `Call` construction site).
-3. **Quick actions + per-call note:** Call (`onDial`), Message (`messagesController.openConversation`), Copy number, **Add to contacts** for unknown inbound leads (`ContactService.save`), one-line note field (persisted via `CallService.updateNotes(CallId, …)`).
+3. **Quick actions + per-call note:** Call (`onDial`), Message (`messagesController.openConversation`), Copy number, **Add to leads** for unknown inbound leads (`LeadService.save`), one-line note field (persisted via `CallService.updateNotes(CallId, …)`).
 4. **Keyboard shortcuts:** `C` call · `M` message · `E` edit · `Esc` close · digit/letter hotkeys per disposition. Cheap, disproportionate power-user love, signals "modern app."
 
 ### P1 — next
@@ -56,7 +56,7 @@ So the panel's **top zone = action zone**, keyboard-reachable, completable in <2
 7. **Slim stats strip:** `last contacted` + `total calls` + `total talk time` only. Small, below the action zone.
 
 ### Cut (this scope)
-- **"Best time-of-day to reach" and per-contact "connect rate."** Statistically meaningless at single-contact sample sizes; flagged as noise by 3 buyers. Belongs in aggregate analytics later, not here.
+- **"Best time-of-day to reach" and per-lead "connect rate."** Statistically meaningless at single-lead sample sizes; flagged as noise by 3 buyers. Belongs in aggregate analytics later, not here.
 - **"Set callback reminder" button — UNLESS the callback resurfaces in the work queue.** A reminder that doesn't resurface is theater. Either scope it as *capture here → resurface in dialer/queue at the promised time*, or omit the button until that loop exists.
 
 ---
@@ -67,11 +67,11 @@ So the panel's **top zone = action zone**, keyboard-reachable, completable in <2
 |---|---|---|
 | Header (number, flag, country, dial code) | `NumberDetailDialog.header()`, `CountryLookup`, `CountryCatalog.ALL`, `FlagImages` | — |
 | Local-time label | `Country.zone()` + `DateTimeFormatter` | tiny label |
-| Contact card | `NumberDetailDialog.contactCard()`, `ContactService.findByPhone` | — |
+| Lead card | `NumberDetailDialog.leadCard()`, `LeadService.findByPhone` | — |
 | Quick Call | `onDial` (already wired) | button + `C` accel |
 | Quick Message | `MessagesController.openConversation(PhoneNumber)` (already added) | button + `M` accel |
-| Add to contacts | `ContactService.save(NewContact)` | small inline form/dialog + `E` |
-| Edit contact | `ContactService.update(Contact)` | inline edit affordance |
+| Add to leads | `LeadService.save(NewLead)` | small inline form/dialog + `E` |
+| Edit lead | `LeadService.update(Lead)` | inline edit affordance |
 | Copy number | — | clipboard write |
 | Call history list | `NumberDetailDialog.callsSection/callRow`, `RecordingPlayer` | — |
 | SMS in timeline | `SmsService.findThread(PhoneNumber)` | merge + render SMS rows |
@@ -90,13 +90,13 @@ So the panel's **top zone = action zone**, keyboard-reachable, completable in <2
 - Loading, empty, and error states for every async section (history, timeline, save actions).
 - Disposition/note write-through must update the **same** `Call` record (no data silo) — managers need it to be the syncable source of truth.
 - New domain/service work is TDD: service test for retroactive disposition/notes edit (read-modify-write via `update`, asserts `updatedAt` bumped), formatter tests for timeline merge ordering, and a guard test for non-E.164 numbers.
-- Keep controllers thin: panel is a UI component; persistence goes through `CallService` / `ContactService` only.
+- Keep controllers thin: panel is a UI component; persistence goes through `CallService` / `LeadService` only.
 
 ---
 
 ## 6. Suggested phasing
 
-- **Phase A (P0):** side-panel container + quick actions + copy + add-to-contacts + keyboard shortcuts. (UI-only; reuses existing services.)
+- **Phase A (P0):** side-panel container + quick actions + copy + add-to-leads + keyboard shortcuts. (UI-only; reuses existing services.)
 - **Phase B (P0):** historical disposition + note edit via new `CallService.updateDisposition/updateNotes` (reuses existing `CallRepository.findById`/`update`; no migration). (Service + UI; TDD.)
 - **Phase C (P1):** combined call+SMS timeline + auto timezone label.
 - **Phase D (P2):** slim stats strip.
@@ -118,7 +118,7 @@ Each phase ends green on `./gradlew build` + new tests.
 1. **Non-E.164 remote numbers crash `PhoneNumber`.** `findByRemoteNumber`, `findThread`, and `findByPhone` all take a `PhoneNumber`, whose compact constructor throws `IllegalArgumentException` for anything not matching `\+[1-9]\d{1,14}`. Inbound calls from private/unknown/short-code/malformed caller-IDs will blow up the panel on open. **Guard:** wrap construction; if invalid, show the raw string read-only with actions (Call/Message/Add) disabled, mirroring the existing `openMessageThread` try/catch.
 2. **Auto-disposition is misleading.** `CallService.persistCallRecord` defaults a normal hung-up call (`reason == "bye"`) to **`NotInterested`** via `mapReasonToDisposition`. So historical dispositions the panel shows are often an *auto-guess*, not a real outcome. This strengthens the case for retroactive editing, and the panel should treat a shown disposition as editable rather than authoritative. (Optional: visually distinguish auto-set vs user-set — but there's no flag for it today, so YAGNI unless asked.)
 3. **`Failed` disposition carries a `reason` string.** `CallDisposition.Failed(reason)` isn't a simple toggle. The user-selectable disposition chips are the 7 non-`Failed` cases; don't render `Failed` as a settable chip.
-4. **"Add to contacts" does not back-link history.** Existing `Call` rows store `contactId = Optional.empty()`. Saving a new contact won't retroactively populate `contactId` on past calls, so `findByContact` still misses them. The panel itself is fine (it queries by `remoteNumber`), but don't promise CRM/contact-history linkage of past calls without a back-fill step. (Defer back-fill — YAGNI.)
+4. **"Add to leads" does not back-link history.** Existing `Call` rows store `leadId = Optional.empty()`. Saving a new lead won't retroactively populate `leadId` on past calls, so `findByLead` still misses them. The panel itself is fine (it queries by `remoteNumber`), but don't promise CRM/lead-history linkage of past calls without a back-fill step. (Defer back-fill — YAGNI.)
 5. **Timeline timestamp normalization.** `Call` orders by `startedAt`; `SmsMessage` by `sentAt`. The merge must map both to a common `Instant` key before sorting, and decide tie-breaking when a call and text share a second.
 6. **Live updates while a call is active.** If the panel is open on a number that's currently in an active call, the in-memory `ActiveCall` disposition/notes won't be in the persisted history yet. Decide whether the panel refreshes on `onCallEnded` (it should — `MainWindow.refreshRecentCalls()` already fires there; the open panel should re-query too).
 ```

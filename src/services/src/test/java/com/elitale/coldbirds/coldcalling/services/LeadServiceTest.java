@@ -1,8 +1,8 @@
 package com.elitale.coldbirds.coldcalling.services;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
@@ -14,17 +14,17 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class ContactServiceTest {
+class LeadServiceTest {
 
-    @Mock ContactRepository repo;
-    ContactService service;
+    @Mock LeadRepository repo;
+    LeadService service;
 
     private static final PhoneNumber PHONE = new PhoneNumber("+12025551234");
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new ContactService(repo);
+        service = new LeadService(repo);
     }
 
     @Test
@@ -42,33 +42,33 @@ class ContactServiceTest {
     }
 
     @Test
-    void isDnc_trueWhenContactMarked() {
-        when(repo.findByPhone(PHONE)).thenReturn(Optional.of(dncContact(true)));
+    void isDnc_trueWhenLeadMarked() {
+        when(repo.findByPhone(PHONE)).thenReturn(Optional.of(dncLead(true)));
         assertThat(service.isDnc(PHONE)).isTrue();
     }
 
     @Test
-    void isDnc_falseWhenContactNotMarked() {
-        when(repo.findByPhone(PHONE)).thenReturn(Optional.of(dncContact(false)));
+    void isDnc_falseWhenLeadNotMarked() {
+        when(repo.findByPhone(PHONE)).thenReturn(Optional.of(dncLead(false)));
         assertThat(service.isDnc(PHONE)).isFalse();
     }
 
     @Test
-    void isDnc_falseWhenContactUnknown() {
+    void isDnc_falseWhenLeadUnknown() {
         when(repo.findByPhone(PHONE)).thenReturn(Optional.empty());
         assertThat(service.isDnc(PHONE)).isFalse();
     }
 
     @Test
     void save_delegatesToRepo() {
-        // ContactService.NewContact is the service-layer DTO; internally it
-        // maps to ContactRepository.NewContact before calling repo.save().
-        final var nc = new ContactService.NewContact(
+        // LeadService.NewLead is the service-layer DTO; internally it
+        // maps to LeadRepository.NewLead before calling repo.save().
+        final var nc = new LeadService.NewLead(
                 Optional.of("Alice"), Optional.of("Smith"), PHONE,
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty()
         );
-        final var repoNc = new ContactRepository.NewContact(
+        final var repoNc = new LeadRepository.NewLead(
                 nc.firstName(), nc.lastName(), nc.phone(),
                 nc.company(), nc.title(), nc.email(), nc.tags(), nc.notes()
         );
@@ -79,14 +79,14 @@ class ContactServiceTest {
 
     @Test
     void delete_delegatesToRepo() {
-        when(repo.delete(new ContactId(1L))).thenReturn(Result.ok(null));
-        service.delete(new ContactId(1L));
-        verify(repo).delete(new ContactId(1L));
+        when(repo.delete(new LeadId(1L))).thenReturn(Result.ok(null));
+        service.delete(new LeadId(1L));
+        verify(repo).delete(new LeadId(1L));
     }
 
-    private static Contact dncContact(boolean dnc) {
-        return new Contact(
-                new ContactId(1L),
+    private static Lead dncLead(boolean dnc) {
+        return new Lead(
+                new LeadId(1L),
                 Optional.empty(), Optional.empty(),
                 PHONE,
                 Optional.empty(), Optional.empty(), Optional.empty(),

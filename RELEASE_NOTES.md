@@ -33,7 +33,7 @@ Mini Call HUD; local WAV recording.
 **Power dialer** — hands-free auto-dial with Start / Pause / Stop, auto-advance on
 disposition/busy/no-answer/failure, live counters, and configurable timeouts.
 
-**Contacts, history & SMS** — contact management with tags and notes, a
+**Leads, history & SMS** — lead management with tags and notes, a
 non-blocking number-detail panel, filterable call history, two-way SMS, and
 service-level DNC enforcement before every dial.
 

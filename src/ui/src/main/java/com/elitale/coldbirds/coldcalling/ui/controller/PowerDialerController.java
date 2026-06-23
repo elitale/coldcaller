@@ -1,7 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.model.CallList;
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Threading: all FXML callbacks run on the FX Application Thread.
  * Service calls that do I/O are dispatched to background via CompletableFuture.
- * Service event callbacks (session/contact/stats changed) fire on non-FX threads
+ * Service event callbacks (session/lead/stats changed) fire on non-FX threads
  * and are routed to the FX thread via Platform.runLater().
  */
 public final class PowerDialerController {
@@ -35,10 +35,10 @@ public final class PowerDialerController {
     @FXML private Label              statsLabel;
 
     @FXML private Label  noActiveLabel;
-    @FXML private VBox   contactDetails;
-    @FXML private Label  contactNameLabel;
-    @FXML private Label  contactPhoneLabel;
-    @FXML private Label  contactCompanyLabel;
+    @FXML private VBox   leadDetails;
+    @FXML private Label  leadNameLabel;
+    @FXML private Label  leadPhoneLabel;
+    @FXML private Label  leadCompanyLabel;
 
     @FXML private Label  dialedCountLabel;
     @FXML private Label  connectedCountLabel;
@@ -50,16 +50,16 @@ public final class PowerDialerController {
     @FXML private Button advanceBtn;
 
     @FXML private VBox             upNextSection;
-    @FXML private ListView<Contact> upNextView;
+    @FXML private ListView<Lead> upNextView;
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    /** How many upcoming contacts to preview in the "Up Next" queue. */
+    /** How many upcoming leads to preview in the "Up Next" queue. */
     private static final int UP_NEXT_LIMIT = 5;
 
     private PowerDialerService powerDialerService;
     private final ObservableList<CallList> lists  = FXCollections.observableArrayList();
-    private final ObservableList<Contact>  upNext = FXCollections.observableArrayList();
+    private final ObservableList<Lead>  upNext = FXCollections.observableArrayList();
 
     /** Required no-arg constructor for FXMLLoader. */
     public PowerDialerController() {}
@@ -78,7 +78,7 @@ public final class PowerDialerController {
             protected void updateItem(CallList item, boolean empty) {
                 super.updateItem(item, empty);
                 setText((empty || item == null) ? null
-                        : item.name() + " (" + item.size() + " contacts)");
+                        : item.name() + " (" + item.size() + " leads)");
             }
         });
         callListView.setPlaceholder(new Label("No call lists. Create one to get started."));
@@ -89,7 +89,7 @@ public final class PowerDialerController {
         upNextView.setItems(upNext);
         upNextView.setCellFactory(lv -> new ListCell<>() {
             @Override
-            protected void updateItem(Contact item, boolean empty) {
+            protected void updateItem(Lead item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
@@ -103,8 +103,8 @@ public final class PowerDialerController {
 
         powerDialerService.setOnSessionChanged(
                 s -> Platform.runLater(() -> applySessionState(s)));
-        powerDialerService.setOnContactChanged(
-                c -> Platform.runLater(() -> applyContact(c)));
+        powerDialerService.setOnLeadChanged(
+                c -> Platform.runLater(() -> applyLead(c)));
         powerDialerService.setOnStatsChanged(
                 stats -> Platform.runLater(() -> applyStats(stats)));
     }
@@ -213,23 +213,23 @@ public final class PowerDialerController {
         }
     }
 
-    private void applyContact(Optional<Contact> contactOpt) {
-        if (contactOpt.isEmpty()) {
+    private void applyLead(Optional<Lead> leadOpt) {
+        if (leadOpt.isEmpty()) {
             noActiveLabel.setVisible(true);
             noActiveLabel.setManaged(true);
-            contactDetails.setVisible(false);
-            contactDetails.setManaged(false);
+            leadDetails.setVisible(false);
+            leadDetails.setManaged(false);
             advanceBtn.setDisable(true);
             return;
         }
-        final Contact c = contactOpt.get();
-        contactNameLabel.setText(c.displayName());
-        contactPhoneLabel.setText(c.phone().value());
-        contactCompanyLabel.setText(c.company().orElse(""));
+        final Lead c = leadOpt.get();
+        leadNameLabel.setText(c.displayName());
+        leadPhoneLabel.setText(c.phone().value());
+        leadCompanyLabel.setText(c.company().orElse(""));
         noActiveLabel.setVisible(false);
         noActiveLabel.setManaged(false);
-        contactDetails.setVisible(true);
-        contactDetails.setManaged(true);
+        leadDetails.setVisible(true);
+        leadDetails.setManaged(true);
         refreshUpNext();
     }
 
@@ -258,8 +258,8 @@ public final class PowerDialerController {
         advanceBtn.setDisable(true);
         noActiveLabel.setVisible(true);
         noActiveLabel.setManaged(true);
-        contactDetails.setVisible(false);
-        contactDetails.setManaged(false);
+        leadDetails.setVisible(false);
+        leadDetails.setManaged(false);
     }
 
     private static void showAlert(String title, String message) {

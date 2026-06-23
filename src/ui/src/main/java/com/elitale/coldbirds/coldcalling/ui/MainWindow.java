@@ -2,13 +2,13 @@ package com.elitale.coldbirds.coldcalling.ui;
 
 import com.elitale.coldbirds.coldcalling.services.CallService;
 import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
-import com.elitale.coldbirds.coldcalling.services.ContactService;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
@@ -17,7 +17,7 @@ import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.ui.controller.ActiveCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.CallHistoryController;
-import com.elitale.coldbirds.coldcalling.ui.controller.ContactsController;
+import com.elitale.coldbirds.coldcalling.ui.controller.LeadsController;
 import com.elitale.coldbirds.coldcalling.ui.controller.DialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.IncomingCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
@@ -67,7 +67,7 @@ public final class MainWindow {
 
     /** All services the window and its controllers need. */
     public record Dependencies(
-            ContactService     contactService,
+            LeadService        leadService,
             CallService        callService,
             SmsService         smsService,
             PhoneNumberService phoneNumberService,
@@ -87,7 +87,7 @@ public final class MainWindow {
     private static final double DEFAULT_HEIGHT = 820;
 
     private final Stage              stage;
-    private final ContactService     contactService;
+    private final LeadService        leadService;
     private final CallService        callService;
     private final SmsService         smsService;
     private final PhoneNumberService phoneNumberService;
@@ -104,7 +104,7 @@ public final class MainWindow {
     private DialerController       dialerController;
     private IncomingCallController incomingCallController;
     private ActiveCallController   activeCallController;
-    private ContactsController     contactsController;
+    private LeadsController        leadsController;
     private CallHistoryController  callHistoryController;
     private MessagesController     messagesController;
     private PowerDialerController  powerDialerController;
@@ -134,7 +134,7 @@ public final class MainWindow {
     private Parent dialerView;
     private Parent incomingCallView;
     private Parent activeCallView;
-    private Parent contactsView;
+    private Parent leadsView;
     private Parent callHistoryView;
     private Parent messagesView;
     private Parent powerDialerView;
@@ -155,7 +155,7 @@ public final class MainWindow {
     public MainWindow(Stage stage, Dependencies deps) {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
         Objects.requireNonNull(deps, "deps must not be null");
-        this.contactService     = Objects.requireNonNull(deps.contactService(),     "contactService");
+        this.leadService        = Objects.requireNonNull(deps.leadService(),        "leadService");
         this.callService        = Objects.requireNonNull(deps.callService(),        "callService");
         this.smsService         = Objects.requireNonNull(deps.smsService(),         "smsService");
         this.phoneNumberService = Objects.requireNonNull(deps.phoneNumberService(), "phoneNumberService");
@@ -263,7 +263,7 @@ public final class MainWindow {
 
     /**
      * Register the handler fired when the rep picks a disposition during the wrap-up phase.
-     * The power dialer uses it to auto-advance to the next contact. May be called before
+     * The power dialer uses it to auto-advance to the next lead. May be called before
      * {@link #show()} builds the controller; the handler is then applied once it exists.
      */
     public void setOnWrapUpDispositionChosen(Runnable handler) {
@@ -346,20 +346,20 @@ public final class MainWindow {
         });
     }
 
-    /** Resolve a remote number to a display participant (contact + country). */
+    /** Resolve a remote number to a display participant (lead + country). */
     private CallParticipant participantFor(String number) {
-        Optional<Contact> contact = Optional.empty();
+        Optional<Lead> lead = Optional.empty();
         Optional<Call> priorCall = Optional.empty();
         try {
             final PhoneNumber remote = new PhoneNumber(number);
-            contact = contactService.findByPhone(remote);
+            lead = leadService.findByPhone(remote);
             final List<Call> history = callService.findByRemoteNumber(remote);
             priorCall = history.isEmpty() ? Optional.empty() : Optional.of(history.get(0));
         } catch (final IllegalArgumentException ignored) {
             // Non-E.164 caller id — fall back to number-only display.
         }
         final Optional<Country> country = CountryLookup.byE164(CountryCatalog.ALL, number);
-        return CallParticipant.of(number, contact, country, priorCall);
+        return CallParticipant.of(number, lead, country, priorCall);
     }
 
     /** Return to the dialer view. Safe to call from any thread. */
@@ -430,15 +430,15 @@ public final class MainWindow {
                         call.startedAt(),
                         callService.findByRemoteNumber(call.remoteNumber()).size(),
                         CountryLookup.byE164(CountryCatalog.ALL, call.remoteNumber().value()),
-                        contactService.findByPhone(call.remoteNumber())))
+                        leadService.findByPhone(call.remoteNumber())))
                 .toList();
     }
 
-    /** Open the number-detail panel (contact/lead + call history + recordings). */
+    /** Open the number-detail panel (lead + call history + recordings). */
     private void openNumberDetail(String number) {
         if (numberDetailPanel == null) {
             numberDetailPanel = new NumberDetailPanel(
-                    callService, contactService, smsService, phoneNumberService, CountryCatalog.ALL,
+                    callService, leadService, smsService, phoneNumberService, CountryCatalog.ALL,
                     onDial, this::openMessageThread, this::closeNumberDetail, this::refreshRecentCalls);
         }
         numberDetailPanel.show(number);
@@ -476,11 +476,11 @@ public final class MainWindow {
         callHistoryController.setOnDial(onDial);
         callHistoryView = loadFxml("/fxml/call-history-view.fxml", callHistoryController);
 
-        // ── Contacts
-        contactsController = new ContactsController();
-        contactsController.setContactService(contactService);
-        contactsController.setOnDial(onDial);
-        contactsView = loadFxml("/fxml/contacts-view.fxml", contactsController);
+        // ── Leads
+        leadsController = new LeadsController();
+        leadsController.setLeadService(leadService);
+        leadsController.setOnDial(onDial);
+        leadsView = loadFxml("/fxml/leads-view.fxml", leadsController);
 
         // ── Messages
         messagesController = new MessagesController();
@@ -665,7 +665,7 @@ public final class MainWindow {
         appName.setPadding(new Insets(0, 0, 12, 4));
 
         Button dialerBtn      = navButton("Dialer",       () -> showCenter(dialerView));
-        Button contactsBtn    = navButton("Contacts",     () -> showCenter(contactsView));
+        Button leadsBtn       = navButton("Leads",        () -> showCenter(leadsView));
         Button historyBtn     = navButton("Call History", () -> showCenter(callHistoryView));
         Button messagesBtn    = navButton("Messages",     () -> {
             messagesController.refresh();
@@ -686,7 +686,7 @@ public final class MainWindow {
 
         sidebar.getChildren().addAll(
                 appName, new Separator(), gap(8),
-                dialerBtn, contactsBtn, historyBtn, messagesBtn, powerDialerBtn,
+                dialerBtn, leadsBtn, historyBtn, messagesBtn, powerDialerBtn,
                 spacer,
                 new Separator(), gap(4),
                 settingsBtn

@@ -39,14 +39,14 @@
         <VBox spacing="20" alignment="TOP_LEFT">
             <padding><Insets top="20" bottom="24" left="28" right="32"/></padding>
 
-            <!-- Current contact card -->
-            <VBox fx:id="contactCard" spacing="6" styleClass="section-card">
+            <!-- Current lead card -->
+            <VBox fx:id="leadCard" spacing="6" styleClass="section-card">
                 <Label fx:id="noActiveLabel"    text="No active call"
                        styleClass="body" visible="true" managed="true"/>
-                <VBox fx:id="contactDetails" spacing="4" visible="false" managed="false">
-                    <Label fx:id="contactNameLabel"    text="—" styleClass="title-2"/>
-                    <Label fx:id="contactPhoneLabel"   text="—" styleClass="mono"/>
-                    <Label fx:id="contactCompanyLabel" text="—" styleClass="caption"/>
+                <VBox fx:id="leadDetails" spacing="4" visible="false" managed="false">
+                    <Label fx:id="leadNameLabel"    text="—" styleClass="title-2"/>
+                    <Label fx:id="leadPhoneLabel"   text="—" styleClass="mono"/>
+                    <Label fx:id="leadCompanyLabel" text="—" styleClass="caption"/>
                 </VBox>
             </VBox>
 
@@ -75,7 +75,7 @@
                 <Button fx:id="stopBtn"    text="Stop"    styleClass="danger"
                         onAction="#onStop"    disable="true"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Button fx:id="advanceBtn" text="Next Contact" styleClass="flat"
+                <Button fx:id="advanceBtn" text="Next Lead" styleClass="flat"
                         onAction="#onAdvance" disable="true"/>
             </HBox>
 

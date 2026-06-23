@@ -1,6 +1,6 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 
 import javafx.geometry.Pos;
@@ -31,7 +31,7 @@ import java.util.function.Consumer;
  *   🇮🇳 India                      7:42 PM · IST    [Call] [Message]
  * </pre>
  *
- * <p>Line 1: contact name (or number) · the saved number when a contact matches ·
+ * <p>Line 1: lead name (or number) · the saved number when a lead matches ·
  * humanized last-call time. Line 2: country flag + name, current local time and
  * timezone, plus Call and Message action buttons. The time / "ago" labels
  * recompute on every render, so a periodic {@code ListView.refresh()} keeps them
@@ -126,9 +126,9 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
         currentNumber = row.number();
 
         final Instant now = Instant.now();
-        final Optional<Contact> contact = row.contact();
-        if (contact.isPresent()) {
-            primaryLabel.setText(contact.get().displayName());
+        final Optional<Lead> lead = row.lead();
+        if (lead.isPresent()) {
+            primaryLabel.setText(lead.get().displayName());
             numberLabel.setText(row.number());
             numberLabel.setManaged(true);
             numberLabel.setVisible(true);

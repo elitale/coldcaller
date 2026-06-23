@@ -1,7 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import org.junit.jupiter.api.Test;
@@ -19,7 +19,7 @@ class CallParticipantTest {
             new Country("US", "United States", "+1", "America/New_York");
 
     @Test
-    void of_withoutContact_headlineIsNumber() {
+    void of_withoutLead_headlineIsNumber() {
         CallParticipant party = CallParticipant.of(PHONE.value(), Optional.empty(), Optional.empty());
 
         assertThat(party.name()).isEmpty();
@@ -28,8 +28,8 @@ class CallParticipantTest {
     }
 
     @Test
-    void of_withNamedContact_headlineIsName() {
-        CallParticipant party = CallParticipant.of(PHONE.value(), Optional.of(contact("Jane", "Doe",
+    void of_withNamedLead_headlineIsName() {
+        CallParticipant party = CallParticipant.of(PHONE.value(), Optional.of(lead("Jane", "Doe",
                 Optional.of("CTO"), Optional.of("Acme"))), Optional.of(US));
 
         assertThat(party.name()).contains("Jane Doe");
@@ -39,9 +39,9 @@ class CallParticipantTest {
     }
 
     @Test
-    void of_contactWithoutName_fallsBackToNumber() {
+    void of_leadWithoutName_fallsBackToNumber() {
         CallParticipant party = CallParticipant.of(PHONE.value(),
-                Optional.of(contact(null, null, Optional.empty(), Optional.empty())), Optional.empty());
+                Optional.of(lead(null, null, Optional.empty(), Optional.empty())), Optional.empty());
 
         assertThat(party.name()).isEmpty();
         assertThat(party.headline()).isEqualTo(PHONE.value());
@@ -50,7 +50,7 @@ class CallParticipantTest {
     @Test
     void initials_fromName_usesTwoLetters() {
         CallParticipant party = CallParticipant.of(PHONE.value(),
-                Optional.of(contact("Jane", "Doe", Optional.empty(), Optional.empty())), Optional.empty());
+                Optional.of(lead("Jane", "Doe", Optional.empty(), Optional.empty())), Optional.empty());
 
         assertThat(party.initials()).isEqualTo("JD");
     }
@@ -65,15 +65,15 @@ class CallParticipantTest {
     @Test
     void subtitle_titleOnly_hasNoSeparator() {
         CallParticipant party = CallParticipant.of(PHONE.value(),
-                Optional.of(contact("Jane", "Doe", Optional.of("CTO"), Optional.empty())), Optional.empty());
+                Optional.of(lead("Jane", "Doe", Optional.of("CTO"), Optional.empty())), Optional.empty());
 
         assertThat(party.subtitle()).contains("CTO");
     }
 
-    private static Contact contact(String first, String last,
-                                   Optional<String> title, Optional<String> company) {
-        return new Contact(
-                new ContactId(1L),
+    private static Lead lead(String first, String last,
+                             Optional<String> title, Optional<String> company) {
+        return new Lead(
+                new LeadId(1L),
                 Optional.ofNullable(first), Optional.ofNullable(last),
                 PHONE, company, title, Optional.empty(),
                 List.of(), Optional.empty(), false,

@@ -1,9 +1,9 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
-import com.elitale.coldbirds.coldcalling.services.ContactService;
-import com.elitale.coldbirds.coldcalling.services.ContactService.NewContact;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.LeadService.NewLead;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -21,49 +21,49 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Controller for the Contacts screen (contacts-view.fxml).
+ * Controller for the Leads screen (leads-view.fxml).
  * <p>
- * Provides full-text search, async loading, an inline Add-Contact dialog,
+ * Provides full-text search, async loading, an inline Add-Lead dialog,
  * soft delete, and one-click dial.
  * <p>
  * Threading: all methods must be called on the FX Application Thread except
  * where CompletableFuture dispatches to a background thread explicitly.
  */
-public final class ContactsController {
+public final class LeadsController {
 
     // ── FXML-injected fields ──────────────────────────────────────────────────
 
-    @FXML private TextField                      searchField;
-    @FXML private TableView<Contact>             table;
-    @FXML private TableColumn<Contact, String>   nameCol;
-    @FXML private TableColumn<Contact, String>   phoneCol;
-    @FXML private TableColumn<Contact, String>   companyCol;
-    @FXML private TableColumn<Contact, String>   dncCol;
-    @FXML private Button                         callBtn;
-    @FXML private Button                         deleteBtn;
+    @FXML private TextField                   searchField;
+    @FXML private TableView<Lead>             table;
+    @FXML private TableColumn<Lead, String>   nameCol;
+    @FXML private TableColumn<Lead, String>   phoneCol;
+    @FXML private TableColumn<Lead, String>   companyCol;
+    @FXML private TableColumn<Lead, String>   dncCol;
+    @FXML private Button                      callBtn;
+    @FXML private Button                      deleteBtn;
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    private ContactService   contactService;
+    private LeadService      leadService;
     private Consumer<String> onDial = ignored -> {};
 
-    private final ObservableList<Contact> contacts = FXCollections.observableArrayList();
+    private final ObservableList<Lead> leads = FXCollections.observableArrayList();
 
     /** Default no-arg constructor — required by FXMLLoader. */
-    public ContactsController() {}
+    public LeadsController() {}
 
     // ── Configuration (called before FXMLLoader.load()) ───────────────────────
 
     /**
      * Inject the service. Must be called before {@code FXMLLoader.load()}.
      */
-    public void setContactService(ContactService service) {
-        this.contactService = Objects.requireNonNull(service, "service must not be null");
+    public void setLeadService(LeadService service) {
+        this.leadService = Objects.requireNonNull(service, "service must not be null");
     }
 
     /**
-     * Register a callback for when the user clicks Call on a contact.
-     * The callback receives the contact's E.164 phone number string.
+     * Register a callback for when the user clicks Call on a lead.
+     * The callback receives the lead's E.164 phone number string.
      */
     public void setOnDial(Consumer<String> callback) {
         this.onDial = Objects.requireNonNull(callback, "callback must not be null");
@@ -99,11 +99,11 @@ public final class ContactsController {
         });
 
         // Placeholder shown when the table has no rows
-        Label placeholder = new Label("No contacts yet. Click \"Add Contact\" to get started.");
+        Label placeholder = new Label("No leads yet. Click \"Add Lead\" to get started.");
         placeholder.getStyleClass().add("caption");
         table.setPlaceholder(placeholder);
 
-        table.setItems(contacts);
+        table.setItems(leads);
 
         // Button state bound to selection
         callBtn.disableProperty().bind(
@@ -113,7 +113,7 @@ public final class ContactsController {
 
         // Double-click a row to dial
         table.setRowFactory(tv -> {
-            TableRow<Contact> row = new TableRow<>();
+            TableRow<Lead> row = new TableRow<>();
             row.setOnMouseClicked(e -> {
                 if (e.getClickCount() == 2 && !row.isEmpty()) {
                     onDial.accept(row.getItem().phone().value());
@@ -124,17 +124,17 @@ public final class ContactsController {
 
         // Reactive search — fires on every keystroke
         searchField.textProperty().addListener(
-                (obs, oldVal, newVal) -> loadContacts(newVal.strip()));
+                (obs, oldVal, newVal) -> loadLeads(newVal.strip()));
 
         // Initial load
-        loadContacts("");
+        loadLeads("");
     }
 
     // ── FXML event handlers ───────────────────────────────────────────────────
 
     @FXML
     private void onCall() {
-        Contact selected = table.getSelectionModel().getSelectedItem();
+        Lead selected = table.getSelectionModel().getSelectedItem();
         if (selected != null) {
             onDial.accept(selected.phone().value());
         }
@@ -142,23 +142,23 @@ public final class ContactsController {
 
     @FXML
     private void onAdd() {
-        showAddContactDialog();
+        showAddLeadDialog();
     }
 
     @FXML
     private void onDelete() {
-        Contact selected = table.getSelectionModel().getSelectedItem();
+        Lead selected = table.getSelectionModel().getSelectedItem();
         if (selected == null) return;
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Delete Contact");
+        confirm.setTitle("Delete Lead");
         confirm.setHeaderText("Delete " + selected.displayName() + "?");
-        confirm.setContentText("This contact will be soft-deleted and hidden from all lists.");
+        confirm.setContentText("This lead will be soft-deleted and hidden from all lists.");
         confirm.showAndWait().ifPresent(btn -> {
             if (btn == ButtonType.OK) {
                 CompletableFuture
-                        .runAsync(() -> contactService.delete(selected.id()))
-                        .thenRunAsync(() -> loadContacts(searchField.getText().strip()),
+                        .runAsync(() -> leadService.delete(selected.id()))
+                        .thenRunAsync(() -> loadLeads(searchField.getText().strip()),
                                 Platform::runLater);
             }
         });
@@ -166,28 +166,28 @@ public final class ContactsController {
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private void loadContacts(String query) {
-        if (contactService == null) return;
+    private void loadLeads(String query) {
+        if (leadService == null) return;
 
         CompletableFuture
                 .supplyAsync(() -> query.isBlank()
-                        ? contactService.findAll()
-                        : contactService.search(query))
+                        ? leadService.findAll()
+                        : leadService.search(query))
                 .thenAcceptAsync(list -> {
-                    contacts.setAll(list);
+                    leads.setAll(list);
                     if (list.isEmpty()) {
                         String msg = query.isBlank()
-                                ? "No contacts yet. Click \"Add Contact\" to get started."
+                                ? "No leads yet. Click \"Add Lead\" to get started."
                                 : "No results for \"" + query + "\"";
                         ((Label) table.getPlaceholder()).setText(msg);
                     }
                 }, Platform::runLater);
     }
 
-    private void showAddContactDialog() {
+    private void showAddLeadDialog() {
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Add Contact");
-        dialog.setHeaderText("New Contact");
+        dialog.setTitle("Add Lead");
+        dialog.setHeaderText("New Lead");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
         GridPane grid = new GridPane();
@@ -233,7 +233,7 @@ public final class ContactsController {
                     .replace(")", "");
             try {
                 PhoneNumber phone = new PhoneNumber(rawPhone);
-                NewContact newContact = new NewContact(
+                NewLead newLead = new NewLead(
                         blankToEmpty(firstNameField.getText()),
                         blankToEmpty(lastNameField.getText()),
                         phone,
@@ -244,8 +244,8 @@ public final class ContactsController {
                         Optional.empty()
                 );
                 CompletableFuture
-                        .runAsync(() -> contactService.save(newContact))
-                        .thenRunAsync(() -> loadContacts(searchField.getText().strip()),
+                        .runAsync(() -> leadService.save(newLead))
+                        .thenRunAsync(() -> loadLeads(searchField.getText().strip()),
                                 Platform::runLater);
             } catch (IllegalArgumentException e) {
                 Alert err = new Alert(Alert.AlertType.ERROR);

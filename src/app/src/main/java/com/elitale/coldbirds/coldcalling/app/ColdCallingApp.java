@@ -55,7 +55,7 @@ public final class ColdCallingApp extends Application {
     private TelephonyService   telephonyService;
     private SmsService         smsService;
     private CallService        callService;
-    private ContactService     contactService;
+    private LeadService        leadService;
     private PhoneNumberService phoneNumberService;
     private PowerDialerService powerDialerService;
     private SettingsService    settingsService;
@@ -71,7 +71,7 @@ public final class ColdCallingApp extends Application {
     private volatile String voicemailDropCallId;
 
     // Repositories — built once in init(), reused by launchMainApp()
-    private ContactRepository     contactRepo;
+    private LeadRepository        leadRepo;
     private PhoneNumberRepository phoneNumberRepo;
     private CallRepository        callRepo;
     private SmsRepository         smsRepo;
@@ -100,7 +100,7 @@ public final class ColdCallingApp extends Application {
             final var connection = db.connection();
 
             // 2. Repositories
-            contactRepo     = new SqliteContactRepository(connection);
+            leadRepo        = new SqliteLeadRepository(connection);
             phoneNumberRepo = new SqlitePhoneNumberRepository(connection);
             callRepo        = new SqliteCallRepository(connection);
             smsRepo         = new SqliteSmsRepository(connection);
@@ -111,7 +111,7 @@ public final class ColdCallingApp extends Application {
             settingsService = new SettingsService(settingsRepo);
 
             // 4. Credential-independent services usable before onboarding.
-            contactService = new ContactService(contactRepo);
+            leadService = new LeadService(leadRepo);
             audioDeviceManager = new AudioDeviceManager();
             audioDeviceTester  = new AudioDeviceTester();
 
@@ -169,7 +169,7 @@ public final class ColdCallingApp extends Application {
         );
 
         telephonyService = new TelephonyService(sipCreds, NOOP_LISTENER, null, null);
-        callService      = new CallService(telephonyService, callRepo, contactRepo, phoneNumberRepo, settingsService);
+        callService      = new CallService(telephonyService, callRepo, leadRepo, phoneNumberRepo, settingsService);
         telephonyService.setListener(callService);  // wire back: SIP events → CallService
         // Resolve the remote number's country so recordings land under the right folder.
         telephonyService.setCountryResolver(
@@ -187,7 +187,7 @@ public final class ColdCallingApp extends Application {
 
         // Power Dialer
         powerDialerService = new PowerDialerService(
-                callListRepo, contactRepo, callerIdSelector, settingsService,
+                callListRepo, leadRepo, callerIdSelector, settingsService,
                 (remote, local) -> callService.dial(remote, local));
 
         // Seed the global Motion Doctrine gate from the saved preference.
@@ -231,7 +231,7 @@ public final class ColdCallingApp extends Application {
                 });
 
         mainWindow = new MainWindow(stage, new MainWindow.Dependencies(
-                contactService, callService, smsService, phoneNumberService,
+                leadService, callService, smsService, phoneNumberService,
                 onDial, powerDialerService, settingsService,
                 new CallRoutingService(settingsService),
                 audioDeviceManager, audioDeviceTester, applyAudioDevices(),
@@ -257,7 +257,7 @@ public final class ColdCallingApp extends Application {
         });
 
         // During a power-dialer run, picking a disposition on the wrap-up screen finalises
-        // the current call and advances to the next contact — hands-free triage. Outside a
+        // the current call and advances to the next lead — hands-free triage. Outside a
         // running session this is a no-op (manual calls finalise via "Save & Close").
         mainWindow.setOnWrapUpDispositionChosen(() -> {
             final boolean running = powerDialerService.getCurrentSession()
@@ -277,7 +277,7 @@ public final class ColdCallingApp extends Application {
         mainWindow.setOnVoicemailDrop(callService::dropVoicemail);
 
         // When the greeting finishes during a running power-dialer session, end the current
-        // call and advance to the next contact — voicemail → drop → advance as one hands-free
+        // call and advance to the next lead — voicemail → drop → advance as one hands-free
         // flow. The actual advance happens when the resulting call-end event arrives (below),
         // so the outcome is recorded as Voicemail and the wrap-up screen is skipped. Manual
         // calls leave the line to the rep.
@@ -387,7 +387,7 @@ public final class ColdCallingApp extends Application {
     /**
      * Finalise a call that ended via a voicemail drop during a power-dialer run:
      * record the Voicemail disposition, return to the dialer, and advance to the
-     * next contact — no wrap-up screen. Runs on the call-ended (JAIN-SIP) thread;
+     * next lead — no wrap-up screen. Runs on the call-ended (JAIN-SIP) thread;
      * the call record is already persisted by the time this fires.
      */
     private void finalizeVoicemailAndAdvance(String callId) {

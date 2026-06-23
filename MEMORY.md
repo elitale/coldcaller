@@ -41,11 +41,11 @@ Sister project: [`sequence`](../sequence) handles cold email campaigns. These tw
 
 - [x] All scaffold/planning files: `AGENTS.md`, `MEMORY.md`, `.plan/coldcalling.md`, agent files, copilot instructions
 - [x] Gradle multi-module scaffold: `settings.gradle`, root `build.gradle`, `gradle/libs.versions.toml`, module `build.gradle` files
-- [x] **Domain layer** — 17 tests PASS: all value objects (PhoneNumber, ContactId, PhoneNumberId, SmsId, AreaCode, CallDirection, CallDisposition, NumberReputation, SmsStatus, Result), sealed interfaces (CallState, PowerDialerState, DomainEvent), entity records (Contact, OwnedNumber, Call, SmsMessage, CallList, CallListContact, PowerDialerSession)
-- [x] **Storage layer** — 15 tests PASS: `DatabaseManager` (SQLite + Flyway), `V1__initial_schema.sql`, all 5 Sqlite repositories (Contact, PhoneNumber, Call, Sms, Settings, CallList)
+- [x] **Domain layer** — 17 tests PASS: all value objects (PhoneNumber, LeadId, PhoneNumberId, SmsId, AreaCode, CallDirection, CallDisposition, NumberReputation, SmsStatus, Result), sealed interfaces (CallState, PowerDialerState, DomainEvent), entity records (Lead, OwnedNumber, Call, SmsMessage, CallList, CallListEntry, PowerDialerSession)
+- [x] **Storage layer** — 15 tests PASS: `DatabaseManager` (SQLite + Flyway), `V1__initial_schema.sql`, all 5 Sqlite repositories (Lead, PhoneNumber, Call, Sms, Settings, CallList)
 - [x] **Telephony layer** — 38 tests PASS: `G711Codec`, `StunMessage`, `StunClient`, `SipCredentials`, `SdpBuilder`, `SipEngine`, `SipRegistrar`, `RtpSession`, `AudioPipeline`, `TelephonyService`
 - [x] **Providers layer** — 28 tests PASS: `TwilioClient`, `TwilioConfig`, `HttpSender`, `TwilioNumberData`, `SmsRelayClient`, `SmsRelayConfig`
-- [x] **Services layer** — 26 tests PASS: `CallService`, `ContactService`, `SmsService`, `PhoneNumberService`
+- [x] **Services layer** — 26 tests PASS: `CallService`, `LeadService`, `SmsService`, `PhoneNumberService`
 - [x] **UI layer** — `./gradlew build` green: `MainWindow`, `DialerController`, `IncomingCallController`, `ActiveCallController`, bespoke Cupertino Light CSS (~550 lines)
 - [x] **`app/` module** — `ColdCallingApp` fully wired: DB → repos → providers → services → telephony → UI
 - [x] **Call routing (PSTN bridge)** — 2026-06-23: `CallRoutingMode`/`CallRoutingConfig` (domain), `SettingsService` routing keys, `TwilioClient.setSipDomainVoiceUrl`/`readSipDomainVoiceUrl`, `CallRoutingService` (load/applyManual/autoConfigure/currentVoiceUrl), onboarding 5th "Routing" step, Settings "Call Routing" section, wired through `MainWindow.Dependencies` + `ColdCallingApp`. In-app config replaces the manual `.scripts/setup-sip-pstn-handler.js` for end-users (script kept as operator fallback). Full build + test green.
@@ -67,7 +67,7 @@ Sister project: [`sequence`](../sequence) handles cold email campaigns. These tw
 ### Build status — `./gradlew build`: **GREEN** (64 tests, 0 failures)
 
 ### Not yet started
-- [ ] Contacts screen (FXML + `ContactsController`)
+- [ ] Leads screen (FXML + `LeadsController`)
 - [ ] Call history screen (`CallHistoryController`)
 - [ ] SMS/Messages screen (`MessagesController`)
 - [ ] Power dialer screen + engine (`PowerDialerController`, `PowerDialerService`)
@@ -82,7 +82,7 @@ Sister project: [`sequence`](../sequence) handles cold email campaigns. These tw
 ```java
 // Value objects
 record PhoneNumber(String value)        // E.164 validated
-record ContactId(long value)            // positive long
+record LeadId(long value)               // positive long
 record CallId(long value)
 record PhoneNumberId(long value)
 
@@ -159,8 +159,8 @@ PowerDialerSession:
   - startedAt: Instant
 
 Algorithm:
-  1. Load contacts at position >= currentPosition where status = 'pending'
-  2. Dial next contact using round-robin number selection
+  1. Load leads at position >= currentPosition where status = 'pending'
+  2. Dial next lead using round-robin number selection
   3. On 200 OK → pause auto-advance, wait for user disposition
   4. On busy/no-answer → write call record, advance currentPosition, schedule next dial
   5. On list end → emit PowerDialerState.Stopped, show session summary
@@ -201,7 +201,7 @@ Algorithm:
 |------|---------|
 | 2026-06-21 | Project planning session. Defined architecture (Java 21 + JavaFX + JAIN-SIP + jlibrtp + SQLite + Twilio + AWS CDK). Designed complete SQLite schema. Designed all 8 JavaFX screens (Apple HIG). Chose color tokens, typography scale, spacing system. Created all 7 scaffold files. |
 | 2026-06-21 | Built domain layer (17 tests), storage layer (15 tests), telephony layer (38 tests), providers layer (28 tests), bespoke Cupertino Light CSS, UI layer (DialerController, IncomingCallController, ActiveCallController + FXML). |
-| 2026-06-21 | Added `services/` module (CallService, ContactService, SmsService, PhoneNumberService — 26 tests). Rewired `ColdCallingApp`. Fixed all blocked issues: circular dependency (TelephonyService.setListener), `var` lambda syntax, `PhoneNumberId(0)` domain invariant violation, `NumberReputation`/`SmsStatus` record instantiation, JAIN-SIP compile classpath. Build: GREEN. 64 tests, 0 failures. |
+| 2026-06-21 | Added `services/` module (CallService, LeadService, SmsService, PhoneNumberService — 26 tests). Rewired `ColdCallingApp`. Fixed all blocked issues: circular dependency (TelephonyService.setListener), `var` lambda syntax, `PhoneNumberId(0)` domain invariant violation, `NumberReputation`/`SmsStatus` record instantiation, JAIN-SIP compile classpath. Build: GREEN. 64 tests, 0 failures. |
 | 2026-06-22 | Active-call audio UX (`.plan/active-call-audio-visualization.md`), 3 phases, build GREEN. P1: call-control icon hover/click CSS + mute-red/hold-amber tints. P2: pull-model audio levels — `AudioLevels.rms` (shared), volatile mic/remote levels on `AudioPipeline`, `TelephonyService`/`CallService` getters, new `WaveformBuffer` (6 tests) + `AudioWaveform` Canvas, controller `AnimationTimer` driving adaptive avatar halo + threshold ripple + live mic waveform + mic-on/off glyph. P3: mid-call device switch — `TelephonyService.switchAudioDevices` (volatile `activeRtp`, rebuilds pipeline keeping RTP+recorder), in-call `bi-sliders` ContextMenu (mic/speaker radio submenus), write-through to Settings via app `switchAudioDevices()` `BiConsumer`. |
 | 2026-06-22 | Mobile-style call UX + meaningful motion (`.plan/mobile-call-ux-and-motion.md`), 3 phases, build GREEN. **P1 (motion + indicators):** `Motion` gate (in-app Reduce Motion setting only, `isReduced`/`setReduced`/`pressFlash`), SettingsService keys (`voicemail.greeting.path`, `appearance.reduceMotion`), REC chip + connect bloom + dial-pad press flash, queue "up next" preview wired through `PowerDialerService.upcoming()`, `isRecording` getter chain (AudioPipeline→TelephonyService→CallService). **P2 (voicemail drop):** `VoicemailGreeting.load` (validates PCM_SIGNED/8000Hz/mono/16-bit, 160-sample frames), `AudioPipeline.playGreeting`, `TelephonyService.playGreeting`, `CallService.dropVoicemail`, end-to-end UI wiring (V key, Settings greeting picker copying to `~/.coldcalling/voicemail-greeting.wav`, power-dialer finalize-and-advance on drop). **P3 (alt-tab + output):** `CallHudWindow` (transparent always-on-top pill, drag, pulse timer + REC dot, mute/hang, fade/scale in-out gated by Motion) shown via `CallHudVisibility.shouldShow(callLive, mainFocused)`; primary speaker/headset `outputButton` on the call card cycles output devices through the shipped switch path (••• menu kept as full picker). SKIP per §0/§8: AMD, slide-to-answer, max-motion. Number-reputation/Scam-Likely escalated to its own future plan. |
 | 2026-06-23 | Multi-number rotation + sticky caller-ID. New `CallerIdSelector` (services): pool = active owned numbers; sticky reuse of the last **outbound** number per prospect (derived from `CallRepository.findByRemoteNumber`, no migration); otherwise round-robin via an in-memory `AtomicInteger`; empty-pool → `getDefault()` fallback. Wired into both manual dial (`ColdCallingApp.onDial`) and `PowerDialerService` (replaced its private `resolveLocal` modulo; swapped `PhoneNumberService`→`CallerIdSelector` dependency). `PhoneNumberService` gained `listAll()` + `setActive(id, active)` (toggles the `active` flag via `repo.update`). Settings **General**→**Calling numbers**: single default-number `ComboBox` replaced by a multi-select checkbox pool (`numberPoolBox` VBox; checked = active); save toggles `setActive`. Default is no longer user-set in Settings (onboarding still seeds one as fallback). Tests: `CallerIdSelectorTest` (8), `PhoneNumberServiceTest` (+5), `PowerDialerServiceTest` (mock swap). Build GREEN. |

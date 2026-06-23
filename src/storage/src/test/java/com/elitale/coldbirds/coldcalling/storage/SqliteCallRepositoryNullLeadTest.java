@@ -7,11 +7,10 @@ import com.elitale.coldbirds.coldcalling.domain.value.NumberReputation;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
-import com.elitale.coldbirds.coldcalling.domain.value.SmsStatus;
+import com.elitale.coldbirds.coldcalling.storage.repository.CallRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteCallRepository;
 import com.elitale.coldbirds.coldcalling.storage.sqlite.SqlitePhoneNumberRepository;
-import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteSmsRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
@@ -19,9 +18,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
-class SqliteSmsRepositoryNullContactTest {
+class SqliteCallRepositoryNullLeadTest {
 
-    private SmsRepository repo;
+    private CallRepository repo;
     private PhoneNumberId phoneNumberId;
 
     @BeforeEach
@@ -36,25 +35,31 @@ class SqliteSmsRepositoryNullContactTest {
                         "twilio",
                         new NumberReputation.Clean()))).value();
         phoneNumberId = owned.id();
-        repo = new SqliteSmsRepository(db.connection());
+        repo = new SqliteCallRepository(db.connection());
     }
 
     @Test
-    void findByRemoteNumber_withNullContactId_doesNotThrowAndReturnsMessage() {
+    void findByRemoteNumber_withNullLeadIdAndTimestamps_doesNotThrowAndMapsEmpties() {
         PhoneNumber remote = new PhoneNumber("+14155559999");
-        repo.save(new SmsRepository.NewSmsMessage(
-                CallDirection.INBOUND,
+        repo.save(new CallRepository.NewCall(
+                CallDirection.OUTBOUND,
                 phoneNumberId,
-                Optional.empty(), // no linked contact → contact_id is NULL
+                Optional.empty(), // no linked lead → lead_id is NULL
                 remote,
-                "hello there",
-                new SmsStatus.Delivered(),
-                Instant.now()));
+                Optional.empty(), // no disposition
+                Instant.now(),
+                Optional.empty(), // answered_at NULL
+                Optional.empty(), // ended_at NULL
+                Optional.empty(), // duration_ms NULL
+                Optional.empty(),
+                Optional.empty()));
 
         assertThatCode(() -> repo.findByRemoteNumber(remote)).doesNotThrowAnyException();
-        var thread = repo.findByRemoteNumber(remote);
-        assertThat(thread).hasSize(1);
-        assertThat(thread.get(0).contactId()).isEmpty();
-        assertThat(thread.get(0).body()).isEqualTo("hello there");
+        var calls = repo.findByRemoteNumber(remote);
+        assertThat(calls).hasSize(1);
+        assertThat(calls.get(0).leadId()).isEmpty();
+        assertThat(calls.get(0).answeredAt()).isEmpty();
+        assertThat(calls.get(0).endedAt()).isEmpty();
+        assertThat(calls.get(0).durationMs()).isEmpty();
     }
 }

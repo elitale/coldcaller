@@ -4,7 +4,7 @@ import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.CallId;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
@@ -18,7 +18,7 @@ public interface CallRepository {
     record NewCall(
             CallDirection direction,
             PhoneNumberId phoneNumberId,
-            Optional<ContactId> contactId,
+            Optional<LeadId> leadId,
             PhoneNumber remoteNumber,
             Optional<CallDisposition> disposition,
             Instant startedAt,
@@ -31,7 +31,7 @@ public interface CallRepository {
         public NewCall {
             Objects.requireNonNull(direction,     "direction must not be null");
             Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
-            Objects.requireNonNull(contactId,     "contactId must not be null");
+            Objects.requireNonNull(leadId,        "leadId must not be null");
             Objects.requireNonNull(remoteNumber,  "remoteNumber must not be null");
             Objects.requireNonNull(disposition,   "disposition must not be null");
             Objects.requireNonNull(startedAt,     "startedAt must not be null");
@@ -49,7 +49,7 @@ public interface CallRepository {
 
     Optional<Call> findById(CallId id);
 
-    List<Call> findByContact(ContactId contactId);
+    List<Call> findByLead(LeadId leadId);
 
     List<Call> findByPhoneNumber(PhoneNumberId phoneNumberId);
 

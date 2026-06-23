@@ -12,7 +12,7 @@ Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships 
   <a href="screenshots/dialer.png"><img src="screenshots/dialer.png" alt="coldCalling — Dialer" width="900"></a>
 </p>
 <p align="center">
-  <b>Dialer</b> — dial pad with a country / caller-ID picker, a live <em>Recent Calls</em> feed, and a contact panel with one-tap dispositions, auto-saving notes, talk-time stats, and playable call recordings.
+  <b>Dialer</b> — dial pad with a country / caller-ID picker, a live <em>Recent Calls</em> feed, and a lead panel with one-tap dispositions, auto-saving notes, talk-time stats, and playable call recordings.
 </p>
 
 <table>
@@ -301,7 +301,7 @@ Run a specific test class:
 
 ```bash
 ./gradlew test --tests "*.CallStateTest"
-./gradlew test --tests "*.SqliteContactRepositoryTest"
+./gradlew test --tests "*.SqliteLeadRepositoryTest"
 ```
 
 Verbose output:
@@ -396,7 +396,7 @@ coldcalling/
 │   ├── domain/                   # Pure domain — zero external dependencies
 │   │   └── .../domain/
 │   │       ├── event/            # DomainEvent (sealed interface)
-│   │       ├── model/            # Entity records (Call, Contact, OwnedNumber, ...)
+│   │       ├── model/            # Entity records (Call, Lead, OwnedNumber, ...)
 │   │       └── value/            # Value objects (PhoneNumber, CallState, Result, ...)
 │   │
 │   ├── storage/                  # SQLite repositories + FlywayDB migrations
@@ -426,7 +426,7 @@ coldcalling/
 │   │       ├── DialerController.java
 │   │       ├── IncomingCallController.java
 │   │       ├── ActiveCallController.java
-│   │       ├── ContactsController.java
+│   │       ├── LeadsController.java
 │   │       ├── CallHistoryController.java
 │   │       ├── MessagesController.java
 │   │       ├── PowerDialerController.java
@@ -475,7 +475,7 @@ FlywayDB applies it on the next startup.
 ```bash
 sqlite3 ~/.coldcalling/data.db
 .tables
-SELECT * FROM contacts LIMIT 10;
+SELECT * FROM leads LIMIT 10;
 ```
 
 ---
@@ -490,7 +490,7 @@ SELECT * FROM contacts LIMIT 10;
 | Drop voicemail | `V` | `V` |
 | Add call note | `N` | `N` |
 | Open dialer | `Cmd+D` | `Ctrl+D` |
-| Open contacts | `Cmd+K` | `Ctrl+K` |
+| Open leads | `Cmd+K` | `Ctrl+K` |
 
 ---
 

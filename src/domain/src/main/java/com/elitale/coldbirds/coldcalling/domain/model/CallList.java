@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** An ordered list of contacts used by the power dialer. */
+/** An ordered list of leads used by the power dialer. */
 public record CallList(
         CallListId id,
         String name,

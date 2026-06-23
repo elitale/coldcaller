@@ -4,7 +4,7 @@ import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.CallId;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
@@ -31,7 +31,7 @@ public final class SqliteCallRepository implements CallRepository {
     public Result<Call> save(NewCall c) {
         String sql = """
             INSERT INTO calls
-                (direction, phone_number_id, contact_id, remote_number, status, disposition,
+                (direction, phone_number_id, lead_id, remote_number, status, disposition,
                  started_at, answered_at, ended_at, duration_ms, recording_path, notes,
                  created_at, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -40,7 +40,7 @@ public final class SqliteCallRepository implements CallRepository {
         try (var stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, c.direction().name().toLowerCase());
             stmt.setLong(2, c.phoneNumberId().value());
-            if (c.contactId().isPresent()) stmt.setLong(3, c.contactId().get().value());
+            if (c.leadId().isPresent()) stmt.setLong(3, c.leadId().get().value());
             else stmt.setNull(3, java.sql.Types.INTEGER);
             stmt.setString(4, c.remoteNumber().value());
             stmt.setString(5, deriveStatus(c));
@@ -120,9 +120,9 @@ public final class SqliteCallRepository implements CallRepository {
     }
 
     @Override
-    public List<Call> findByContact(ContactId contactId) {
-        String sql = "SELECT * FROM calls WHERE contact_id=? ORDER BY started_at DESC";
-        return queryParam(sql, contactId.value());
+    public List<Call> findByLead(LeadId leadId) {
+        String sql = "SELECT * FROM calls WHERE lead_id=? ORDER BY started_at DESC";
+        return queryParam(sql, leadId.value());
     }
 
     @Override
@@ -183,8 +183,8 @@ public final class SqliteCallRepository implements CallRepository {
     }
 
     private static Call map(ResultSet rs) throws SQLException {
-        long contactIdRaw = rs.getLong("contact_id");
-        boolean contactIsNull = rs.wasNull();
+        long leadIdRaw = rs.getLong("lead_id");
+        boolean leadIsNull = rs.wasNull();
         String dispositionStr = rs.getString("disposition");
         long answeredAtRaw = rs.getLong("answered_at");
         boolean answeredIsNull = rs.wasNull();
@@ -196,7 +196,7 @@ public final class SqliteCallRepository implements CallRepository {
                 new CallId(rs.getLong("id")),
                 CallDirection.valueOf(rs.getString("direction").toUpperCase()),
                 new PhoneNumberId(rs.getLong("phone_number_id")),
-                contactIsNull ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
+                leadIsNull ? Optional.empty() : Optional.of(new LeadId(leadIdRaw)),
                 new PhoneNumber(rs.getString("remote_number")),
                 dispositionStr != null
                         ? Optional.of(DomainMappers.dispositionFromString(dispositionStr))

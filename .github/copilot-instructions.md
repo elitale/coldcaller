@@ -51,7 +51,7 @@ infra/       → AWS CDK (TypeScript) — Lambda + API Gateway + DynamoDB for SM
 - Outbound calls: UI dials → SIP INVITE → RTP audio session on 200 OK.
 - Audio target: < 150ms end-to-end latency.
 - NAT traversal: minimal STUN client to discover public IP for SDP generation.
-- Power dialer: ordered contact list → auto-dial next → advance on BYE/timeout. Pause is stateful.
+- Power dialer: ordered lead list → auto-dial next → advance on BYE/timeout. Pause is stateful.
 
 ## Call Routing (PSTN bridge)
 

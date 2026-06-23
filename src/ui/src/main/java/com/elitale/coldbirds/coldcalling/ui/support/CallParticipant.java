@@ -1,7 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 
@@ -10,7 +10,7 @@ import java.util.Optional;
 
 /**
  * The remote party shown on the calling screen: their E.164 number plus any
- * resolved contact identity (name, company/title) and country (for flag and
+ * resolved lead identity (name, company/title) and country (for flag and
  * local-time display), and the notes/disposition carried over from the most
  * recent prior call to this number (so a re-dial pre-loads prior context).
  * Immutable; built off the FX thread and rendered on it.
@@ -33,33 +33,33 @@ public record CallParticipant(
     }
 
     /**
-     * Build a participant from a raw number and any resolved contact/country.
+     * Build a participant from a raw number and any resolved lead/country.
      * The display name falls back to the number; the subtitle combines title
-     * and company when a contact is known. No prior-call context is attached.
+     * and company when a lead is known. No prior-call context is attached.
      */
-    public static CallParticipant of(String number, Optional<Contact> contact, Optional<Country> country) {
-        return of(number, contact, country, Optional.empty());
+    public static CallParticipant of(String number, Optional<Lead> lead, Optional<Country> country) {
+        return of(number, lead, country, Optional.empty());
     }
 
     /**
      * Build a participant, pre-loading notes and disposition from the most
      * recent prior call to this number (if any) so a re-dial shows that context.
      */
-    public static CallParticipant of(String number, Optional<Contact> contact, Optional<Country> country,
+    public static CallParticipant of(String number, Optional<Lead> lead, Optional<Country> country,
                                      Optional<Call> priorCall) {
         Objects.requireNonNull(number, "number must not be null");
         Objects.requireNonNull(priorCall, "priorCall must not be null");
-        final Optional<String> name = contact
-                .map(Contact::displayName)
+        final Optional<String> name = lead
+                .map(Lead::displayName)
                 .filter(n -> !n.equals(number) && !n.isBlank());
-        final Optional<String> subtitle = contact.flatMap(CallParticipant::subtitleFor);
+        final Optional<String> subtitle = lead.flatMap(CallParticipant::subtitleFor);
         final Optional<String> priorNotes = priorCall.flatMap(Call::notes).filter(n -> !n.isBlank());
         final Optional<CallDisposition> priorDisposition = priorCall.flatMap(Call::disposition);
         return new CallParticipant(number, name, subtitle, country, priorNotes, priorDisposition);
     }
 
 
-    /** The headline label — contact name when known, otherwise the number. */
+    /** The headline label — lead name when known, otherwise the number. */
     public String headline() {
         return name.orElse(number);
     }
@@ -76,9 +76,9 @@ public record CallParticipant(
         return Character.isLetter(first) ? String.valueOf(Character.toUpperCase(first)) : "#";
     }
 
-    private static Optional<String> subtitleFor(Contact contact) {
-        final String title = contact.title().orElse("").strip();
-        final String company = contact.company().orElse("").strip();
+    private static Optional<String> subtitleFor(Lead lead) {
+        final String title = lead.title().orElse("").strip();
+        final String company = lead.company().orElse("").strip();
         final String joined = (!title.isEmpty() && !company.isEmpty())
                 ? title + " · " + company
                 : title + company;

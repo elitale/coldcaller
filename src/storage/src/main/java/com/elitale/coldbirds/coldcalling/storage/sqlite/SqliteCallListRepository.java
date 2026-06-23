@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.storage.sqlite;
 import com.elitale.coldbirds.coldcalling.domain.model.CallList;
 import com.elitale.coldbirds.coldcalling.domain.model.CallListEntry;
 import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
 import java.sql.Connection;
@@ -112,17 +112,17 @@ public final class SqliteCallListRepository implements CallListRepository {
     }
 
     @Override
-    public Result<Void> addEntry(CallListId listId, ContactId contactId) {
+    public Result<Void> addEntry(CallListId listId, LeadId leadId) {
         String sql = """
-            INSERT INTO call_list_contacts (list_id, contact_id, position, status, created_at, updated_at)
+            INSERT INTO call_list_leads (list_id, lead_id, position, status, created_at, updated_at)
             VALUES (?, ?,
-                (SELECT COALESCE(MAX(position), -1) + 1 FROM call_list_contacts WHERE list_id=?),
+                (SELECT COALESCE(MAX(position), -1) + 1 FROM call_list_leads WHERE list_id=?),
                 'pending', ?, ?)
             """;
         long now = Instant.now().toEpochMilli();
         try (var stmt = connection.prepareStatement(sql)) {
             stmt.setLong(1, listId.value());
-            stmt.setLong(2, contactId.value());
+            stmt.setLong(2, leadId.value());
             stmt.setLong(3, listId.value());
             stmt.setLong(4, now);
             stmt.setLong(5, now);
@@ -135,7 +135,7 @@ public final class SqliteCallListRepository implements CallListRepository {
 
     @Override
     public Result<Void> updateEntryStatus(long entryId, CallListEntry.DialStatus status) {
-        String sql = "UPDATE call_list_contacts SET status=?, updated_at=? WHERE id=?";
+        String sql = "UPDATE call_list_leads SET status=?, updated_at=? WHERE id=?";
         try (var stmt = connection.prepareStatement(sql)) {
             stmt.setString(1, status.name().toLowerCase());
             stmt.setLong(2, Instant.now().toEpochMilli());
@@ -161,7 +161,7 @@ public final class SqliteCallListRepository implements CallListRepository {
     }
 
     private List<CallListEntry> loadEntries(long listId) {
-        String sql = "SELECT * FROM call_list_contacts WHERE list_id=? ORDER BY position";
+        String sql = "SELECT * FROM call_list_leads WHERE list_id=? ORDER BY position";
         List<CallListEntry> entries = new ArrayList<>();
         try (var stmt = connection.prepareStatement(sql)) {
             stmt.setLong(1, listId);
@@ -169,7 +169,7 @@ public final class SqliteCallListRepository implements CallListRepository {
                 while (rs.next()) {
                     entries.add(new CallListEntry(
                             rs.getLong("id"),
-                            new ContactId(rs.getLong("contact_id")),
+                            new LeadId(rs.getLong("lead_id")),
                             rs.getInt("position"),
                             CallListEntry.DialStatus.valueOf(rs.getString("status").toUpperCase())
                     ));

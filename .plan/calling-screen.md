@@ -57,7 +57,7 @@ These are **functional gaps**, surfaced so the plan is honest about dependencies
 The screen is a single view that moves through states. The control row's **footprint never changes** between states so targets stay put.
 
 ### 2.1 Calling… / Ringing (pre-connect)
-- Large remote-party identity: **contact name** (or E.164 number if unknown), with the number as a secondary line, and the country flag + name.
+- Large remote-party identity: **lead name** (or E.164 number if unknown), with the number as a secondary line, and the country flag + name.
 - Status line: **"Calling…"** → **"Ringing…"** (animated subtle pulse on the avatar ring).
 - **Notes field auto-focused** — the rep can start typing immediately. During Ringing the only active shortcut is **Esc → Cancel** (a scene accelerator that works regardless of focus); the bare one-key shortcuts come alive in the Active state, when notes is *not* auto-focused (see §6).
 - Single prominent **Cancel** button (red, circular, bottom-center) — occupies the **exact pixel position** the Hang up button will take after connect.
@@ -117,7 +117,7 @@ Left-to-right, fixed positions:
 
 ### 3.5 Always-on-top mini Call HUD (the one floating element)
 - Appears **only when the main app window loses focus** during an active call.
-- Contents: `bi-person-circle` avatar · contact name · `bi-clock` live timer · **Mute** (`bi-mic` / `bi-mic-mute-fill`) · **Hang up** (`bi-telephone-x-fill`). Nothing else.
+- Contents: `bi-person-circle` avatar · lead name · `bi-clock` live timer · **Mute** (`bi-mic` / `bi-mic-mute-fill`) · **Hang up** (`bi-telephone-x-fill`). Nothing else.
 - Small, draggable, frameless, rounded — sits above other apps so a rep on a call can always end it while in their CRM/Sheet.
 - Disappears when the main window regains focus or the call ends.
 
@@ -254,7 +254,7 @@ Built on the existing **[cupertino-light.css](src/ui/src/main/resources/css/cupe
 - Card/overlay corner radius: **8px** (cards), circular buttons fully rounded, keypad keys **12px**.
 
 ### 5.2 Avatar / identity
-- Circular avatar placeholder (contact initials or a glyph), ~**88px**, with a 2px ring that animates a subtle pulse while ringing and recolors per state (accent → green active → amber hold).
+- Circular avatar placeholder (lead initials or a glyph), ~**88px**, with a 2px ring that animates a subtle pulse while ringing and recolors per state (accent → green active → amber hold).
 - Identity uses **Inter** (bundled, SF-Pro analog): name at `title-1` (22/600), number at `caption` (12/400) mono, country flag image + name beside it (reuse `FlagImages`).
 
 ### 5.3 Control buttons

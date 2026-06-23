@@ -1,16 +1,16 @@
 package com.elitale.coldbirds.coldcalling.storage.repository;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public interface ContactRepository {
+public interface LeadRepository {
 
-    record NewContact(
+    record NewLead(
             Optional<String> firstName,
             Optional<String> lastName,
             PhoneNumber phone,
@@ -20,7 +20,7 @@ public interface ContactRepository {
             List<String> tags,
             Optional<String> notes
     ) {
-        public NewContact {
+        public NewLead {
             Objects.requireNonNull(firstName, "firstName must not be null");
             Objects.requireNonNull(lastName,  "lastName must not be null");
             Objects.requireNonNull(phone,     "phone must not be null");
@@ -33,20 +33,20 @@ public interface ContactRepository {
         }
     }
 
-    Result<Contact> save(NewContact contact);
+    Result<Lead> save(NewLead lead);
 
-    Result<Contact> update(Contact contact);
+    Result<Lead> update(Lead lead);
 
-    Optional<Contact> findById(ContactId id);
+    Optional<Lead> findById(LeadId id);
 
-    Optional<Contact> findByPhone(PhoneNumber phone);
+    Optional<Lead> findByPhone(PhoneNumber phone);
 
-    /** Returns all non-deleted contacts. */
-    List<Contact> findAll();
+    /** Returns all non-deleted leads. */
+    List<Lead> findAll();
 
     /** Full-text search across first/last name, company, phone. */
-    List<Contact> search(String query);
+    List<Lead> search(String query);
 
     /** Soft delete — sets deleted_at. */
-    Result<Void> delete(ContactId id);
+    Result<Void> delete(LeadId id);
 }

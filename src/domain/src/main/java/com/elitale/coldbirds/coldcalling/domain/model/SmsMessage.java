@@ -1,7 +1,7 @@
 package com.elitale.coldbirds.coldcalling.domain.model;
 
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.SmsId;
@@ -15,7 +15,7 @@ public record SmsMessage(
         SmsId id,
         CallDirection direction,
         PhoneNumberId phoneNumberId,
-        Optional<ContactId> contactId,
+        Optional<LeadId> leadId,
         PhoneNumber remoteNumber,
         String body,
         SmsStatus status,
@@ -27,7 +27,7 @@ public record SmsMessage(
         Objects.requireNonNull(id,            "id must not be null");
         Objects.requireNonNull(direction,     "direction must not be null");
         Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
-        Objects.requireNonNull(contactId,     "contactId must not be null");
+        Objects.requireNonNull(leadId,        "leadId must not be null");
         Objects.requireNonNull(remoteNumber,  "remoteNumber must not be null");
         Objects.requireNonNull(body,          "body must not be null");
         Objects.requireNonNull(status,        "status must not be null");

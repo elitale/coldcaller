@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.domain.model;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.CallId;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import java.time.Instant;
@@ -15,7 +15,7 @@ public record Call(
         CallId id,
         CallDirection direction,
         PhoneNumberId phoneNumberId,
-        Optional<ContactId> contactId,
+        Optional<LeadId> leadId,
         PhoneNumber remoteNumber,
         Optional<CallDisposition> disposition,
         Instant startedAt,
@@ -31,7 +31,7 @@ public record Call(
         Objects.requireNonNull(id,            "id must not be null");
         Objects.requireNonNull(direction,     "direction must not be null");
         Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
-        Objects.requireNonNull(contactId,     "contactId must not be null");
+        Objects.requireNonNull(leadId,        "leadId must not be null");
         Objects.requireNonNull(remoteNumber,  "remoteNumber must not be null");
         Objects.requireNonNull(disposition,   "disposition must not be null");
         Objects.requireNonNull(startedAt,     "startedAt must not be null");

@@ -2,7 +2,7 @@ package com.elitale.coldbirds.coldcalling.storage.sqlite;
 
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
@@ -30,7 +30,7 @@ public final class SqliteSmsRepository implements SmsRepository {
     public Result<SmsMessage> save(NewSmsMessage s) {
         String sql = """
             INSERT INTO sms_messages
-                (direction, phone_number_id, contact_id, remote_number, body, status,
+                (direction, phone_number_id, lead_id, remote_number, body, status,
                  sent_at, created_at, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?)
             """;
@@ -38,7 +38,7 @@ public final class SqliteSmsRepository implements SmsRepository {
         try (var stmt = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setString(1, s.direction().name().toLowerCase());
             stmt.setLong(2, s.phoneNumberId().value());
-            if (s.contactId().isPresent()) stmt.setLong(3, s.contactId().get().value());
+            if (s.leadId().isPresent()) stmt.setLong(3, s.leadId().get().value());
             else stmt.setNull(3, java.sql.Types.INTEGER);
             stmt.setString(4, s.remoteNumber().value());
             stmt.setString(5, s.body());
@@ -91,9 +91,9 @@ public final class SqliteSmsRepository implements SmsRepository {
     }
 
     @Override
-    public List<SmsMessage> findByContact(ContactId contactId) {
-        return queryParam("SELECT * FROM sms_messages WHERE contact_id=? ORDER BY sent_at DESC",
-                contactId.value());
+    public List<SmsMessage> findByLead(LeadId leadId) {
+        return queryParam("SELECT * FROM sms_messages WHERE lead_id=? ORDER BY sent_at DESC",
+                leadId.value());
     }
 
     @Override
@@ -132,13 +132,13 @@ public final class SqliteSmsRepository implements SmsRepository {
     }
 
     private static SmsMessage map(ResultSet rs) throws SQLException {
-        long contactIdRaw = rs.getLong("contact_id");
-        boolean contactIsNull = rs.wasNull();
+        long leadIdRaw = rs.getLong("lead_id");
+        boolean leadIsNull = rs.wasNull();
         return new SmsMessage(
                 new SmsId(rs.getLong("id")),
                 CallDirection.valueOf(rs.getString("direction").toUpperCase()),
                 new PhoneNumberId(rs.getLong("phone_number_id")),
-                contactIsNull ? Optional.empty() : Optional.of(new ContactId(contactIdRaw)),
+                leadIsNull ? Optional.empty() : Optional.of(new LeadId(leadIdRaw)),
                 new PhoneNumber(rs.getString("remote_number")),
                 rs.getString("body"),
                 DomainMappers.smsStatusFromString(rs.getString("status")),

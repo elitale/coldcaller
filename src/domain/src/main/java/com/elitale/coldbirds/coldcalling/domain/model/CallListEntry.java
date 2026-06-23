@@ -1,17 +1,17 @@
 package com.elitale.coldbirds.coldcalling.domain.model;
 
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import java.util.Objects;
 
-/** A single entry in a CallList: contact reference + position + dial status. */
+/** A single entry in a CallList: lead reference + position + dial status. */
 public record CallListEntry(
         long entryId,
-        ContactId contactId,
+        LeadId leadId,
         int position,
         DialStatus status
 ) {
     public CallListEntry {
-        Objects.requireNonNull(contactId, "contactId must not be null");
+        Objects.requireNonNull(leadId, "leadId must not be null");
         Objects.requireNonNull(status,    "status must not be null");
         if (position < 0) throw new IllegalArgumentException("position must be >= 0");
     }

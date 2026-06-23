@@ -2,7 +2,7 @@ package com.elitale.coldbirds.coldcalling.storage.repository;
 
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
@@ -18,7 +18,7 @@ public interface SmsRepository {
     record NewSmsMessage(
             CallDirection direction,
             PhoneNumberId phoneNumberId,
-            Optional<ContactId> contactId,
+            Optional<LeadId> leadId,
             PhoneNumber remoteNumber,
             String body,
             SmsStatus status,
@@ -27,7 +27,7 @@ public interface SmsRepository {
         public NewSmsMessage {
             Objects.requireNonNull(direction,     "direction must not be null");
             Objects.requireNonNull(phoneNumberId, "phoneNumberId must not be null");
-            Objects.requireNonNull(contactId,     "contactId must not be null");
+            Objects.requireNonNull(leadId,        "leadId must not be null");
             Objects.requireNonNull(remoteNumber,  "remoteNumber must not be null");
             Objects.requireNonNull(body,          "body must not be null");
             Objects.requireNonNull(status,        "status must not be null");
@@ -42,7 +42,7 @@ public interface SmsRepository {
 
     Optional<SmsMessage> findById(SmsId id);
 
-    List<SmsMessage> findByContact(ContactId contactId);
+    List<SmsMessage> findByLead(LeadId leadId);
 
     List<SmsMessage> findByRemoteNumber(PhoneNumber remoteNumber);
 

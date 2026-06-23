@@ -76,7 +76,7 @@ You must:
 | **Location** | Bangalore, India — all clients are US-based |
 | **Daily call volume** | 80–120 calls/day |
 | **Phone numbers** | 6 numbers (2 per client, rotating) |
-| **Current stack** | Google Voice ($20/mo), Skype ($10/mo), a spreadsheet for contact tracking |
+| **Current stack** | Google Voice ($20/mo), Skype ($10/mo), a spreadsheet for lead tracking |
 | **Monthly software spend** | ~$35/mo — extremely price-sensitive |
 | **Technical capability** | 4/10 — follows setup guides, can buy a phone number, can't debug SIP issues |
 | **Risk tolerance** | High for trying new tools. Zero for downtime during calling hours. |
@@ -229,10 +229,10 @@ You must:
 | **Decision influence** | High — Marcus won't keep a tool Alex hates. SDR churn is expensive. If the daily experience is bad, team morale tanks. |
 
 #### Alex's Internal Monologue
-> "I dial 200 numbers a day. That's 200 times I click the call button. 200 times I wait for the connect. 200 times I listen for the pickup. Every extra click, every half-second of audio lag, every time the call drops and I have to find the contact again — it compounds. In a 7-hour day it adds up to an hour of wasted time. Give me a fast, clean dialer. Let me add a note in 5 seconds while I'm dialing the next number. Don't make me navigate 4 screens to do something I do 200 times a day."
+> "I dial 200 numbers a day. That's 200 times I click the call button. 200 times I wait for the connect. 200 times I listen for the pickup. Every extra click, every half-second of audio lag, every time the call drops and I have to find the lead again — it compounds. In a 7-hour day it adds up to an hour of wasted time. Give me a fast, clean dialer. Let me add a note in 5 seconds while I'm dialing the next number. Don't make me navigate 4 screens to do something I do 200 times a day."
 
 #### What Alex Evaluates
-- Speed from contact to dial — how many clicks?
+- Speed from lead to dial — how many clicks?
 - Audio quality — can the prospect hear me clearly?
 - Note-taking during/after call — keyboard shortcuts?
 - Power dialer smoothness — does it auto-advance without friction?
@@ -244,7 +244,7 @@ You must:
 - More than 2 clicks to dial a number
 - Any audio lag or echo
 - No voicemail drop
-- Can't see call history for a contact before dialing
+- Can't see call history for a lead before dialing
 - Power dialer that auto-advances before you've finished the note
 - Tiny text, cramped layout (they stare at this 7 hours a day)
 - No keyboard shortcuts

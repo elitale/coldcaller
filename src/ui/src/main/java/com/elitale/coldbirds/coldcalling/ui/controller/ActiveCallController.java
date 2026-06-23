@@ -60,7 +60,7 @@ import java.util.function.Supplier;
  * <p>
  * Drives five phases — Ringing → Active → On Hold → Wrap-up / Failed — with a
  * pulsing avatar halo, a live duration + remote local-time clock, synthesised
- * ringback/connect/hangup/DTMF tones, contact identity, disposition chips and
+ * ringback/connect/hangup/DTMF tones, lead identity, disposition chips and
  * notes. After a call ends naturally the screen stays in a Wrap-up phase so the
  * rep can finish notes and a disposition before saving.
  * <p>
@@ -206,7 +206,7 @@ public final class ActiveCallController {
     /**
      * Register the "disposition chosen during wrap-up" sink. Fired exactly once when the
      * rep picks a disposition chip while the call is in its wrap-up phase — the power dialer
-     * uses this to auto-advance to the next contact. Distinct from {@link #setOnLogChanged}
+     * uses this to auto-advance to the next lead. Distinct from {@link #setOnLogChanged}
      * (which also fires on every note keystroke) so advancing is driven only by a deliberate
      * disposition pick, never by typing notes or by an active (not-yet-ended) call.
      */
@@ -227,7 +227,7 @@ public final class ActiveCallController {
 
     /**
      * Register the sink fired once a dropped greeting has finished playing. The power
-     * dialer uses this to end the current call and advance to the next contact, making
+     * dialer uses this to end the current call and advance to the next lead, making
      * voicemail → drop → advance a single hands-free flow. No-op for manual calls.
      */
     public void setOnVoicemailCompleted(Runnable cb) {

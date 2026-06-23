@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.services;
 import com.elitale.coldbirds.coldcalling.domain.model.*;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.*;
 class PowerDialerServiceTest {
 
     @Mock CallListRepository       callListRepo;
-    @Mock ContactRepository        contactRepo;
+    @Mock LeadRepository           leadRepo;
     @Mock CallerIdSelector         callerIdSelector;
     @Mock SettingsService          settings;
     @Mock ScheduledExecutorService scheduler;
@@ -50,15 +50,15 @@ class PowerDialerServiceTest {
         when(scheduler.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(mock(ScheduledFuture.class));
         service = new PowerDialerService(
-                callListRepo, contactRepo, callerIdSelector, settings, dialCaptor, scheduler);
+                callListRepo, leadRepo, callerIdSelector, settings, dialCaptor, scheduler);
         stubOwnedNumber();
     }
 
     // ── start ─────────────────────────────────────────────────────────────────
 
     @Test
-    void start_dialsFirstContact() {
-        stubTwoContactList();
+    void start_dialsFirstLead() {
+        stubTwoLeadList();
         assertThat(service.start(LIST_ID)).isInstanceOf(Result.Ok.class);
         assertThat(dialed).hasSize(1);
         assertThat(dialed.get(0)[0]).isEqualTo(PHONE_A);
@@ -73,7 +73,7 @@ class PowerDialerServiceTest {
 
     @Test
     void start_alreadyRunning_returnsError() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         // Session is still Running — NO_ANSWER timer was captured, not run
         assertThat(service.start(LIST_ID)).isInstanceOf(Result.Err.class);
@@ -82,8 +82,8 @@ class PowerDialerServiceTest {
     // ── auto-advance ──────────────────────────────────────────────────────────
 
     @Test
-    void notifyCallEnded_unanswered_autoAdvancesToNextContact() {
-        stubTwoContactList();
+    void notifyCallEnded_unanswered_autoAdvancesToNextLead() {
+        stubTwoLeadList();
         service.start(LIST_ID);
         dialed.clear();
         // notifyCallEnded schedules an AUTO_ADVANCE_MS (1 000 ms) task; capture and run it.
@@ -97,7 +97,7 @@ class PowerDialerServiceTest {
 
     @Test
     void notifyCallAnswered_incrementsConnectedCount() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         service.notifyCallAnswered("c1");
         assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(1);
@@ -105,7 +105,7 @@ class PowerDialerServiceTest {
 
     @Test
     void notifyCallEnded_afterAnswered_doesNotAutoAdvance() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         dialed.clear();
         service.notifyCallAnswered("c1");
@@ -116,8 +116,8 @@ class PowerDialerServiceTest {
     // ── manual advance ────────────────────────────────────────────────────────
 
     @Test
-    void advance_dialsNextContact() {
-        stubTwoContactList();
+    void advance_dialsNextLead() {
+        stubTwoLeadList();
         service.start(LIST_ID);
         service.notifyCallAnswered("c1");
         service.notifyCallEnded("c1", "bye");
@@ -129,8 +129,8 @@ class PowerDialerServiceTest {
     // ── queue preview ────────────────────────────────────────────
 
     @Test
-    void upcoming_returnsNextContactsAfterCurrent() {
-        stubTwoContactList();
+    void upcoming_returnsNextLeadsAfterCurrent() {
+        stubTwoLeadList();
         service.start(LIST_ID);
         // Current position is PHONE_A (index 0); upcoming is PHONE_B (index 1).
         assertThat(service.upcoming(5))
@@ -140,7 +140,7 @@ class PowerDialerServiceTest {
 
     @Test
     void upcoming_clampsToRequestedCount() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         assertThat(service.upcoming(0)).isEmpty();
     }
@@ -155,16 +155,16 @@ class PowerDialerServiceTest {
     @Test
     void dialCurrent_usesNoAnswerTimeoutFromSettings() {
         when(settings.getNoAnswerTimeoutSec()).thenReturn(12);
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
-        // start() dials the first contact and schedules the no-answer timer at 12_000 ms.
+        // start() dials the first lead and schedules the no-answer timer at 12_000 ms.
         verify(scheduler).schedule(any(Runnable.class), eq(12_000L), any());
     }
 
     @Test
     void notifyCallEnded_usesAutoAdvanceDelayFromSettings() {
         when(settings.getAutoAdvanceDelaySec()).thenReturn(3);
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         service.notifyCallEnded("c1", "no-answer");
         verify(scheduler).schedule(any(Runnable.class), eq(3_000L), any());
@@ -173,7 +173,7 @@ class PowerDialerServiceTest {
 
     @Test
     void stop_clearsSession() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         service.stop();
         assertThat(service.getCurrentSession()).isEmpty();
@@ -181,7 +181,7 @@ class PowerDialerServiceTest {
 
     @Test
     void listExhausted_sessionEnds() {
-        stubSingleContactList();
+        stubSingleLeadList();
         service.start(LIST_ID);
         // Run the NO_ANSWER task; position advances past end → endSession()
         ArgumentCaptor<Runnable> taskCaptor = ArgumentCaptor.forClass(Runnable.class);
@@ -192,7 +192,7 @@ class PowerDialerServiceTest {
 
     @Test
     void pause_preventsAutoAdvance() {
-        stubTwoContactList();
+        stubTwoLeadList();
         service.start(LIST_ID);
         dialed.clear();
         service.pause();
@@ -227,28 +227,28 @@ class PowerDialerServiceTest {
         when(callerIdSelector.selectFor(any())).thenReturn(Optional.of(on));
     }
 
-    private void stubTwoContactList() {
-        ContactId idA = new ContactId(10L), idB = new ContactId(20L);
+    private void stubTwoLeadList() {
+        LeadId idA = new LeadId(10L), idB = new LeadId(20L);
         CallList list = new CallList(LIST_ID, "Test", Optional.empty(), List.of(
                 new CallListEntry(1L, idA, 0, CallListEntry.DialStatus.PENDING),
                 new CallListEntry(2L, idB, 1, CallListEntry.DialStatus.PENDING)),
                 Instant.now(), Instant.now());
         when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
-        when(contactRepo.findById(idA)).thenReturn(Optional.of(makeContact(idA, PHONE_A)));
-        when(contactRepo.findById(idB)).thenReturn(Optional.of(makeContact(idB, PHONE_B)));
+        when(leadRepo.findById(idA)).thenReturn(Optional.of(makeLead(idA, PHONE_A)));
+        when(leadRepo.findById(idB)).thenReturn(Optional.of(makeLead(idB, PHONE_B)));
     }
 
-    private void stubSingleContactList() {
-        ContactId idA = new ContactId(10L);
+    private void stubSingleLeadList() {
+        LeadId idA = new LeadId(10L);
         CallList list = new CallList(LIST_ID, "Test", Optional.empty(), List.of(
                 new CallListEntry(1L, idA, 0, CallListEntry.DialStatus.PENDING)),
                 Instant.now(), Instant.now());
         when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
-        when(contactRepo.findById(idA)).thenReturn(Optional.of(makeContact(idA, PHONE_A)));
+        when(leadRepo.findById(idA)).thenReturn(Optional.of(makeLead(idA, PHONE_A)));
     }
 
-    private static Contact makeContact(ContactId id, PhoneNumber phone) {
-        return new Contact(id, Optional.of("Test"), Optional.empty(), phone,
+    private static Lead makeLead(LeadId id, PhoneNumber phone) {
+        return new Lead(id, Optional.of("Test"), Optional.empty(), phone,
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty(), false, Instant.now(), Instant.now());
     }

@@ -4,7 +4,7 @@ import com.elitale.coldbirds.coldcalling.domain.model.*;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository.NewCallList;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +67,7 @@ public final class PowerDialerService {
     // ── Dependencies ──────────────────────────────────────────────────────────
 
     private final CallListRepository                  callListRepo;
-    private final ContactRepository                   contactRepo;
+    private final LeadRepository                      leadRepo;
     private final CallerIdSelector                    callerIdSelector;
     private final SettingsService                     settings;
     private final BiConsumer<PhoneNumber, PhoneNumber> dialCommand;
@@ -77,18 +77,18 @@ public final class PowerDialerService {
 
     private Session session;
     private Consumer<Optional<PowerDialerSession>> onSessionChangedCb = s -> {};
-    private Consumer<Optional<Contact>>            onContactChangedCb = c -> {};
+    private Consumer<Optional<Lead>>               onLeadChangedCb    = c -> {};
     private Consumer<SessionStats>                 onStatsCb          = s -> {};
 
     // ── Constructors ──────────────────────────────────────────────────────────
 
     public PowerDialerService(
             CallListRepository callListRepo,
-            ContactRepository contactRepo,
+            LeadRepository leadRepo,
             CallerIdSelector callerIdSelector,
             SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand) {
-        this(callListRepo, contactRepo, callerIdSelector, settings, dialCommand,
+        this(callListRepo, leadRepo, callerIdSelector, settings, dialCommand,
                 Executors.newSingleThreadScheduledExecutor(r -> {
                     Thread t = new Thread(r, "power-dialer-scheduler");
                     t.setDaemon(true);
@@ -99,13 +99,13 @@ public final class PowerDialerService {
     /** Package-private: for tests — supply a controllable scheduler. */
     PowerDialerService(
             CallListRepository callListRepo,
-            ContactRepository contactRepo,
+            LeadRepository leadRepo,
             CallerIdSelector callerIdSelector,
             SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand,
             ScheduledExecutorService scheduler) {
         this.callListRepo       = Objects.requireNonNull(callListRepo);
-        this.contactRepo        = Objects.requireNonNull(contactRepo);
+        this.leadRepo           = Objects.requireNonNull(leadRepo);
         this.callerIdSelector   = Objects.requireNonNull(callerIdSelector);
         this.settings           = Objects.requireNonNull(settings);
         this.dialCommand        = Objects.requireNonNull(dialCommand);
@@ -118,8 +118,8 @@ public final class PowerDialerService {
         this.onSessionChangedCb = Objects.requireNonNull(cb);
     }
 
-    public void setOnContactChanged(Consumer<Optional<Contact>> cb) {
-        this.onContactChangedCb = Objects.requireNonNull(cb);
+    public void setOnLeadChanged(Consumer<Optional<Lead>> cb) {
+        this.onLeadChangedCb = Objects.requireNonNull(cb);
     }
 
     public void setOnStatsChanged(Consumer<SessionStats> cb) {
@@ -161,11 +161,11 @@ public final class PowerDialerService {
         cancelTimeout();
         session.state = new PowerDialerState.Stopped();
         fireSessionChanged();
-        onContactChangedCb.accept(Optional.empty());
+        onLeadChangedCb.accept(Optional.empty());
         session = null;
     }
 
-    /** Manually advance to the next contact after an answered call ends. */
+    /** Manually advance to the next lead after an answered call ends. */
     public synchronized void advance() {
         if (session == null || !(session.state instanceof PowerDialerState.Running)) return;
         cancelTimeout();
@@ -188,9 +188,9 @@ public final class PowerDialerService {
         return Optional.ofNullable(session).map(Session::toRecord);
     }
 
-    public synchronized Optional<Contact> getCurrentContact() {
+    public synchronized Optional<Lead> getCurrentLead() {
         if (session == null) return Optional.empty();
-        return session.currentEntry().flatMap(e -> contactRepo.findById(e.contactId()));
+        return session.currentEntry().flatMap(e -> leadRepo.findById(e.leadId()));
     }
 
     public synchronized Optional<SessionStats> getStats() {
@@ -198,18 +198,18 @@ public final class PowerDialerService {
     }
 
     /**
-     * The next {@code n} contacts queued after the current one, in dial order, for the
+     * The next {@code n} leads queued after the current one, in dial order, for the
      * queue-preview panel. Returns an empty list when no session is active, {@code n <= 0},
      * or the list is exhausted; clamps to however many remain.
      *
-     * @param n maximum number of upcoming contacts to return
+     * @param n maximum number of upcoming leads to return
      */
-    public synchronized List<Contact> upcoming(int n) {
+    public synchronized List<Lead> upcoming(int n) {
         if (session == null || n <= 0) return List.of();
         final List<CallListEntry> entries = session.callList.entries();
-        final List<Contact> result = new ArrayList<>();
+        final List<Lead> result = new ArrayList<>();
         for (int i = session.position + 1; i < entries.size() && result.size() < n; i++) {
-            contactRepo.findById(entries.get(i).contactId()).ifPresent(result::add);
+            leadRepo.findById(entries.get(i).leadId()).ifPresent(result::add);
         }
         return List.copyOf(result);
     }
@@ -244,20 +244,20 @@ public final class PowerDialerService {
     private void dialCurrent() {
         if (session == null || session.isExhausted()) return;
         session.currentEntry().ifPresent(entry -> {
-            final Optional<Contact> contact = contactRepo.findById(entry.contactId());
-            if (contact.isEmpty()) {
-                LOG.warn("Contact {} not found — skipping", entry.contactId().value());
+            final Optional<Lead> lead = leadRepo.findById(entry.leadId());
+            if (lead.isEmpty()) {
+                LOG.warn("Lead {} not found — skipping", entry.leadId().value());
                 session.position++;
                 if (session.isExhausted()) { endSession(); return; }
                 dialCurrent();
                 return;
             }
-            final Optional<OwnedNumber> local = callerIdSelector.selectFor(contact.get().phone());
+            final Optional<OwnedNumber> local = callerIdSelector.selectFor(lead.get().phone());
             if (local.isEmpty()) { LOG.error("No active calling number — stopping dialer"); stop(); return; }
-            onContactChangedCb.accept(Optional.of(contact.get()));
+            onLeadChangedCb.accept(Optional.of(lead.get()));
             session.dialedCount++;
             onStatsCb.accept(session.toStats());
-            dialCommand.accept(contact.get().phone(), local.get().number());
+            dialCommand.accept(lead.get().phone(), local.get().number());
             scheduleAdvance(noAnswerMs());
         });
     }
@@ -287,7 +287,7 @@ public final class PowerDialerService {
                 session.dialedCount, session.connectedCount);
         session.state = new PowerDialerState.Stopped();
         fireSessionChanged();
-        onContactChangedCb.accept(Optional.empty());
+        onLeadChangedCb.accept(Optional.empty());
         session = null;
     }
 

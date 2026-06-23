@@ -1,6 +1,6 @@
 package com.elitale.coldbirds.coldcalling.domain.model;
 
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import java.time.Instant;
 import java.util.List;
@@ -8,8 +8,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** A person to call or SMS. Immutable entity. */
-public record Contact(
-        ContactId id,
+public record Lead(
+        LeadId id,
         Optional<String> firstName,
         Optional<String> lastName,
         PhoneNumber phone,
@@ -22,7 +22,7 @@ public record Contact(
         Instant createdAt,
         Instant updatedAt
 ) {
-    public Contact {
+    public Lead {
         Objects.requireNonNull(id,        "id must not be null");
         Objects.requireNonNull(phone,     "phone must not be null");
         Objects.requireNonNull(firstName, "firstName must not be null");

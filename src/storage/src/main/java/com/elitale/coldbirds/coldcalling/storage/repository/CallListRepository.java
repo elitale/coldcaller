@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.storage.repository;
 import com.elitale.coldbirds.coldcalling.domain.model.CallList;
 import com.elitale.coldbirds.coldcalling.domain.model.CallListEntry;
 import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
-import com.elitale.coldbirds.coldcalling.domain.value.ContactId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import java.util.List;
 import java.util.Objects;
@@ -34,7 +34,7 @@ public interface CallListRepository {
     /** Soft delete. */
     Result<Void> delete(CallListId id);
 
-    Result<Void> addEntry(CallListId listId, ContactId contactId);
+    Result<Void> addEntry(CallListId listId, LeadId leadId);
 
     Result<Void> updateEntryStatus(long entryId, CallListEntry.DialStatus status);
 }

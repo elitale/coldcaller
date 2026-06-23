@@ -3,7 +3,7 @@ package com.elitale.coldbirds.coldcalling.services;
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.storage.repository.CallRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +28,7 @@ class CallServiceTest {
 
     @Mock TelephonyService       telephony;
     @Mock CallRepository         callRepo;
-    @Mock ContactRepository      contactRepo;
+    @Mock LeadRepository         leadRepo;
     @Mock PhoneNumberRepository  phoneNumberRepo;
     @Mock SettingsService        settings;
 
@@ -41,7 +41,7 @@ class CallServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        callService = new CallService(telephony, callRepo, contactRepo, phoneNumberRepo, settings);
+        callService = new CallService(telephony, callRepo, leadRepo, phoneNumberRepo, settings);
     }
 
     // ── dial ──────────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ class CallServiceTest {
 
     @Test
     void dial_dnc_doesNotDelegate() {
-        stubContactDnc(REMOTE, true);
+        stubLeadDnc(REMOTE, true);
 
         callService.dial(REMOTE, LOCAL);
 
@@ -125,7 +125,7 @@ class CallServiceTest {
 
     @Test
     void dial_dnc_doesNotFireCallStarting() {
-        stubContactDnc(REMOTE, true);
+        stubLeadDnc(REMOTE, true);
         @SuppressWarnings("unchecked")
         BiConsumer<String, String> starting = mock(BiConsumer.class);
         callService.setOnCallStarting(starting);
@@ -190,7 +190,7 @@ class CallServiceTest {
 
     @Test
     void dial_dnc_firesFailedCallback() {
-        stubContactDnc(REMOTE, true);
+        stubLeadDnc(REMOTE, true);
         AtomicReference<String> failedReason = new AtomicReference<>();
         callService.setOnCallFailed((remote, reason) -> failedReason.set(reason));
 
@@ -434,9 +434,9 @@ class CallServiceTest {
                 Optional.of(0L), Optional.empty(), notes, started, updatedAt);
     }
 
-    private void stubContactDnc(PhoneNumber number, boolean isDnc) {
-        var contact = new com.elitale.coldbirds.coldcalling.domain.model.Contact(
-                new ContactId(1L),
+    private void stubLeadDnc(PhoneNumber number, boolean isDnc) {
+        var lead = new com.elitale.coldbirds.coldcalling.domain.model.Lead(
+                new LeadId(1L),
                 Optional.of("Test"), Optional.of("User"),
                 number,
                 Optional.empty(), Optional.empty(), Optional.empty(),
@@ -444,7 +444,7 @@ class CallServiceTest {
                 isDnc,
                 Instant.now(), Instant.now()
         );
-        when(contactRepo.findByPhone(number)).thenReturn(Optional.of(contact));
+        when(leadRepo.findByPhone(number)).thenReturn(Optional.of(lead));
     }
 
     private void stubOwnedNumber(PhoneNumber number, PhoneNumberId id) {

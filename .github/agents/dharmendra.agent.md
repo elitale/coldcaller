@@ -77,7 +77,7 @@ coldcalling/src/
 - Plan SIP signaling flows (REGISTER, INVITE, BYE, CANCEL, ACK)
 - Design RTP session management and G.711 audio pipeline
 - Implement JavaFX MVVM patterns with observable properties
-- Design power dialer engine (contact list → auto-dial → advance on answer/no-answer)
+- Design power dialer engine (lead list → auto-dial → advance on answer/no-answer)
 - Plan SMS WebSocket relay (AWS API Gateway + Lambda + DynamoDB)
 - Design inbound call routing (twilio SIP UA → INVITE → ring → answer)
 - Review Java code for SOLID violations, null safety, and thread safety

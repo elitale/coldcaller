@@ -12,9 +12,9 @@ class DatabaseManagerTest {
         try (var db = DatabaseManager.inMemory()) {
             assertThat(db.connection()).isNotNull();
             assertThat(db.connection().isClosed()).isFalse();
-            // Verify migrations ran — contacts table should exist
+            // Verify migrations ran — leads table should exist
             try (var stmt = db.connection().createStatement();
-                 var rs = stmt.executeQuery("SELECT count(*) FROM contacts")) {
+                 var rs = stmt.executeQuery("SELECT count(*) FROM leads")) {
                 assertThat(rs.next()).isTrue();
                 assertThat(rs.getLong(1)).isZero();
             }

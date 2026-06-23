@@ -1,9 +1,9 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
-import com.elitale.coldbirds.coldcalling.services.ContactService;
-import com.elitale.coldbirds.coldcalling.services.ContactService.NewContact;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.LeadService.NewLead;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -18,13 +18,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Inline add/edit form for a {@link Contact}, shown in place inside the
+ * Inline add/edit form for a {@link Lead}, shown in place inside the
  * number-detail panel (no modal — keeps the calling loop unblocked).
  *
- * <p>Builds a {@link NewContact} (add) or an updated {@link Contact} (edit)
- * and persists it through {@link ContactService}, then notifies the host.
+ * <p>Builds a {@link NewLead} (add) or an updated {@link Lead} (edit)
+ * and persists it through {@link LeadService}, then notifies the host.
  */
-public final class ContactEditForm {
+public final class LeadEditForm {
 
     private final VBox root = new VBox(8);
     private final TextField first   = field("First name");
@@ -33,18 +33,18 @@ public final class ContactEditForm {
     private final TextField title   = field("Title");
     private final TextField email   = field("Email");
 
-    private final ContactService contactService;
+    private final LeadService leadService;
     private final PhoneNumber phone;
-    private final Optional<Contact> existing;
+    private final Optional<Lead> existing;
 
-    public ContactEditForm(
-            final ContactService contactService,
+    public LeadEditForm(
+            final LeadService leadService,
             final PhoneNumber phone,
-            final Optional<Contact> existing,
+            final Optional<Lead> existing,
             final Runnable onSaved,
             final Runnable onCancel) {
 
-        this.contactService = Objects.requireNonNull(contactService, "contactService");
+        this.leadService = Objects.requireNonNull(leadService, "leadService");
         this.phone = Objects.requireNonNull(phone, "phone");
         this.existing = Objects.requireNonNull(existing, "existing");
         Objects.requireNonNull(onSaved, "onSaved");
@@ -58,7 +58,7 @@ public final class ContactEditForm {
             email.setText(c.email().orElse(""));
         });
 
-        final Label heading = new Label(existing.isPresent() ? "Edit contact" : "Add to contacts");
+        final Label heading = new Label(existing.isPresent() ? "Edit lead" : "Add to leads");
         heading.getStyleClass().add("detail-section-title");
 
         final Button save = new Button(existing.isPresent() ? "Save" : "Add");
@@ -81,13 +81,13 @@ public final class ContactEditForm {
 
     private boolean persist() {
         if (existing.isPresent()) {
-            final Contact c = existing.get();
-            final Contact updated = new Contact(
+            final Lead c = existing.get();
+            final Lead updated = new Lead(
                     c.id(), opt(first), opt(last), c.phone(), opt(company), opt(title),
                     opt(email), c.tags(), c.notes(), c.dnc(), c.createdAt(), Instant.now());
-            return contactService.update(updated).isOk();
+            return leadService.update(updated).isOk();
         }
-        return contactService.save(new NewContact(
+        return leadService.save(new NewLead(
                 opt(first), opt(last), phone, opt(company), opt(title), opt(email),
                 List.of(), Optional.empty())).isOk();
     }

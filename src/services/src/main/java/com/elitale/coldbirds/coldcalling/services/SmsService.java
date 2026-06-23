@@ -5,7 +5,6 @@ import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
-import com.elitale.coldbirds.coldcalling.storage.repository.ContactRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
@@ -83,7 +82,7 @@ public final class SmsService {
                 final NewSmsMessage record = new NewSmsMessage(
                         CallDirection.OUTBOUND,
                         owned.get().id(),
-                        Optional.empty(),  // contactId resolved at UI layer
+                        Optional.empty(),  // leadId resolved at UI layer
                         to,
                         body,
                         new SmsStatus.Delivered(),
