@@ -27,19 +27,19 @@
                 <VBox spacing="20">
                     <padding><Insets top="8" bottom="32"/></padding>
 
-                    <!-- ── General ─────────────────────────────────────────────── -->
+                    <!-- ── Calling numbers ─────────────────────────────────────── -->
                     <VBox styleClass="bg-elevated" spacing="12">
                         <padding><Insets top="20" bottom="20" left="20" right="20"/></padding>
-                        <Label text="General" styleClass="title-2"/>
+                        <Label text="Calling numbers" styleClass="title-2"/>
+                        <Label text="Checked numbers place outbound calls and rotate automatically. A prospect is always called back from the number they were first reached on."
+                               styleClass="caption" wrapText="true"/>
+
+                        <VBox fx:id="numberPoolBox" spacing="8"/>
 
                         <HBox spacing="12" alignment="CENTER_LEFT">
-                            <Label text="Default number" prefWidth="180"/>
-                            <ComboBox fx:id="defaultNumberCombo" prefWidth="240"/>
-                            <Button fx:id="refreshNumbersButton" text="Refresh"
+                            <Button fx:id="refreshNumbersButton" text="Refresh from Twilio"
                                     onAction="#onRefreshNumbers"/>
-                        </HBox>
-
-                        <HBox alignment="CENTER_RIGHT">
+                            <Region HBox.hgrow="ALWAYS"/>
                             <Button text="Save" styleClass="accent" onAction="#onSaveGeneral"/>
                         </HBox>
                     </VBox>

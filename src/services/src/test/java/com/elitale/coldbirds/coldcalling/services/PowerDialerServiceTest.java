@@ -25,7 +25,7 @@ class PowerDialerServiceTest {
 
     @Mock CallListRepository       callListRepo;
     @Mock ContactRepository        contactRepo;
-    @Mock PhoneNumberService       phoneNumberService;
+    @Mock CallerIdSelector         callerIdSelector;
     @Mock SettingsService          settings;
     @Mock ScheduledExecutorService scheduler;
 
@@ -50,7 +50,7 @@ class PowerDialerServiceTest {
         when(scheduler.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
                 .thenReturn(mock(ScheduledFuture.class));
         service = new PowerDialerService(
-                callListRepo, contactRepo, phoneNumberService, settings, dialCaptor, scheduler);
+                callListRepo, contactRepo, callerIdSelector, settings, dialCaptor, scheduler);
         stubOwnedNumber();
     }
 
@@ -224,7 +224,7 @@ class PowerDialerServiceTest {
         OwnedNumber on = new OwnedNumber(new PhoneNumberId(99L), LOCAL, Optional.empty(),
                 new AreaCode("202"), "twilio", new NumberReputation.Clean(),
                 0, true, Instant.now(), Instant.now());
-        when(phoneNumberService.listOwned()).thenReturn(List.of(on));
+        when(callerIdSelector.selectFor(any())).thenReturn(Optional.of(on));
     }
 
     private void stubTwoContactList() {

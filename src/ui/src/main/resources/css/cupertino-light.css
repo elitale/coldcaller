@@ -1359,6 +1359,21 @@
     -fx-font-weight: 600;
 }
 
+/* Caller-ID pill — which owned number an outbound call is placed from */
+.call-from {
+    -fx-font-family: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+    -fx-font-size: 12.5px;
+    -fx-text-fill: -cc-text-secondary;
+    -fx-background-color: -cc-bg-secondary;
+    -fx-background-radius: 999px;
+    -fx-padding: 4px 12px 4px 10px;
+    -fx-graphic-text-gap: 6px;
+}
+.call-from .ikonli-font-icon {
+    -fx-icon-color: -cc-text-tertiary;
+    -fx-fill: -cc-text-tertiary;
+}
+
 /* Recording indicator chip (visibility + pulse driven in the controller) */
 .call-rec {
     -fx-padding: 0;

@@ -68,7 +68,7 @@ public final class PowerDialerService {
 
     private final CallListRepository                  callListRepo;
     private final ContactRepository                   contactRepo;
-    private final PhoneNumberService                  phoneNumberService;
+    private final CallerIdSelector                    callerIdSelector;
     private final SettingsService                     settings;
     private final BiConsumer<PhoneNumber, PhoneNumber> dialCommand;
     private final ScheduledExecutorService            scheduler;
@@ -85,10 +85,10 @@ public final class PowerDialerService {
     public PowerDialerService(
             CallListRepository callListRepo,
             ContactRepository contactRepo,
-            PhoneNumberService phoneNumberService,
+            CallerIdSelector callerIdSelector,
             SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand) {
-        this(callListRepo, contactRepo, phoneNumberService, settings, dialCommand,
+        this(callListRepo, contactRepo, callerIdSelector, settings, dialCommand,
                 Executors.newSingleThreadScheduledExecutor(r -> {
                     Thread t = new Thread(r, "power-dialer-scheduler");
                     t.setDaemon(true);
@@ -100,13 +100,13 @@ public final class PowerDialerService {
     PowerDialerService(
             CallListRepository callListRepo,
             ContactRepository contactRepo,
-            PhoneNumberService phoneNumberService,
+            CallerIdSelector callerIdSelector,
             SettingsService settings,
             BiConsumer<PhoneNumber, PhoneNumber> dialCommand,
             ScheduledExecutorService scheduler) {
         this.callListRepo       = Objects.requireNonNull(callListRepo);
         this.contactRepo        = Objects.requireNonNull(contactRepo);
-        this.phoneNumberService = Objects.requireNonNull(phoneNumberService);
+        this.callerIdSelector   = Objects.requireNonNull(callerIdSelector);
         this.settings           = Objects.requireNonNull(settings);
         this.dialCommand        = Objects.requireNonNull(dialCommand);
         this.scheduler          = Objects.requireNonNull(scheduler);
@@ -252,8 +252,8 @@ public final class PowerDialerService {
                 dialCurrent();
                 return;
             }
-            final Optional<OwnedNumber> local = resolveLocal();
-            if (local.isEmpty()) { LOG.error("No owned number — stopping dialer"); stop(); return; }
+            final Optional<OwnedNumber> local = callerIdSelector.selectFor(contact.get().phone());
+            if (local.isEmpty()) { LOG.error("No active calling number — stopping dialer"); stop(); return; }
             onContactChangedCb.accept(Optional.of(contact.get()));
             session.dialedCount++;
             onStatsCb.accept(session.toStats());
@@ -294,12 +294,6 @@ public final class PowerDialerService {
     private void markCurrentEntry(CallListEntry.DialStatus status) {
         if (session != null)
             session.currentEntry().ifPresent(e -> callListRepo.updateEntryStatus(e.entryId(), status));
-    }
-
-    private Optional<OwnedNumber> resolveLocal() {
-        final List<OwnedNumber> owned = phoneNumberService.listOwned();
-        if (owned.isEmpty()) return phoneNumberService.getDefault();
-        return Optional.of(owned.get(session.dialedCount % owned.size()));
     }
 
     private static CallListEntry.DialStatus reasonToStatus(String reason) {

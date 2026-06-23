@@ -10,6 +10,7 @@ import com.elitale.coldbirds.coldcalling.storage.repository.SettingsRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,9 +38,14 @@ public final class PhoneNumberService {
         this.settings = Objects.requireNonNull(settings, "settings must not be null");
     }
 
-    /** Return all active owned numbers from local storage. */
+    /** Return all active owned numbers from local storage (the calling-number rotation pool). */
     public List<OwnedNumber> listOwned() {
         return repo.findAllActive();
+    }
+
+    /** Return every owned number, active or not — for the Settings pool editor. */
+    public List<OwnedNumber> listAll() {
+        return repo.findAll();
     }
 
     /**
@@ -64,6 +70,32 @@ public final class PhoneNumberService {
      */
     public void setDefault(PhoneNumber number) {
         settings.set(DEFAULT_NUMBER_KEY, Objects.requireNonNull(number).value());
+    }
+
+    /**
+     * Toggle whether an owned number participates in the outbound calling pool.
+     * Inactive numbers are excluded from rotation and never picked as caller-ID.
+     *
+     * @param id     the owned number to update
+     * @param active {@code true} to include it in the pool, {@code false} to exclude it
+     * @return ok when applied (or already in the desired state), err when the number is unknown
+     */
+    public Result<Void> setActive(PhoneNumberId id, boolean active) {
+        Objects.requireNonNull(id, "id must not be null");
+        return repo.findById(id)
+                .map(number -> applyActive(number, active))
+                .orElseGet(() -> Result.err("Number not found: " + id.value()));
+    }
+
+    private Result<Void> applyActive(OwnedNumber number, boolean active) {
+        if (number.active() == active) return Result.ok(null);
+        final OwnedNumber updated = new OwnedNumber(
+                number.id(), number.number(), number.friendlyName(), number.areaCode(),
+                number.provider(), number.reputation(), number.dailyCalls(), active,
+                number.createdAt(), Instant.now());
+        final Result<OwnedNumber> result = repo.update(updated);
+        if (result instanceof Result.Err<?> err) return Result.err(err.message());
+        return Result.ok(null);
     }
 
     /**

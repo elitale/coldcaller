@@ -184,16 +184,18 @@ public final class MainWindow {
 
     /**
      * Open the calling screen in its connecting phase ("Calling…") the instant
-     * the user presses call, before the SIP INVITE goes out. Safe to call from
-     * any thread.
+     * the user presses call, before the SIP INVITE goes out. {@code fromNumber}
+     * is the owned number the call is placed from (caller ID), shown on the
+     * screen. Safe to call from any thread.
      */
-    public void showCallStarting(String number, Runnable onHangUp) {
+    public void showCallStarting(String number, String fromNumber, Runnable onHangUp) {
         final CallParticipant party = participantFor(number);
+        final Optional<String> callerId = Optional.ofNullable(fromNumber).filter(n -> !n.isBlank());
         Platform.runLater(() -> {
             lastDialedNumber = number;
             activeParty = party;
             activeCallController.setOnHangUp(onHangUp);
-            activeCallController.startConnecting(party);
+            activeCallController.startConnecting(party, callerId);
             root.setCenter(activeCallView);
         });
     }
@@ -436,7 +438,7 @@ public final class MainWindow {
     private void openNumberDetail(String number) {
         if (numberDetailPanel == null) {
             numberDetailPanel = new NumberDetailPanel(
-                    callService, contactService, smsService, CountryCatalog.ALL,
+                    callService, contactService, smsService, phoneNumberService, CountryCatalog.ALL,
                     onDial, this::openMessageThread, this::closeNumberDetail, this::refreshRecentCalls);
         }
         numberDetailPanel.show(number);

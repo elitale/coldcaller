@@ -85,6 +85,7 @@ public final class ActiveCallController {
     @FXML private Label     numberLabel;
     @FXML private Label     locationLabel;
     @FXML private Label     statusLabel;
+    @FXML private Label     callerIdLabel;
     @FXML private Button    muteButton;
     @FXML private Button    keypadButton;
     @FXML private Button    holdButton;
@@ -281,6 +282,10 @@ public final class ActiveCallController {
         micGlyph.setIconSize(15);
         micGlyph.setIconColor(MIC_OFF_COLOR);
         micStateIcon.setGraphic(micGlyph);
+
+        FontIcon fromGlyph = new FontIcon("bi-telephone-outbound-fill");
+        fromGlyph.setIconSize(12);
+        callerIdLabel.setGraphic(fromGlyph);
 
         // Auto-save: debounce note typing, persist a disposition pick immediately.
         notesDebounce = new PauseTransition(Duration.millis(500));
@@ -555,12 +560,14 @@ public final class ActiveCallController {
     /**
      * Show the screen in its connecting phase ("Calling…") with the resolved
      * party. Opened the instant the user presses call, before the SIP INVITE is
-     * even dispatched. Any thread.
+     * even dispatched. {@code callerId} is the owned number the call is placed
+     * from, shown as "From …" (empty hides it). Any thread.
      */
-    public void startConnecting(CallParticipant party) {
+    public void startConnecting(CallParticipant party, Optional<String> callerId) {
         Objects.requireNonNull(party, "party must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
         runOnFx(() -> {
-            reset(party);
+            reset(party, callerId);
             phase = Phase.RINGING;
             statusLabel.setText("Calling\u2026");
             setRingStyle("call-ring--ringing");
@@ -607,7 +614,7 @@ public final class ActiveCallController {
         Objects.requireNonNull(party, "party must not be null");
         Objects.requireNonNull(connectedAt, "connectedAt must not be null");
         runOnFx(() -> {
-            reset(party);
+            reset(party, Optional.empty());
             animateIn();
             markConnected(connectedAt);
         });
@@ -665,7 +672,7 @@ public final class ActiveCallController {
         Objects.requireNonNull(party, "party must not be null");
         Objects.requireNonNull(reason, "reason must not be null");
         runOnFx(() -> {
-            reset(party);
+            reset(party, Optional.empty());
             animateIn();
             markFailed(reason);
         });
@@ -834,7 +841,7 @@ public final class ActiveCallController {
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    private void reset(CallParticipant party) {
+    private void reset(CallParticipant party, Optional<String> callerId) {
         suppressAutoSave = true;
         if (notesDebounce != null) notesDebounce.stop();
         stopLevelMeter();
@@ -844,6 +851,7 @@ public final class ActiveCallController {
         numberLabel.setText(named ? party.number() : "");
         numberLabel.setVisible(named);
         numberLabel.setManaged(named);
+        renderCallerId(callerId);
         subtitle = party.subtitle().orElse("");
         country = party.country();
         refreshLocation();
@@ -911,12 +919,19 @@ public final class ActiveCallController {
         refreshLocation();
     }
 
+    /** Show "From <owned number>" — the caller ID an outbound call is placed from; hidden when unknown. */
+    private void renderCallerId(Optional<String> callerId) {
+        final Optional<String> from = callerId.map(String::strip).filter(n -> !n.isBlank());
+        callerIdLabel.setText(from.map(n -> "From " + n).orElse(""));
+        callerIdLabel.setVisible(from.isPresent());
+        callerIdLabel.setManaged(from.isPresent());
+    }
+
     private void refreshLocation() {
         StringBuilder text = new StringBuilder();
         if (!subtitle.isBlank()) {
             text.append(subtitle);
-        }
-        country.ifPresent(c -> {
+        }        country.ifPresent(c -> {
             if (text.length() > 0) text.append("   ·   ");
             text.append(LocalTimeFormatter.describe(c, Instant.now()));
         });

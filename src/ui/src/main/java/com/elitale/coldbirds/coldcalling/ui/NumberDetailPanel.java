@@ -2,14 +2,17 @@ package com.elitale.coldbirds.coldcalling.ui;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.model.Contact;
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
 import com.elitale.coldbirds.coldcalling.services.CallService;
 import com.elitale.coldbirds.coldcalling.services.ContactService;
+import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.ui.support.ContactEditForm;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
@@ -46,8 +49,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -80,6 +85,7 @@ public final class NumberDetailPanel {
     private final CallService callService;
     private final ContactService contactService;
     private final SmsService smsService;
+    private final PhoneNumberService phoneNumberService;
     private final List<Country> catalog;
     private final Consumer<String> onCall;
     private final Consumer<String> onMessage;
@@ -103,6 +109,7 @@ public final class NumberDetailPanel {
             final CallService callService,
             final ContactService contactService,
             final SmsService smsService,
+            final PhoneNumberService phoneNumberService,
             final List<Country> catalog,
             final Consumer<String> onCall,
             final Consumer<String> onMessage,
@@ -112,6 +119,7 @@ public final class NumberDetailPanel {
         this.callService = Objects.requireNonNull(callService, "callService");
         this.contactService = Objects.requireNonNull(contactService, "contactService");
         this.smsService = Objects.requireNonNull(smsService, "smsService");
+        this.phoneNumberService = Objects.requireNonNull(phoneNumberService, "phoneNumberService");
         this.catalog = List.copyOf(Objects.requireNonNull(catalog, "catalog"));
         this.onCall = Objects.requireNonNull(onCall, "onCall");
         this.onMessage = Objects.requireNonNull(onMessage, "onMessage");
@@ -168,7 +176,8 @@ public final class NumberDetailPanel {
                 .supplyAsync(() -> new Loaded(
                         contactService.findByPhone(number),
                         callService.findByRemoteNumber(number),
-                        smsService.findThread(number)))
+                        smsService.findThread(number),
+                        ownedNumbersById()))
                 .whenComplete((data, error) -> Platform.runLater(() -> {
                     if (error != null) {
                         LOG.error("Failed to load detail panel for {}", number.value(), error);
@@ -194,7 +203,17 @@ public final class NumberDetailPanel {
         player.stop();
     }
 
-    private record Loaded(Optional<Contact> contact, List<Call> calls, List<SmsMessage> sms) {}
+    /** All owned numbers keyed by id, to resolve the local number used per call. */
+    private Map<PhoneNumberId, String> ownedNumbersById() {
+        final Map<PhoneNumberId, String> byId = new HashMap<>();
+        for (final OwnedNumber owned : phoneNumberService.listAll()) {
+            byId.put(owned.id(), owned.number().value());
+        }
+        return byId;
+    }
+
+    private record Loaded(Optional<Contact> contact, List<Call> calls, List<SmsMessage> sms,
+                          Map<PhoneNumberId, String> ownedNumbers) {}
 
     // ── Rendering ───────────────────────────────────────────────────────────────
 
@@ -249,7 +268,7 @@ public final class NumberDetailPanel {
                 statsStrip(data.calls()),
                 contactCard(data.contact()),
                 new Separator(),
-                timeline(data.calls(), data.sms()));
+                timeline(data.calls(), data.sms(), data.ownedNumbers()));
         refreshPlayButtons();
     }
 
@@ -420,7 +439,8 @@ public final class NumberDetailPanel {
         return box;
     }
 
-    private VBox timeline(final List<Call> calls, final List<SmsMessage> sms) {
+    private VBox timeline(final List<Call> calls, final List<SmsMessage> sms,
+                          final Map<PhoneNumberId, String> ownedNumbers) {
         final int total = calls.size() + sms.size();
         final VBox box = new VBox(8, sectionTitle("Timeline (" + total + ")"));
         if (total == 0) {
@@ -428,7 +448,7 @@ public final class NumberDetailPanel {
             return box;
         }
         final List<Entry> entries = new ArrayList<>();
-        for (final Call c : calls) entries.add(new Entry(c.startedAt(), callRow(c)));
+        for (final Call c : calls) entries.add(new Entry(c.startedAt(), callRow(c, ownedNumbers)));
         for (final SmsMessage m : sms) entries.add(new Entry(m.sentAt(), smsRow(m)));
         entries.sort(Comparator.comparing(Entry::at).reversed());
         for (final Entry e : entries) box.getChildren().add(e.node());
@@ -437,13 +457,17 @@ public final class NumberDetailPanel {
 
     private record Entry(Instant at, Region node) {}
 
-    private HBox callRow(final Call call) {
+    private HBox callRow(final Call call, final Map<PhoneNumberId, String> ownedNumbers) {
         final String arrow = call.direction() == CallDirection.OUTBOUND ? "↗" : "↙";
         final String primary = arrow + "  " + STAMP.format(call.startedAt().atZone(localZone))
                 + "   ·   " + formatDuration(call.durationMs().orElse(0L));
-        final String secondary = call.disposition()
+        final String dispo = call.disposition()
                 .map(NumberDetailPanel::dispositionLabel)
                 .orElse("—");
+        final String prep = call.direction() == CallDirection.OUTBOUND ? "From " : "To ";
+        final String secondary = Optional.ofNullable(ownedNumbers.get(call.phoneNumberId()))
+                .map(local -> dispo + "   ·   " + prep + local)
+                .orElse(dispo);
         final VBox info = new VBox(2, new Label(primary), muted(secondary));
         final Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

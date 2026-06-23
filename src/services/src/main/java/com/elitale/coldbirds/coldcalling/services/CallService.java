@@ -83,7 +83,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     // UI callbacks
     private IncomingCallListener          onIncomingCallCb   = (id, a, b) -> {};
-    private Consumer<String>              onCallStartingCb   = remote -> {};
+    private BiConsumer<String, String>    onCallStartingCb   = (remote, from) -> {};
     private Consumer<String>              onCallRingingCb    = id -> {};
     private Consumer<String>              onCallAnsweredCb   = id -> {};
     private BiConsumer<String, String>    onCallEndedCb      = (id, r) -> {};
@@ -114,10 +114,11 @@ public final class CallService implements TelephonyService.TelephonyListener {
      * dialling — after the DNC and number-ownership checks pass, but BEFORE the
      * SIP INVITE is dispatched. This lets the UI open the calling screen
      * immediately so the user sees instant feedback while the (slower) SIP
-     * signalling happens in the background. The argument is the remote E.164
-     * number. Fired on the dialling thread; dispatch UI work to the FX thread.
+     * signalling happens in the background. The arguments are the remote E.164
+     * number and the owned number the call is placed from (caller ID). Fired on
+     * the dialling thread; dispatch UI work to the FX thread.
      */
-    public void setOnCallStarting(Consumer<String> cb) {
+    public void setOnCallStarting(BiConsumer<String, String> cb) {
         this.onCallStartingCb = Objects.requireNonNull(cb);
     }
 
@@ -182,7 +183,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
         // Show the calling screen NOW — before the (slower) SIP INVITE leaves the
         // wire — so pressing call gives instant feedback. The actual signalling
         // follows on this same background thread.
-        onCallStartingCb.accept(remote.value());
+        onCallStartingCb.accept(remote.value(), local.value());
 
         final String sipCallId = telephony.dial(local, remote);
         if (sipCallId.isBlank()) {

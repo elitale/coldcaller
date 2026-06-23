@@ -49,6 +49,10 @@
     <Label fx:id="statusLabel" text="" styleClass="call-status"
            alignment="CENTER" maxWidth="Infinity"/>
 
+    <!-- Caller ID — the owned number an outbound call is placed from (controller-driven) -->
+    <Label fx:id="callerIdLabel" text="" styleClass="call-from"
+           alignment="CENTER" visible="false" managed="false"/>
+
     <!-- Recording indicator — visible only while the call is being recorded -->
     <HBox fx:id="recChip" spacing="6" alignment="CENTER" styleClass="call-rec"
           visible="false" managed="false">

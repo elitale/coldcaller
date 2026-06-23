@@ -180,9 +180,14 @@ public final class ColdCallingApp extends Application {
                 audioDeviceManager.resolveInput(settingsService.getAudioInputDevice()).orElse(null),
                 audioDeviceManager.resolveOutput(settingsService.getAudioOutputDevice()).orElse(null));
 
+        // Caller-ID selection: rotate across the active number pool, but stick to the
+        // number a prospect was last reached on (derived from call history). Shared by
+        // manual dialling and the power dialer so both behave identically.
+        final CallerIdSelector callerIdSelector = new CallerIdSelector(phoneNumberService, callRepo);
+
         // Power Dialer
         powerDialerService = new PowerDialerService(
-                callListRepo, contactRepo, phoneNumberService, settingsService,
+                callListRepo, contactRepo, callerIdSelector, settingsService,
                 (remote, local) -> callService.dial(remote, local));
 
         // Seed the global Motion Doctrine gate from the saved preference.
@@ -214,11 +219,11 @@ public final class ColdCallingApp extends Application {
                         notifyError(msg);
                         return;
                     }
-                    phoneNumberService.getDefault().ifPresentOrElse(
+                    callerIdSelector.selectFor(remote).ifPresentOrElse(
                             owned -> callService.dial(remote, owned.number()),
                             () -> {
-                                String msg = "Cannot dial " + rawNumber + " — no default number "
-                                        + "configured. Set a default number in Settings.";
+                                String msg = "Cannot dial " + rawNumber + " — no active calling "
+                                        + "number. Turn on at least one number in Settings.";
                                 LOG.warn(msg);
                                 notifyError(msg);
                             }
@@ -289,9 +294,9 @@ public final class ColdCallingApp extends Application {
 
         // Outbound: open the calling screen the instant the user presses call —
         // BEFORE the SIP INVITE is dispatched — so dialling feels immediate.
-        callService.setOnCallStarting(remote -> {
+        callService.setOnCallStarting((remote, from) -> {
             activeCallId = null;
-            mainWindow.showCallStarting(remote, () -> callService.hangUp());
+            mainWindow.showCallStarting(remote, from, () -> callService.hangUp());
         });
 
         // INVITE dispatched → flip the already-visible screen to "Ringing…".

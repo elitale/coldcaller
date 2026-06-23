@@ -1,8 +1,8 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.onboarding.ProviderOptions;
 import com.elitale.coldbirds.coldcalling.domain.routing.CallRoutingConfig;
-import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
@@ -11,6 +11,7 @@ import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDevice;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.telephony.rtp.VoicemailGreeting;
+import com.elitale.coldbirds.coldcalling.ui.support.CallerIdLabel;
 import com.elitale.coldbirds.coldcalling.ui.support.Motion;
 import javafx.animation.AnimationTimer;
 import javafx.application.Platform;
@@ -18,6 +19,7 @@ import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.SpinnerValueFactory.IntegerSpinnerValueFactory;
+import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Window;
 import javafx.util.StringConverter;
@@ -28,6 +30,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -50,9 +53,12 @@ public final class SettingsController {
 
     @FXML private Label            statusLabel;
 
-    // General
-    @FXML private ComboBox<String> defaultNumberCombo;
+    // Calling numbers
+    @FXML private VBox             numberPoolBox;
     @FXML private Button           refreshNumbersButton;
+
+    /** One checkbox per owned number; checked = active (in the rotation pool). */
+    private final List<CheckBox> numberChecks = new ArrayList<>();
 
     // Twilio
     @FXML private TextField        twilioAccountSidField;
@@ -186,11 +192,15 @@ public final class SettingsController {
 
     @FXML
     private void onSaveGeneral() {
-        final String sel = defaultNumberCombo.getValue();
-        if (sel != null && !sel.isBlank()) {
-            phoneNumberService.setDefault(new PhoneNumber(sel));
+        int active = 0;
+        for (final CheckBox check : numberChecks) {
+            final OwnedNumber number = (OwnedNumber) check.getUserData();
+            phoneNumberService.setActive(number.id(), check.isSelected());
+            if (check.isSelected()) active++;
         }
-        showStatus("General settings saved.");
+        showStatus(active == 0
+                ? "Saved — no active calling numbers. Outbound calls need at least one."
+                : "Saved — " + active + " number(s) in rotation.");
     }
 
     /**
@@ -441,7 +451,7 @@ public final class SettingsController {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private record AllSettings(
-            List<String> ownedNumbers,  String defaultNumber,
+            List<OwnedNumber> ownedNumbers,
             String twilioAccountSid,    String twilioAuthToken,
             String sipUsername,         String sipPassword,
             String sipDomain,           String sipProxy,    int sipProxyPort,
@@ -453,12 +463,8 @@ public final class SettingsController {
 
     /** Runs on a background thread — no UI access here. */
     private AllSettings loadAll() {
-        final List<String> numbers = phoneNumberService.listOwned()
-                .stream().map(n -> n.number().value()).toList();
-        final String defNum = phoneNumberService.getDefault()
-                .map(n -> n.number().value()).orElse("");
         return new AllSettings(
-                numbers, defNum,
+                phoneNumberService.listAll(),
                 settingsService.getTwilioAccountSid(), settingsService.getTwilioAuthToken(),
                 settingsService.getSipUsername(),    settingsService.getSipPassword(),
                 settingsService.getSipDomain(),      settingsService.getSipProxy(),
@@ -475,8 +481,7 @@ public final class SettingsController {
 
     /** Runs on the FX Application Thread — safe to update UI fields here. */
     private void applyAll(AllSettings s) {
-        defaultNumberCombo.setItems(FXCollections.observableArrayList(s.ownedNumbers()));
-        if (!s.defaultNumber().isBlank()) defaultNumberCombo.setValue(s.defaultNumber());
+        populateNumberPool(s.ownedNumbers());
 
         twilioAccountSidField.setText(s.twilioAccountSid());
         twilioAuthTokenField.setText(s.twilioAuthToken());
@@ -518,7 +523,7 @@ public final class SettingsController {
                         () -> combo.getItems().stream().findFirst().ifPresent(combo::setValue));
     }
 
-    private record NumbersRefresh(String message, List<String> numbers) {}
+    private record NumbersRefresh(String message, List<OwnedNumber> numbers) {}
 
     /** Background thread: pull numbers from Twilio, then read back the owned list. */
     private NumbersRefresh fetchAndListNumbers() {
@@ -528,20 +533,33 @@ public final class SettingsController {
                     : ok.value() + " new number(s) added.";
             case Result.Err<?> err -> "Couldn\u2019t refresh numbers \u2014 check Twilio settings.";
         };
-        final List<String> numbers = phoneNumberService.listOwned()
-                .stream().map(n -> n.number().value()).toList();
-        return new NumbersRefresh(message, numbers);
+        return new NumbersRefresh(message, phoneNumberService.listAll());
     }
 
-    /** FX thread: refresh the combo, keeping the current selection when still present. */
+    /** FX thread: rebuild the number pool from storage (active flags are authoritative). */
     private void applyRefreshedNumbers(NumbersRefresh r) {
         refreshNumbersButton.setDisable(false);
-        final String current = defaultNumberCombo.getValue();
-        defaultNumberCombo.setItems(FXCollections.observableArrayList(r.numbers()));
-        if (current != null && r.numbers().contains(current)) {
-            defaultNumberCombo.setValue(current);
-        }
+        populateNumberPool(r.numbers());
         showStatus(r.message());
+    }
+
+    /** Rebuild the calling-number checkbox list; checked = active (in rotation). */
+    private void populateNumberPool(List<OwnedNumber> numbers) {
+        numberChecks.clear();
+        numberPoolBox.getChildren().clear();
+        if (numbers.isEmpty()) {
+            final Label empty = new Label("No numbers yet \u2014 add one in Twilio, then Refresh.");
+            empty.getStyleClass().add("caption");
+            numberPoolBox.getChildren().add(empty);
+            return;
+        }
+        for (final OwnedNumber number : numbers) {
+            final CheckBox check = new CheckBox(CallerIdLabel.describe(number));
+            check.setSelected(number.active());
+            check.setUserData(number);
+            numberChecks.add(check);
+            numberPoolBox.getChildren().add(check);
+        }
     }
 
     /** Selected device id, or "" (system default) when nothing is selected. */

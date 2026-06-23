@@ -128,6 +128,46 @@ class PhoneNumberServiceTest {
         verify(repo, never()).save(any());
     }
 
+    @Test
+    void listAll_delegatesToRepo() {
+        when(repo.findAll()).thenReturn(List.of(stubOwned()));
+        assertThat(service.listAll()).hasSize(1);
+        verify(repo).findAll();
+    }
+
+    @Test
+    void setActive_unknownNumber_returnsErr() {
+        when(repo.findById(ID)).thenReturn(Optional.empty());
+        assertThat(service.setActive(ID, false)).isInstanceOf(Result.Err.class);
+        verify(repo, never()).update(any());
+    }
+
+    @Test
+    void setActive_noChange_skipsUpdate() {
+        when(repo.findById(ID)).thenReturn(Optional.of(stubOwned())); // already active
+        assertThat(service.setActive(ID, true)).isInstanceOf(Result.Ok.class);
+        verify(repo, never()).update(any());
+    }
+
+    @Test
+    void setActive_change_persistsViaUpdate() {
+        when(repo.findById(ID)).thenReturn(Optional.of(stubOwned())); // active → deactivate
+        when(repo.update(any())).thenReturn(Result.ok(stubOwned()));
+        final ArgumentCaptor<OwnedNumber> captor = ArgumentCaptor.forClass(OwnedNumber.class);
+
+        assertThat(service.setActive(ID, false)).isInstanceOf(Result.Ok.class);
+
+        verify(repo).update(captor.capture());
+        assertThat(captor.getValue().active()).isFalse();
+    }
+
+    @Test
+    void setActive_updateFails_propagatesErr() {
+        when(repo.findById(ID)).thenReturn(Optional.of(stubOwned()));
+        when(repo.update(any())).thenReturn(Result.err("db down"));
+        assertThat(service.setActive(ID, false)).isInstanceOf(Result.Err.class);
+    }
+
     private OwnedNumber stubOwned() {
         return new OwnedNumber(
                 ID, NUMBER, Optional.empty(),
