@@ -1,13 +1,5 @@
 package com.elitale.coldbirds.coldcalling.services;
 
-import com.elitale.coldbirds.coldcalling.domain.model.*;
-import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.*;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,8 +11,34 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
+
+import com.elitale.coldbirds.coldcalling.domain.model.CallList;
+import com.elitale.coldbirds.coldcalling.domain.model.CallListEntry;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.AreaCode;
+import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadStatus;
+import com.elitale.coldbirds.coldcalling.domain.value.NumberReputation;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 
 class PowerDialerServiceTest {
 
@@ -202,21 +220,128 @@ class PowerDialerServiceTest {
         assertThat(dialed).isEmpty();
     }
 
-    // ── createCallList ────────────────────────────────────────────────────────
+    // ── resume semantics ──────────────────────────────────────────────────────
 
     @Test
-    void createCallList_blankName_returnsError() {
-        assertThat(service.createCallList("  ")).isInstanceOf(Result.Err.class);
+    void start_resumesFromFirstPending_skippingDialed() {
+        LeadId idA = new LeadId(10L), idB = new LeadId(20L);
+        CallList list = new CallList(LIST_ID, "Half done", Optional.empty(), List.of(
+                new CallListEntry(1L, idA, 0, CallListEntry.DialStatus.DIALED),
+                new CallListEntry(2L, idB, 1, CallListEntry.DialStatus.PENDING)),
+                Instant.now(), Instant.now());
+        when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
+        when(leadRepo.findById(idB)).thenReturn(Optional.of(makeLead(idB, PHONE_B)));
+        assertThat(service.start(LIST_ID)).isInstanceOf(Result.Ok.class);
+        assertThat(dialed).hasSize(1);
+        assertThat(dialed.get(0)[0]).isEqualTo(PHONE_B); // resumed at B, skipped dialed A
     }
 
     @Test
-    void createCallList_delegatesToRepo() {
-        CallList expected = new CallList(LIST_ID, "Sales", Optional.empty(),
-                List.of(), Instant.now(), Instant.now());
-        when(callListRepo.save(any())).thenReturn(Result.ok(expected));
-        Result<CallList> r = service.createCallList("Sales");
-        assertThat(r).isInstanceOf(Result.Ok.class);
-        assertThat(((Result.Ok<CallList>) r).value().name()).isEqualTo("Sales");
+    void advance_skipsInterleavedDialedEntries() {
+        LeadId idA = new LeadId(10L), idX = new LeadId(30L), idB = new LeadId(20L);
+        CallList list = new CallList(LIST_ID, "Interleaved", Optional.empty(), List.of(
+                new CallListEntry(1L, idA, 0, CallListEntry.DialStatus.PENDING),
+                new CallListEntry(2L, idX, 1, CallListEntry.DialStatus.DIALED),
+                new CallListEntry(3L, idB, 2, CallListEntry.DialStatus.PENDING)),
+                Instant.now(), Instant.now());
+        when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
+        when(leadRepo.findById(idA)).thenReturn(Optional.of(makeLead(idA, PHONE_A)));
+        when(leadRepo.findById(idB)).thenReturn(Optional.of(makeLead(idB, PHONE_B)));
+        service.start(LIST_ID);                 // dials A (index 0)
+        service.notifyCallAnswered("c1");
+        service.notifyCallEnded("c1", "bye");   // answered → no auto-advance
+        dialed.clear();
+        service.advance();                      // pos→1 (DIALED, skip) → 2 (B)
+        assertThat(dialed).hasSize(1);
+        assertThat(dialed.get(0)[0]).isEqualTo(PHONE_B);
+    }
+
+    @Test
+    void start_allDialed_returnsError() {
+        CallList list = new CallList(LIST_ID, "Done", Optional.empty(), List.of(
+                new CallListEntry(1L, new LeadId(10L), 0, CallListEntry.DialStatus.DIALED)),
+                Instant.now(), Instant.now());
+        when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
+        assertThat(service.start(LIST_ID)).isInstanceOf(Result.Err.class);
+    }
+
+    @Test
+    void start_missingList_returnsError() {
+        when(callListRepo.findById(LIST_ID)).thenReturn(Optional.empty());
+        assertThat(service.start(LIST_ID)).isInstanceOf(Result.Err.class);
+    }
+
+    // ── last-used list ────────────────────────────────────────────────────────
+
+    @Test
+    void start_persistsLastUsedList() {
+        stubTwoLeadList();
+        service.start(LIST_ID);
+        verify(settings).set(PowerDialerService.KEY_LAST_LIST, "1");
+    }
+
+    @Test
+    void lastUsedListId_readsFromSettings() {
+        when(settings.get(PowerDialerService.KEY_LAST_LIST, "")).thenReturn("7");
+        assertThat(service.lastUsedListId()).hasValue(new CallListId(7L));
+    }
+
+    @Test
+    void lastUsedListId_emptyWhenUnset() {
+        when(settings.get(PowerDialerService.KEY_LAST_LIST, "")).thenReturn("");
+        assertThat(service.lastUsedListId()).isEmpty();
+    }
+
+    @Test
+    void lastUsedListId_emptyWhenGarbage() {
+        when(settings.get(PowerDialerService.KEY_LAST_LIST, "")).thenReturn("not-a-number");
+        assertThat(service.lastUsedListId()).isEmpty();
+    }
+
+    // ── all-leads (synthetic pool) ────────────────────────────────────────────
+
+    @Test
+    void startAllLeads_dialsFirstLead() {
+        stubAllLeads();
+        assertThat(service.startAllLeads()).isInstanceOf(Result.Ok.class);
+        assertThat(dialed).hasSize(1);
+        assertThat(dialed.get(0)[0]).isEqualTo(PHONE_A);
+    }
+
+    @Test
+    void startAllLeads_noLeads_returnsError() {
+        when(leadRepo.findAll()).thenReturn(List.of());
+        assertThat(service.startAllLeads()).isInstanceOf(Result.Err.class);
+    }
+
+    @Test
+    void startAllLeads_persistsAllLeadsToken() {
+        stubAllLeads();
+        service.startAllLeads();
+        verify(settings).set(PowerDialerService.KEY_LAST_LIST, PowerDialerService.ALL_LEADS_TOKEN);
+    }
+
+    @Test
+    void startAllLeads_neverWritesEntryStatus() {
+        stubAllLeads();
+        service.startAllLeads();
+        service.notifyCallAnswered("c1");
+        service.notifyCallEnded("c1", "bye"); // answered → would mark DIALED on a saved list
+        verify(callListRepo, never()).updateEntryStatus(anyLong(), any());
+    }
+
+    @Test
+    void lastUsedAllLeads_trueWhenTokenStored() {
+        when(settings.get(PowerDialerService.KEY_LAST_LIST, ""))
+                .thenReturn(PowerDialerService.ALL_LEADS_TOKEN);
+        assertThat(service.lastUsedAllLeads()).isTrue();
+        assertThat(service.lastUsedListId()).isEmpty();
+    }
+
+    @Test
+    void countAllLeads_returnsLeadCount() {
+        stubAllLeads();
+        assertThat(service.countAllLeads()).isEqualTo(2);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -246,6 +371,13 @@ class PowerDialerServiceTest {
                 Instant.now(), Instant.now());
         when(callListRepo.findById(LIST_ID)).thenReturn(Optional.of(list));
         when(leadRepo.findById(idA)).thenReturn(Optional.of(makeLead(idA, PHONE_A)));
+    }
+
+    private void stubAllLeads() {
+        LeadId idA = new LeadId(10L), idB = new LeadId(20L);
+        when(leadRepo.findAll()).thenReturn(List.of(makeLead(idA, PHONE_A), makeLead(idB, PHONE_B)));
+        when(leadRepo.findById(idA)).thenReturn(Optional.of(makeLead(idA, PHONE_A)));
+        when(leadRepo.findById(idB)).thenReturn(Optional.of(makeLead(idB, PHONE_B)));
     }
 
     private static Lead makeLead(LeadId id, PhoneNumber phone) {

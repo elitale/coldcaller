@@ -44,9 +44,9 @@ import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallReadiness;
-import com.elitale.coldbirds.coldcalling.ui.support.PowerDialerResumePrompt;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
+import com.elitale.coldbirds.coldcalling.ui.support.PowerDialerResumePrompt;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
 import com.elitale.coldbirds.coldcalling.ui.support.SidebarStatusModel;
 import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
@@ -603,6 +603,7 @@ public final class MainWindow {
         // ── Power Dialer
         powerDialerController = new PowerDialerController();
         powerDialerController.setPowerDialerService(powerDialerService);
+        powerDialerController.setOnGoToLeads(() -> navigate(NavSelectionModel.Destination.LEADS));
         powerDialerView = loadFxml("/fxml/power-dialer-view.fxml", powerDialerController);
 
         // ── Settings

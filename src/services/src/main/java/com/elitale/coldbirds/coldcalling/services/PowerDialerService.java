@@ -1,21 +1,32 @@
 package com.elitale.coldbirds.coldcalling.services;
 
-import com.elitale.coldbirds.coldcalling.domain.model.*;
-import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository.NewCallList;
-import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.elitale.coldbirds.coldcalling.domain.model.CallList;
+import com.elitale.coldbirds.coldcalling.domain.model.CallListEntry;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.model.ListProgress;
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
+import com.elitale.coldbirds.coldcalling.domain.model.PowerDialerSession;
+import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 
 /**
  * Manages power dialer sessions: iterates a {@link CallList}, dials each entry,
@@ -29,6 +40,15 @@ public final class PowerDialerService {
 
     private static final Logger LOG = LoggerFactory.getLogger(PowerDialerService.class);
 
+    /** Settings key: id of the most recently started list (auto-selected on open). */
+    static final String KEY_LAST_LIST = "power_dialer.last_list_id";
+
+    /** Sentinel stored in {@link #KEY_LAST_LIST} when the synthetic "All Leads" pool was last dialed. */
+    static final String ALL_LEADS_TOKEN = "all";
+
+    /** Synthetic list id for the "All Leads" pool — never persisted to {@code call_lists}. */
+    private static final CallListId ALL_LEADS_ID = new CallListId(Long.MAX_VALUE);
+
     /** Snapshot statistics for UI display. */
     public record SessionStats(int dialedCount, int connectedCount, int remaining) {}
 
@@ -36,6 +56,7 @@ public final class PowerDialerService {
 
     private static final class Session {
         final CallList         callList;
+        final boolean          synthetic;
         int                    position;
         int                    dialedCount;
         int                    connectedCount;
@@ -44,7 +65,10 @@ public final class PowerDialerService {
         PowerDialerState       state = new PowerDialerState.Running();
         final Instant          startedAt = Instant.now();
 
-        Session(CallList callList) { this.callList = callList; }
+        Session(CallList callList, boolean synthetic) {
+            this.callList = callList;
+            this.synthetic = synthetic;
+        }
 
         boolean isExhausted() { return position >= callList.entries().size(); }
 
@@ -128,18 +152,52 @@ public final class PowerDialerService {
 
     // ── Control API ───────────────────────────────────────────────────────────
 
+    /**
+     * Start (or resume) dialing {@code listId}. The session begins at the first {@code PENDING}
+     * entry, so a partially-dialed list resumes where it left off and never re-dials reached
+     * leads. The list id is remembered as the last-used list.
+     *
+     * @return {@code Err} when a session is already running, the list is missing/empty, or every
+     *         lead has already been dialed (nothing left to dial).
+     */
     public synchronized Result<Void> start(CallListId listId) {
         if (session != null && session.state instanceof PowerDialerState.Running)
             return Result.err("A session is already running");
-        return callListRepo.findById(Objects.requireNonNull(listId))
-                .filter(l -> !l.entries().isEmpty())
-                .<Result<Void>>map(l -> {
-                    session = new Session(l);
-                    fireSessionChanged();
-                    dialCurrent();
-                    return Result.ok(null);
-                })
-                .orElse(Result.err("Call list not found or empty: " + listId.value()));
+        final Optional<CallList> found = callListRepo.findById(Objects.requireNonNull(listId));
+        if (found.isEmpty()) return Result.err("Call list not found: " + listId.value());
+        final CallList list = found.get();
+        if (list.entries().isEmpty())
+            return Result.err("This list has no leads to dial — add leads on the Leads screen");
+        final ListProgress progress = ListProgress.of(list);
+        if (progress.resumeIndex() < 0)
+            return Result.err("List complete — every lead has been dialed");
+        session = new Session(list, false);
+        session.position = progress.resumeIndex();
+        settings.set(KEY_LAST_LIST, String.valueOf(listId.value()));
+        fireSessionChanged();
+        dialCurrent();
+        return Result.ok(null);
+    }
+
+    /**
+     * Start dialing every lead — the synthetic "All Leads" pool. Unlike a saved list this carries
+     * no persisted dial status: it always starts at the first lead and is not resumed across
+     * restarts (in-session pause/resume still works). Remembered as the last-used target so the
+     * pool is re-selected on open.
+     *
+     * @return {@code Err} when a session is already running or there are no leads to dial.
+     */
+    public synchronized Result<Void> startAllLeads() {
+        if (session != null && session.state instanceof PowerDialerState.Running)
+            return Result.err("A session is already running");
+        final List<Lead> leads = leadRepo.findAll();
+        if (leads.isEmpty())
+            return Result.err("No leads to dial — add leads on the Leads screen");
+        session = new Session(syntheticAllLeads(leads), true);
+        settings.set(KEY_LAST_LIST, ALL_LEADS_TOKEN);
+        fireSessionChanged();
+        dialCurrent();
+        return Result.ok(null);
     }
 
     public synchronized void pause() {
@@ -179,9 +237,24 @@ public final class PowerDialerService {
 
     public List<CallList> getCallLists() { return callListRepo.findAll(); }
 
-    public Result<CallList> createCallList(String name) {
-        if (name == null || name.isBlank()) return Result.err("Name must not be blank");
-        return callListRepo.save(new NewCallList(name.trim(), Optional.empty()));
+    /** Number of dialable leads in the synthetic "All Leads" pool. */
+    public int countAllLeads() { return leadRepo.findAll().size(); }
+
+    /** Whether the synthetic "All Leads" pool was the last-used target — re-selected on open. */
+    public boolean lastUsedAllLeads() {
+        return ALL_LEADS_TOKEN.equals(settings.get(KEY_LAST_LIST, ""));
+    }
+
+    /** Id of the most recently started list, if any — used to auto-select on open. */
+    public Optional<CallListId> lastUsedListId() {
+        final String raw = settings.get(KEY_LAST_LIST, "");
+        if (raw == null || raw.isBlank()) return Optional.empty();
+        try {
+            final long id = Long.parseLong(raw.trim());
+            return id > 0 ? Optional.of(new CallListId(id)) : Optional.empty();
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     public synchronized Optional<PowerDialerSession> getCurrentSession() {
@@ -242,13 +315,14 @@ public final class PowerDialerService {
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private void dialCurrent() {
-        if (session == null || session.isExhausted()) return;
+        if (session == null) return;
+        skipNonPending();
+        if (session.isExhausted()) { endSession(); return; }
         session.currentEntry().ifPresent(entry -> {
             final Optional<Lead> lead = leadRepo.findById(entry.leadId());
             if (lead.isEmpty()) {
                 LOG.warn("Lead {} not found — skipping", entry.leadId().value());
                 session.position++;
-                if (session.isExhausted()) { endSession(); return; }
                 dialCurrent();
                 return;
             }
@@ -260,6 +334,16 @@ public final class PowerDialerService {
             dialCommand.accept(lead.get().phone(), local.get().number());
             scheduleAdvance(noAnswerMs());
         });
+    }
+
+    /** Advance the cursor over entries already dialed/skipped in a prior session. */
+    private void skipNonPending() {
+        while (!session.isExhausted()
+                && session.currentEntry()
+                          .map(e -> e.status() != CallListEntry.DialStatus.PENDING)
+                          .orElse(false)) {
+            session.position++;
+        }
     }
 
     private void scheduleAdvance(long delayMs) {
@@ -292,8 +376,18 @@ public final class PowerDialerService {
     }
 
     private void markCurrentEntry(CallListEntry.DialStatus status) {
-        if (session != null)
-            session.currentEntry().ifPresent(e -> callListRepo.updateEntryStatus(e.entryId(), status));
+        if (session == null || session.synthetic) return; // synthetic pool has no DB rows to update
+        session.currentEntry().ifPresent(e -> callListRepo.updateEntryStatus(e.entryId(), status));
+    }
+
+    /** Build an in-memory all-leads list (entry id 0 — synthetic, never written back). */
+    private static CallList syntheticAllLeads(List<Lead> leads) {
+        final List<CallListEntry> entries = new ArrayList<>(leads.size());
+        for (int i = 0; i < leads.size(); i++) {
+            entries.add(new CallListEntry(0L, leads.get(i).id(), i, CallListEntry.DialStatus.PENDING));
+        }
+        final Instant now = Instant.now();
+        return new CallList(ALL_LEADS_ID, "All Leads", Optional.empty(), entries, now, now);
     }
 
     private static CallListEntry.DialStatus reasonToStatus(String reason) {

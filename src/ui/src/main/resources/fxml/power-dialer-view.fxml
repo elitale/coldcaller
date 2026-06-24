@@ -4,7 +4,9 @@
 <?import javafx.geometry.*?>
 
 <!--
-  Power Dialer view — call list selector (left) + session panel (right).
+  Power Dialer view — pick a list (left) and dial it (centre).
+  The centre swaps between an idle panel (Start/Resume) and a live session panel.
+  List authoring lives on the Leads screen; this screen only selects + dials.
   Controller: PowerDialerController (set via FXMLLoader.setController before load).
 -->
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
@@ -14,7 +16,7 @@
         <HBox spacing="16" alignment="CENTER_LEFT" styleClass="view-header">
             <Label text="Power Dialer" styleClass="view-title"/>
             <Region HBox.hgrow="ALWAYS"/>
-            <Label fx:id="statsLabel" text="Select a list to begin" styleClass="caption"/>
+            <Label fx:id="statsLabel" text="" styleClass="caption"/>
         </HBox>
     </top>
 
@@ -25,69 +27,81 @@
             <Label text="Call Lists" styleClass="section-title"/>
             <ListView fx:id="callListView" VBox.vgrow="ALWAYS"
                       prefHeight="400" styleClass="card-list"/>
-            <HBox spacing="8">
-                <Button fx:id="newListBtn"    text="+ New"   styleClass="accent"
-                        onAction="#onNewList" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
-                <Button fx:id="deleteListBtn" text="Delete"  styleClass="danger"
-                        onAction="#onDeleteList" disable="true"/>
-            </HBox>
+            <Button text="Manage on Leads →" styleClass="flat"
+                    onAction="#onGoToLeads" maxWidth="Infinity"/>
         </VBox>
     </left>
 
-    <!-- ── CENTER: Session panel ─────────────────────────────────────────────── -->
+    <!-- ── CENTER: Idle panel  ⇄  Session panel ─────────────────────────────── -->
     <center>
-        <VBox spacing="20" alignment="TOP_LEFT">
+        <StackPane>
             <padding><Insets top="20" bottom="24" left="28" right="32"/></padding>
 
-            <!-- Current lead card -->
-            <VBox fx:id="leadCard" spacing="6" styleClass="section-card">
-                <Label fx:id="noActiveLabel"    text="No active call"
-                       styleClass="body" visible="true" managed="true"/>
-                <VBox fx:id="leadDetails" spacing="4" visible="false" managed="false">
-                    <Label fx:id="leadNameLabel"    text="—" styleClass="title-2"/>
-                    <Label fx:id="leadPhoneLabel"   text="—" styleClass="mono"/>
-                    <Label fx:id="leadCompanyLabel" text="—" styleClass="caption"/>
-                </VBox>
+            <!-- IDLE: selected-list summary + Start/Resume -->
+            <VBox fx:id="idleBox" spacing="16" alignment="CENTER"
+                  visible="true" managed="true">
+                <Label fx:id="selectedTitle" text="No list selected" styleClass="view-title"/>
+                <Label fx:id="readinessLabel" text="Select a call list on the left"
+                       styleClass="body" wrapText="true"/>
+                <Button fx:id="startBtn" text="Start dialing" styleClass="accent"
+                        onAction="#onStart" disable="true" prefWidth="220"/>
+                <Button fx:id="buildListBtn" text="Add leads on the Leads screen →"
+                        styleClass="flat" onAction="#onGoToLeads"
+                        visible="false" managed="false"/>
             </VBox>
 
-            <!-- Stats row -->
-            <HBox spacing="16">
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
-                    <Label fx:id="dialedCountLabel"    text="0" styleClass="stat-value"/>
-                    <Label text="Dialed"    styleClass="stat-label"/>
-                </VBox>
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
-                    <Label fx:id="connectedCountLabel" text="0" styleClass="stat-value"/>
-                    <Label text="Connected" styleClass="stat-label"/>
-                </VBox>
-                <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
-                    <Label fx:id="remainingCountLabel" text="—" styleClass="stat-value"/>
-                    <Label text="Remaining" styleClass="stat-label"/>
-                </VBox>
-            </HBox>
-
-            <!-- Control buttons -->
-            <HBox spacing="12" alignment="CENTER_LEFT">
-                <Button fx:id="startBtn"   text="Start"   styleClass="accent"
-                        onAction="#onStart"/>
-                <Button fx:id="pauseBtn"   text="Pause"   styleClass="flat"
-                        onAction="#onPause"   disable="true"/>
-                <Button fx:id="stopBtn"    text="Stop"    styleClass="danger"
-                        onAction="#onStop"    disable="true"/>
-                <Region HBox.hgrow="ALWAYS"/>
-                <Button fx:id="advanceBtn" text="Next Lead" styleClass="flat"
-                        onAction="#onAdvance" disable="true"/>
-            </HBox>
-
-            <!-- Up Next queue preview — shown only during an active session -->
-            <VBox fx:id="upNextSection" spacing="8" VBox.vgrow="ALWAYS"
+            <!-- SESSION: live lead + stats + controls -->
+            <VBox fx:id="sessionBox" spacing="20" alignment="TOP_LEFT"
                   visible="false" managed="false">
-                <Label text="Up Next" styleClass="section-title"/>
-                <ListView fx:id="upNextView" prefHeight="180" VBox.vgrow="ALWAYS"
-                          styleClass="card-list"/>
-            </VBox>
 
-        </VBox>
+                <!-- Current lead card -->
+                <VBox fx:id="leadCard" spacing="6" styleClass="section-card">
+                    <Label fx:id="noActiveLabel" text="No active call"
+                           styleClass="body" visible="true" managed="true"/>
+                    <VBox fx:id="leadDetails" spacing="4" visible="false" managed="false">
+                        <Label fx:id="leadNameLabel"    text="—" styleClass="title-2"/>
+                        <Label fx:id="leadPhoneLabel"   text="—" styleClass="mono"/>
+                        <Label fx:id="leadCompanyLabel" text="—" styleClass="caption"/>
+                    </VBox>
+                </VBox>
+
+                <!-- Stats row -->
+                <HBox spacing="16">
+                    <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                        <Label fx:id="dialedCountLabel"    text="0" styleClass="stat-value"/>
+                        <Label text="Dialed"    styleClass="stat-label"/>
+                    </VBox>
+                    <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                        <Label fx:id="connectedCountLabel" text="0" styleClass="stat-value"/>
+                        <Label text="Connected" styleClass="stat-label"/>
+                    </VBox>
+                    <VBox alignment="CENTER" HBox.hgrow="ALWAYS" styleClass="stat-tile">
+                        <Label fx:id="remainingCountLabel" text="—" styleClass="stat-value"/>
+                        <Label text="Remaining" styleClass="stat-label"/>
+                    </VBox>
+                </HBox>
+
+                <!-- Control buttons -->
+                <HBox spacing="12" alignment="CENTER_LEFT">
+                    <Button fx:id="pauseBtn" text="Pause" styleClass="flat"
+                            onAction="#onPause" disable="true"/>
+                    <Button fx:id="stopBtn"  text="Stop"  styleClass="danger"
+                            onAction="#onStop"  disable="true"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="advanceBtn" text="Next Lead" styleClass="accent"
+                            onAction="#onAdvance" disable="true"/>
+                </HBox>
+
+                <!-- Up Next queue preview -->
+                <VBox fx:id="upNextSection" spacing="8" VBox.vgrow="ALWAYS"
+                      visible="false" managed="false">
+                    <Label text="Up Next" styleClass="section-title"/>
+                    <ListView fx:id="upNextView" prefHeight="180" VBox.vgrow="ALWAYS"
+                              styleClass="card-list"/>
+                </VBox>
+
+            </VBox>
+        </StackPane>
     </center>
 
 </BorderPane>
