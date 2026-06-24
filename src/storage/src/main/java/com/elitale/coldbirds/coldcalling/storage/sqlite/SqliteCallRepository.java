@@ -155,6 +155,19 @@ public final class SqliteCallRepository implements CallRepository {
         return List.copyOf(result);
     }
 
+    @Override
+    public List<Call> findCallbacks() {
+        // The due date is encoded in the disposition text as "callback:<epochMillis>";
+        // map(rs) parses it back into CallDisposition.Callback(scheduledAt).
+        String sql = "SELECT * FROM calls WHERE disposition LIKE 'callback:%' ORDER BY started_at DESC";
+        List<Call> result = new ArrayList<>();
+        try (var stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) result.add(map(rs));
+        } catch (SQLException ignored) {}
+        return List.copyOf(result);
+    }
+
     private List<Call> queryParam(String sql, long param) {
         List<Call> result = new ArrayList<>();
         try (var stmt = connection.prepareStatement(sql)) {

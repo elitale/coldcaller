@@ -450,6 +450,99 @@ class CallServiceTest {
         verify(callRepo, never()).update(any());
     }
 
+    // ── callback lifecycle ───────────────────────────────────────────────────
+
+    private static final PhoneNumber CB_A = new PhoneNumber("+13105550001");
+    private static final PhoneNumber CB_B = new PhoneNumber("+13105550002");
+    private static final Instant CB_T0 = Instant.parse("2026-06-24T10:00:00Z");
+
+    private static Call callTo(PhoneNumber remote, CallDirection dir, Instant startedAt,
+                               Optional<CallDisposition> disp, boolean answered) {
+        return new Call(new CallId(1L), dir, LOCAL_ID, Optional.empty(), remote, disp, startedAt,
+                answered ? Optional.of(startedAt) : Optional.empty(), Optional.empty(),
+                answered ? Optional.of(1000L) : Optional.empty(), Optional.empty(), Optional.empty(),
+                startedAt, startedAt);
+    }
+
+    @Test
+    void callbacksDue_returnsOpenCallbacksSortedSoonestFirst() {
+        Instant dueA = CB_T0.plusSeconds(200);
+        Instant dueB = CB_T0.plusSeconds(100);
+        when(callRepo.findCallbacks()).thenReturn(List.of(
+                callTo(CB_A, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(dueA)), true),
+                callTo(CB_B, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(dueB)), true)));
+        when(callRepo.findByRemoteNumber(CB_A)).thenReturn(List.of(
+                callTo(CB_A, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(dueA)), true)));
+        when(callRepo.findByRemoteNumber(CB_B)).thenReturn(List.of(
+                callTo(CB_B, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(dueB)), true)));
+
+        var due = callService.callbacksDue();
+
+        assertThat(due).extracting(CallService.CallbackEntry::number).containsExactly(CB_B, CB_A);
+    }
+
+    @Test
+    void callbacksDue_dropsHonoredByLaterConnectedCall() {
+        Instant due = CB_T0.plusSeconds(100);
+        when(callRepo.findCallbacks()).thenReturn(List.of(
+                callTo(CB_A, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(due)), true)));
+        when(callRepo.findByRemoteNumber(CB_A)).thenReturn(List.of(
+                callTo(CB_A, CallDirection.OUTBOUND, due.plusSeconds(60), Optional.empty(), true),
+                callTo(CB_A, CallDirection.OUTBOUND, CB_T0, Optional.of(new CallDisposition.Callback(due)), true)));
+
+        assertThat(callService.callbacksDue()).isEmpty();
+    }
+
+    @Test
+    void reschedule_updatesLatestCallbackToNewTime() {
+        Instant newWhen = CB_T0.plusSeconds(999);
+        Call callback = callTo(CB_A, CallDirection.OUTBOUND, CB_T0,
+                Optional.of(new CallDisposition.Callback(CB_T0.plusSeconds(50))), true);
+        when(callRepo.findByRemoteNumber(CB_A)).thenReturn(List.of(callback));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        var result = callService.reschedule(CB_A, newWhen);
+
+        assertThat(result).isInstanceOf(Result.Ok.class);
+        ArgumentCaptor<Call> captor = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo).update(captor.capture());
+        assertThat(captor.getValue().disposition()).get().isInstanceOf(CallDisposition.Callback.class);
+        assertThat(((CallDisposition.Callback) captor.getValue().disposition().orElseThrow()).scheduledAt())
+                .isEqualTo(newWhen);
+    }
+
+    @Test
+    void resolveCallback_clearsTheCallbackDisposition() {
+        Call callback = callTo(CB_A, CallDirection.OUTBOUND, CB_T0,
+                Optional.of(new CallDisposition.Callback(CB_T0.plusSeconds(50))), true);
+        when(callRepo.findByRemoteNumber(CB_A)).thenReturn(List.of(callback));
+        when(callRepo.update(any())).thenAnswer(inv -> Result.ok(inv.getArgument(0)));
+
+        callService.resolveCallback(CB_A);
+
+        ArgumentCaptor<Call> captor = ArgumentCaptor.forClass(Call.class);
+        verify(callRepo).update(captor.capture());
+        assertThat(captor.getValue().disposition()).isEmpty();
+    }
+
+    @Test
+    void reschedule_noOpenCallback_returnsErr() {
+        when(callRepo.findByRemoteNumber(CB_A)).thenReturn(List.of());
+        assertThat(callService.reschedule(CB_A, CB_T0)).isInstanceOf(Result.Err.class);
+        verify(callRepo, never()).update(any());
+    }
+
+    @Test
+    void missedInbound_returnsUnansweredInboundLatestPerNumber() {
+        when(callRepo.findRecent(500)).thenReturn(List.of(
+                callTo(CB_A, CallDirection.INBOUND, CB_T0.plusSeconds(30), Optional.empty(), false),
+                callTo(CB_B, CallDirection.INBOUND, CB_T0.plusSeconds(20), Optional.empty(), true),
+                callTo(CB_A, CallDirection.OUTBOUND, CB_T0.plusSeconds(10), Optional.empty(), false)));
+
+        assertThat(callService.missedInbound())
+                .extracting(Call::remoteNumber).containsExactly(CB_A);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private static Call aCall(Optional<CallDisposition> disposition, Optional<String> notes, Instant updatedAt) {

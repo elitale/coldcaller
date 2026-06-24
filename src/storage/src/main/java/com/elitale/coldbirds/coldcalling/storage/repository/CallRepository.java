@@ -56,4 +56,8 @@ public interface CallRepository {
     List<Call> findByRemoteNumber(PhoneNumber remoteNumber);
 
     List<Call> findRecent(int limit);
+
+    /** Calls dispositioned as a scheduled callback (newest first). The parsed due date rides on
+     *  each call's {@code disposition} ({@code CallDisposition.Callback}). */
+    List<Call> findCallbacks();
 }

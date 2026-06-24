@@ -9,46 +9,52 @@
 -->
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
-    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
-            <Label text="Call History" styleClass="view-title"/>
+        <VBox spacing="10">
 
-            <Region HBox.hgrow="ALWAYS"/>
-
-            <!-- Direction filter (segmented control) -->
-            <HBox alignment="CENTER" styleClass="segmented">
-                <ToggleButton fx:id="allBtn"      text="All"/>
-                <ToggleButton fx:id="inboundBtn"  text="Inbound"/>
-                <ToggleButton fx:id="outboundBtn" text="Outbound"/>
+            <!-- Toolbar: title · search · direction · refresh -->
+            <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
+                <Label text="Call History" styleClass="view-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <TextField fx:id="searchField"
+                           promptText="Search by name, company, or number"
+                           prefWidth="260"
+                           styleClass="search-field"/>
+                <HBox alignment="CENTER" styleClass="segmented">
+                    <ToggleButton fx:id="allBtn"      text="All"/>
+                    <ToggleButton fx:id="inboundBtn"  text="Inbound"/>
+                    <ToggleButton fx:id="outboundBtn" text="Outbound"/>
+                </HBox>
+                <Button text="Refresh" onAction="#onRefresh" styleClass="flat"/>
             </HBox>
 
-            <Button text="Refresh" onAction="#onRefresh" styleClass="flat"/>
-        </HBox>
+            <!-- Outcome filter chips (multi-select) -->
+            <HBox fx:id="chipBar" spacing="8" alignment="CENTER_LEFT" styleClass="chip-bar">
+                <padding><Insets left="32" right="32"/></padding>
+                <ToggleButton fx:id="chipCallbacks"  text="Callbacks"   styleClass="filter-chip"/>
+                <ToggleButton fx:id="chipNoAnswer"   text="No answer"   styleClass="filter-chip"/>
+                <ToggleButton fx:id="chipInterested" text="Interested"  styleClass="filter-chip"/>
+                <ToggleButton fx:id="chipVoicemail"  text="Voicemail"   styleClass="filter-chip"/>
+                <ToggleButton fx:id="chipDnc"        text="DNC"         styleClass="filter-chip"/>
+            </HBox>
+
+            <!-- Pinned callbacks band is inserted here in code -->
+            <VBox fx:id="bandHost">
+                <padding><Insets left="24" right="24"/></padding>
+            </VBox>
+        </VBox>
     </top>
 
-    <!-- ── Call table ──────────────────────────────────────────────────────── -->
     <center>
-        <TableView fx:id="table" styleClass="data-table">
-            <BorderPane.margin><Insets left="32" right="32" bottom="0"/></BorderPane.margin>
-            <columns>
-                <TableColumn fx:id="directionCol"   text=""            prefWidth="72"/>
-                <TableColumn fx:id="numberCol"      text="Number"      prefWidth="180"/>
-                <TableColumn fx:id="durationCol"    text="Duration"    prefWidth="90"/>
-                <TableColumn fx:id="dispositionCol" text="Disposition" prefWidth="140"/>
-                <TableColumn fx:id="dateCol"        text="Date"        prefWidth="210"/>
-            </columns>
-        </TableView>
+        <ListView fx:id="list" styleClass="data-list">
+            <BorderPane.margin><Insets left="20" right="24" top="8" bottom="0"/></BorderPane.margin>
+        </ListView>
     </center>
 
-    <!-- ── Action bar ──────────────────────────────────────────────────────── -->
     <bottom>
         <HBox spacing="8" alignment="CENTER_RIGHT">
-            <padding><Insets top="16" bottom="24" left="32" right="32"/></padding>
-            <Button fx:id="callBackBtn"
-                    text="Call Back"
-                    styleClass="accent"
-                    onAction="#onCallBack"/>
+            <padding><Insets top="12" bottom="20" left="32" right="32"/></padding>
+            <Label fx:id="countLabel" styleClass="caption"/>
         </HBox>
     </bottom>
 

@@ -7,6 +7,7 @@ import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.ZoneId;
 
 class DispositionCatalogTest {
 
@@ -44,10 +45,10 @@ class DispositionCatalogTest {
     }
 
     @Test
-    void callbackIsScheduledOneDayAhead() {
+    void callbackDefaultsToTomorrowMorning() {
         CallDisposition d = DispositionCatalog.toDisposition("Callback", NOW).orElseThrow();
         assertThat(d).isInstanceOfSatisfying(CallDisposition.Callback.class, cb ->
-                assertThat(cb.scheduledAt()).isEqualTo(NOW.plus(DispositionCatalog.DEFAULT_CALLBACK_DELAY)));
+                assertThat(cb.scheduledAt()).isEqualTo(CallbackWhen.defaultWhen(NOW, ZoneId.systemDefault())));
     }
 
     @Test

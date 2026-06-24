@@ -14,7 +14,11 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,6 +74,9 @@ public final class CallService implements TelephonyService.TelephonyListener {
     private final LeadRepository        leadRepo;
     private final PhoneNumberRepository phoneNumberRepo;
     private final SettingsService       settings;
+
+    /** How many recent calls to scan for unanswered inbound (the missed-callback band entry). */
+    private static final int MISSED_INBOUND_SCAN = 500;
 
     /** Calls that have started but not yet ended, keyed by SIP Call-ID. */
     private final ConcurrentHashMap<String, ActiveCall> activeCalls = new ConcurrentHashMap<>();
@@ -441,6 +448,100 @@ public final class CallService implements TelephonyService.TelephonyListener {
      */
     public List<Call> findByRemoteNumber(PhoneNumber remoteNumber) {
         return callRepo.findByRemoteNumber(Objects.requireNonNull(remoteNumber, "remoteNumber"));
+    }
+
+    // ── Callback lifecycle ────────────────────────────────────────────────────
+
+    /** A still-open scheduled callback: who + when it was promised. */
+    public record CallbackEntry(PhoneNumber number, Optional<LeadId> leadId, Instant scheduledAt) {
+        public CallbackEntry {
+            Objects.requireNonNull(number, "number must not be null");
+            Objects.requireNonNull(leadId, "leadId must not be null");
+            Objects.requireNonNull(scheduledAt, "scheduledAt must not be null");
+        }
+    }
+
+    /**
+     * The open scheduled callbacks (latest promise per number), dropping any already
+     * <em>honored</em> by a later connected outbound call. Sorted soonest-due first.
+     * Safe to call from a background thread.
+     */
+    public List<CallbackEntry> callbacksDue() {
+        final Map<String, Call> latest = new LinkedHashMap<>();
+        for (Call call : callRepo.findCallbacks()) {           // newest first
+            latest.putIfAbsent(call.remoteNumber().value(), call);
+        }
+        final List<CallbackEntry> out = new ArrayList<>();
+        for (Call call : latest.values()) {
+            final Instant due = scheduledAt(call);
+            if (due == null || isHonored(call.remoteNumber(), due)) {
+                continue;
+            }
+            out.add(new CallbackEntry(call.remoteNumber(), call.leadId(), due));
+        }
+        out.sort(Comparator.comparing(CallbackEntry::scheduledAt));
+        return List.copyOf(out);
+    }
+
+    /** Move a prospect's open callback to a new time (no new dial). */
+    public Result<Void> reschedule(PhoneNumber number, Instant newWhen) {
+        Objects.requireNonNull(number, "number must not be null");
+        Objects.requireNonNull(newWhen, "newWhen must not be null");
+        return latestCallback(number)
+                .map(call -> applyDisposition(call, Optional.of(new CallDisposition.Callback(newWhen))))
+                .orElse(Result.err("No callback to reschedule for " + number.value()));
+    }
+
+    /** Close a prospect's callback with no new dial — clears it from the band. */
+    public Result<Void> resolveCallback(PhoneNumber number) {
+        Objects.requireNonNull(number, "number must not be null");
+        return latestCallback(number)
+                .map(call -> applyDisposition(call, Optional.empty()))
+                .orElse(Result.err("No callback to resolve for " + number.value()));
+    }
+
+    /** Unanswered inbound calls (a lead calling back), latest per number — louder than overdue. */
+    public List<Call> missedInbound() {
+        final Map<String, Call> latest = new LinkedHashMap<>();
+        for (Call call : callRepo.findRecent(MISSED_INBOUND_SCAN)) {
+            if (call.direction() == CallDirection.INBOUND && call.answeredAt().isEmpty()) {
+                latest.putIfAbsent(call.remoteNumber().value(), call);
+            }
+        }
+        return List.copyOf(latest.values());
+    }
+
+    private Optional<Call> latestCallback(PhoneNumber number) {
+        return callRepo.findByRemoteNumber(number).stream()   // newest first
+                .filter(c -> c.disposition().map(d -> d instanceof CallDisposition.Callback).orElse(false))
+                .findFirst();
+    }
+
+    private boolean isHonored(PhoneNumber number, Instant scheduledAt) {
+        return callRepo.findByRemoteNumber(number).stream()
+                .filter(c -> c.direction() == CallDirection.OUTBOUND)
+                .anyMatch(c -> c.startedAt().isAfter(scheduledAt) && isConnected(c));
+    }
+
+    private static boolean isConnected(Call call) {
+        return call.answeredAt().isPresent() || call.durationMs().map(ms -> ms > 0L).orElse(false);
+    }
+
+    private static Instant scheduledAt(Call call) {
+        return call.disposition()
+                .filter(d -> d instanceof CallDisposition.Callback)
+                .map(d -> ((CallDisposition.Callback) d).scheduledAt())
+                .orElse(null);
+    }
+
+    private Result<Void> applyDisposition(Call call, Optional<CallDisposition> disposition) {
+        final Call updated = new Call(call.id(), call.direction(), call.phoneNumberId(), call.leadId(),
+                call.remoteNumber(), disposition, call.startedAt(), call.answeredAt(), call.endedAt(),
+                call.durationMs(), call.recordingPath(), call.notes(), call.createdAt(), Instant.now());
+        final Result<Call> result = callRepo.update(updated);
+        return result instanceof Result.Err<Call> err
+                ? Result.<Void>err(err.message())
+                : Result.<Void>ok(null);
     }
 
     /**

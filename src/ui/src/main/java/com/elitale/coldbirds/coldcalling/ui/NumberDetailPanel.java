@@ -15,6 +15,7 @@ import com.elitale.coldbirds.coldcalling.services.LeadService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.ui.support.LeadEditForm;
+import com.elitale.coldbirds.coldcalling.ui.support.CallbackWhen;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.RecordingPlayer;
@@ -24,6 +25,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.TextField;
@@ -81,6 +84,8 @@ public final class NumberDetailPanel {
             DateTimeFormatter.ofPattern("EEE d MMM, h:mm a", Locale.ENGLISH);
     private static final DateTimeFormatter CLOCK =
             DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
+    private static final DateTimeFormatter CALLBACK_WHEN_FMT =
+            DateTimeFormatter.ofPattern("EEE h:mm a", Locale.ENGLISH);
 
     private final CallService callService;
     private final LeadService leadService;
@@ -362,10 +367,42 @@ public final class NumberDetailPanel {
             chips.getChildren().add(b);
         }
         final VBox box = new VBox(6, sectionTitle("Disposition"), chips);
+        active.ifPresent(d -> {
+            if (d instanceof CallDisposition.Callback cb) {
+                box.getChildren().add(callbackWhenRow(cb));
+            }
+        });
         if (latestCall.isEmpty()) {
             box.getChildren().add(muted("No call to disposition yet."));
         }
         return box;
+    }
+
+    /** Shows the scheduled callback time + a one-click "Change" override (default-and-go). */
+    private HBox callbackWhenRow(CallDisposition.Callback cb) {
+        final Label when = new Label("Callback "
+                + CALLBACK_WHEN_FMT.format(cb.scheduledAt().atZone(ZoneId.systemDefault())));
+        when.getStyleClass().add("caption");
+        final MenuButton change = new MenuButton("Change");
+        change.getStyleClass().addAll("flat", "recent-action");
+        for (CallbackWhen.Preset preset : CallbackWhen.Preset.values()) {
+            final MenuItem item = new MenuItem(presetLabel(preset));
+            item.setOnAction(e -> applyHotkeyDisposition(new CallDisposition.Callback(
+                    CallbackWhen.resolve(preset, Instant.now(), ZoneId.systemDefault()))));
+            change.getItems().add(item);
+        }
+        final HBox row = new HBox(8, when, change);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
+    }
+
+    private static String presetLabel(CallbackWhen.Preset preset) {
+        return switch (preset) {
+            case LATER_TODAY -> "Later today";
+            case TOMORROW_AM -> "Tomorrow AM";
+            case IN_TWO_DAYS -> "In 2 days";
+            case NEXT_WEEK   -> "Next week";
+        };
     }
 
     private VBox noteZone() {
@@ -578,7 +615,8 @@ public final class NumberDetailPanel {
             case A -> applyHotkeyDisposition(new CallDisposition.NoAnswer());
             case B -> applyHotkeyDisposition(new CallDisposition.Busy());
             case D -> applyHotkeyDisposition(new CallDisposition.DNC());
-            case K -> applyHotkeyDisposition(new CallDisposition.Callback(Instant.now().plus(Duration.ofDays(1))));
+            case K -> applyHotkeyDisposition(new CallDisposition.Callback(
+                    CallbackWhen.defaultWhen(Instant.now(), ZoneId.systemDefault())));
             default -> false;
         };
         if (handled) event.consume();
@@ -599,7 +637,8 @@ public final class NumberDetailPanel {
     private static final List<Chip> CHIPS = List.of(
             new Chip("Interested",     CallDisposition.Interested::new),
             new Chip("Not interested", CallDisposition.NotInterested::new),
-            new Chip("Callback",       () -> new CallDisposition.Callback(Instant.now().plus(Duration.ofDays(1)))),
+            new Chip("Callback",       () -> new CallDisposition.Callback(
+                    CallbackWhen.defaultWhen(Instant.now(), ZoneId.systemDefault()))),
             new Chip("Voicemail",      CallDisposition.Voicemail::new),
             new Chip("No answer",      CallDisposition.NoAnswer::new),
             new Chip("Busy",           CallDisposition.Busy::new),

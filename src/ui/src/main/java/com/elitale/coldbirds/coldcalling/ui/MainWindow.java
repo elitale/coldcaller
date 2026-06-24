@@ -505,7 +505,10 @@ public final class MainWindow {
         // ── Call History
         callHistoryController = new CallHistoryController();
         callHistoryController.setCallService(callService);
+        callHistoryController.setLeadService(leadService);
+        callHistoryController.setPhoneNumberService(phoneNumberService);
         callHistoryController.setOnDial(onDial);
+        callHistoryController.setOnOpenDetail(this::openNumberDetail);
         callHistoryView = loadFxml("/fxml/call-history-view.fxml", callHistoryController);
 
         // ── Leads
