@@ -1,7 +1,14 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
 import com.elitale.coldbirds.coldcalling.services.CallListService;
 import com.elitale.coldbirds.coldcalling.services.LeadImportService;
 import com.elitale.coldbirds.coldcalling.services.LeadService;
@@ -9,6 +16,7 @@ import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.ui.support.LeadFilterState;
 import com.elitale.coldbirds.coldcalling.ui.support.LeadPhoneParser;
 import com.elitale.coldbirds.coldcalling.ui.support.LeadSelectionModel;
+
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -24,11 +32,6 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.Clipboard;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
-
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 /**
  * Controller for the Leads workbench (leads-view.fxml).
@@ -149,7 +152,7 @@ public final class LeadsController {
         if (leadService == null) {
             return;
         }
-        quickAddBar = new LeadQuickAddBar(leadService, LeadPhoneParser::parse);
+        quickAddBar = new LeadQuickAddBar(this::persistNewLead, LeadPhoneParser::parse);
         quickAddBar.setOnAdded(this::afterDataChanged);
         bulkBar = new LeadBulkBar(leadService, selection);
         bulkBar.setOnChanged(this::afterBulkChanged);
@@ -194,7 +197,7 @@ public final class LeadsController {
             return;
         }
         AddLeadDialog.show().ifPresent(newLead -> CompletableFuture
-                .runAsync(() -> leadService.save(newLead))
+                .runAsync(() -> persistNewLead(newLead))
                 .thenRunAsync(this::afterDataChanged, Platform::runLater));
     }
 
@@ -260,6 +263,19 @@ public final class LeadsController {
             selection.clear();
             afterBulkChanged();
         });
+    }
+
+    /**
+     * Persist a new lead and, when a real list is selected in the rail, attach it to that
+     * list so it shows in the scoped grid. Runs off the FX thread (callers wrap it in a
+     * {@link CompletableFuture}); "All Leads" ({@code listId} empty) saves globally only.
+     */
+    private void persistNewLead(LeadService.NewLead draft) {
+        final Result<Lead> result = leadService.save(draft);
+        if (result instanceof Result.Ok<Lead> ok && callListService != null) {
+            filterState.listId().ifPresent(listId ->
+                    callListService.addLeads(listId, List.of(ok.value().id())));
+        }
     }
 
     private void pasteClipboard() {

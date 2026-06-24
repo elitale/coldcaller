@@ -1,7 +1,15 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.services.LeadService;
+
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -13,12 +21,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
 
 /**
  * Keyboard-first inline add-row pinned above the grid: phone (required, live-validated),
@@ -33,7 +35,7 @@ final class LeadQuickAddBar {
     private final HBox row = new HBox(8);
     private final Label phoneError = new Label();
     private final VBox node = new VBox(2, row, phoneError);
-    private final LeadService leadService;
+    private final Consumer<LeadService.NewLead> onPersist;
     private final Function<String, Optional<PhoneNumber>> phoneParser;
 
     private final TextField phone = new TextField();
@@ -43,8 +45,9 @@ final class LeadQuickAddBar {
 
     private Runnable onAdded = () -> { };
 
-    LeadQuickAddBar(LeadService leadService, Function<String, Optional<PhoneNumber>> phoneParser) {
-        this.leadService = Objects.requireNonNull(leadService, "leadService must not be null");
+    LeadQuickAddBar(Consumer<LeadService.NewLead> onPersist,
+                    Function<String, Optional<PhoneNumber>> phoneParser) {
+        this.onPersist = Objects.requireNonNull(onPersist, "onPersist must not be null");
         this.phoneParser = Objects.requireNonNull(phoneParser, "phoneParser must not be null");
         build();
     }
@@ -139,7 +142,7 @@ final class LeadQuickAddBar {
                 List.of(),
                 Optional.empty());
         CompletableFuture
-                .runAsync(() -> leadService.save(draft))
+                .runAsync(() -> onPersist.accept(draft))
                 .thenRunAsync(() -> {
                     clearFields();
                     onAdded.run();
