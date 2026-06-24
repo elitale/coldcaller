@@ -144,6 +144,9 @@ public final class MainWindow {
     private Instant         callConnectedAt;
     private boolean         callLive;
 
+    /** The screen showing before a call took over the centre — restored when the call ends. */
+    private Parent callReturnView;
+
     // Loaded FXML roots
     private Parent dialerView;
     private Parent incomingCallView;
@@ -205,6 +208,7 @@ public final class MainWindow {
                         ? callerName : callerNumber;
                 sidebar.onInboundRing(Optional.ofNullable(ringLabel).filter(s -> !s.isBlank()));
             }
+            rememberReturnTarget();
             root.setCenter(incomingCallView);
         });
     }
@@ -223,6 +227,7 @@ public final class MainWindow {
             activeParty = party;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startConnecting(party, callerId);
+            rememberReturnTarget();
             root.setCenter(activeCallView);
         });
     }
@@ -259,6 +264,7 @@ public final class MainWindow {
             callLive = true;
             activeCallController.setOnHangUp(onHangUp);
             activeCallController.startActive(party, connectedAt);
+            rememberReturnTarget();
             root.setCenter(activeCallView);
             updateHud();
         });
@@ -392,6 +398,38 @@ public final class MainWindow {
     /** Return to the dialer view. Safe to call from any thread. */
     public void showDialer() {
         Platform.runLater(() -> root.setCenter(dialerView));
+    }
+
+    /**
+     * Return to the screen the call was started from (Leads, Call History, Power Dialer, …),
+     * falling back to the Dialer when no origin was captured. Restores the sidebar active state
+     * via {@link #navigate}. Safe to call from any thread.
+     */
+    public void returnFromCall() {
+        Platform.runLater(() -> {
+            final Parent target = (callReturnView != null) ? callReturnView : dialerView;
+            callReturnView = null;
+            destinationFor(target).ifPresentOrElse(this::navigate, () -> root.setCenter(target));
+        });
+    }
+
+    /** Remember the current centre as the post-call return target, unless it is a call screen. */
+    private void rememberReturnTarget() {
+        final var current = root.getCenter();
+        if (current != null && current != activeCallView && current != incomingCallView) {
+            callReturnView = (Parent) current;
+        }
+    }
+
+    /** Reverse map a loaded centre view to its nav destination (call screens have none). */
+    private Optional<NavSelectionModel.Destination> destinationFor(Parent view) {
+        if (view == dialerView)       return Optional.of(NavSelectionModel.Destination.DIALER);
+        if (view == leadsView)        return Optional.of(NavSelectionModel.Destination.LEADS);
+        if (view == callHistoryView)  return Optional.of(NavSelectionModel.Destination.CALL_HISTORY);
+        if (view == messagesView)     return Optional.of(NavSelectionModel.Destination.MESSAGES);
+        if (view == powerDialerView)  return Optional.of(NavSelectionModel.Destination.POWER_DIALER);
+        if (view == settingsView)     return Optional.of(NavSelectionModel.Destination.SETTINGS);
+        return Optional.empty();
     }
 
     /**

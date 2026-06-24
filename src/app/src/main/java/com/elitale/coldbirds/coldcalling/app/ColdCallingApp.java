@@ -318,7 +318,7 @@ public final class ColdCallingApp extends Application {
 
         // Outbound that never started (not signed in, DNC, etc.): show the reason.
         callService.setOnCallFailed((remote, reason) -> {
-            mainWindow.showCallFailed(remote, reason, closeToDialer());
+            mainWindow.showCallFailed(remote, reason, closeAfterCall());
             notifyError("Call failed: " + reason);
         });
 
@@ -348,7 +348,7 @@ public final class ColdCallingApp extends Application {
             if (reason != null && reason.startsWith(TelephonyService.FAILURE_PREFIX)) {
                 // Failed call: keep the calling screen up and show the reason there.
                 final String detail = reason.substring(TelephonyService.FAILURE_PREFIX.length());
-                mainWindow.markCallFailed(detail, closeToDialer());
+                mainWindow.markCallFailed(detail, closeAfterCall());
                 notifyError("Call failed: " + detail);
             } else {
                 // Natural end: stay on a wrap-up screen so the rep can finish logging.
@@ -374,25 +374,25 @@ public final class ColdCallingApp extends Application {
 
     /**
      * Build the dismiss action for the failed/cancelled calling screen:
-     * stop timers/tones and return to the dialer.
+     * stop timers/tones and return to the screen the call was started from.
      */
-    private Runnable closeToDialer() {
+    private Runnable closeAfterCall() {
         return () -> {
             activeCallId = null;
             mainWindow.endActiveCall();
-            mainWindow.showDialer();
+            mainWindow.returnFromCall();
         };
     }
 
     /**
      * Finalise a call from the wrap-up screen: persist the disposition and notes
-     * the rep entered after the line dropped, then return to the dialer.
+     * the rep entered after the line dropped, then return to the originating screen.
      */
     private void finalizeAndClose(String callId) {
         callService.finalizeWrapUp(callId, mainWindow.selectedDisposition(), mainWindow.callNotes());
         activeCallId = null;
         mainWindow.endActiveCall();
-        mainWindow.showDialer();
+        mainWindow.returnFromCall();
     }
 
     /**
@@ -405,7 +405,7 @@ public final class ColdCallingApp extends Application {
         callService.finalizeWrapUp(callId, Optional.of(new CallDisposition.Voicemail()), "");
         activeCallId = null;
         mainWindow.endActiveCall();
-        mainWindow.showDialer();
+        mainWindow.returnFromCall();
         CompletableFuture.runAsync(powerDialerService::advance);
     }
 
