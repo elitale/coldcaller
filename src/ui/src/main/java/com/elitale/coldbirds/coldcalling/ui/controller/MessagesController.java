@@ -1,43 +1,57 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Lead;
-import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
-import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
-import com.elitale.coldbirds.coldcalling.domain.value.Country;
-import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
-import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
-import com.elitale.coldbirds.coldcalling.services.LeadService;
-import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
-import com.elitale.coldbirds.coldcalling.services.SmsService;
-import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
-import com.elitale.coldbirds.coldcalling.ui.support.Motion;
-import com.elitale.coldbirds.coldcalling.ui.support.SmsConversationRow;
-import com.elitale.coldbirds.coldcalling.ui.support.SmsSegments;
-import javafx.animation.FadeTransition;
-import javafx.application.Platform;
-import javafx.beans.property.BooleanProperty;
-import javafx.beans.property.SimpleBooleanProperty;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
-import javafx.fxml.FXML;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Node;
-import javafx.scene.control.*;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.util.Duration;
-import javafx.util.StringConverter;
-import org.kordamp.ikonli.javafx.FontIcon;
-
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+
+import org.kordamp.ikonli.javafx.FontIcon;
+
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
+import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
+import com.elitale.coldbirds.coldcalling.domain.value.Country;
+import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
+import com.elitale.coldbirds.coldcalling.services.CallService;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
+import com.elitale.coldbirds.coldcalling.services.SmsService;
+import com.elitale.coldbirds.coldcalling.ui.support.ContactSuggestion;
+import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.FromNumberDefault;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
+import com.elitale.coldbirds.coldcalling.ui.support.RecentContacts;
+import com.elitale.coldbirds.coldcalling.ui.support.SmsConversationRow;
+import com.elitale.coldbirds.coldcalling.ui.support.SmsSegments;
+
+import javafx.animation.FadeTransition;
+import javafx.animation.PauseTransition;
+import javafx.application.Platform;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.util.Duration;
+import javafx.util.StringConverter;
 
 /**
  * Controller for the Messages screen (messages-view.fxml).
@@ -61,12 +75,16 @@ public final class MessagesController {
     @FXML private Label                 composeHint;
     @FXML private Button                sendBtn;
     @FXML private Button                refreshBtn;
+    @FXML private VBox                  newMessageOverlay;
+    @FXML private TextField             toField;
+    @FXML private ListView<ContactSuggestion> suggestionList;
 
-    // ── State ─────────────────────────────────────────────────────────────────
+    // ── State ────────────────────────────────────────────────
 
     private SmsService         smsService;
     private PhoneNumberService phoneNumberService;
     private LeadService        leadService;
+    private CallService        callService;
 
     private final ObservableList<SmsConversationRow> conversations = FXCollections.observableArrayList();
     private final ObservableList<SmsMessage>         thread        = FXCollections.observableArrayList();
@@ -82,8 +100,19 @@ public final class MessagesController {
     /** Message ids that should "pop in" on the next thread render (newly sent/received). */
     private final Set<Long> pendingBubbleAnimations = new HashSet<>();
 
+    /** Backing list for the New-message picker. */
+    private final ObservableList<ContactSuggestion> suggestions = FXCollections.observableArrayList();
+
+    /** Debounce so each keystroke in the To: field doesn't hammer the lead search. */
+    private final PauseTransition searchDebounce = new PauseTransition(Duration.millis(150));
+
+    private static final int RECENT_LIMIT = 8;
+
     /** The remote number whose thread is currently open, if any. */
     private Optional<PhoneNumber> selectedRemote = Optional.empty();
+
+    /** Identity the rep picked in New — owns the header for a number shared by >1 lead. */
+    private Optional<Lead> sessionIdentity = Optional.empty();
 
     /** Default no-arg constructor — required by FXMLLoader. */
     public MessagesController() {}
@@ -101,6 +130,10 @@ public final class MessagesController {
 
     public void setLeadService(LeadService leadService) {
         this.leadService = Objects.requireNonNull(leadService, "leadService must not be null");
+    }
+
+    public void setCallService(CallService callService) {
+        this.callService = Objects.requireNonNull(callService, "callService must not be null");
     }
 
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
@@ -148,6 +181,20 @@ public final class MessagesController {
         sendBtn.setText(null);
         sendBtn.getStyleClass().add("compose-send");
 
+        // New-message inline composer.
+        newMessageOverlay.setVisible(false);
+        suggestionList.setItems(suggestions);
+        suggestionList.setCellFactory(lv -> new ContactSuggestionCell());
+        suggestionList.setPlaceholder(caption("No matches"));
+        suggestionList.setOnMouseClicked(e -> { if (e.getClickCount() >= 2) pickSelectedSuggestion(); });
+        suggestionList.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ENTER) { pickSelectedSuggestion(); e.consume(); }
+            else if (e.getCode() == KeyCode.ESCAPE) { exitNewMessage(); e.consume(); }
+        });
+        searchDebounce.setOnFinished(e -> runContactSearch());
+        toField.textProperty().addListener((o, a, b) -> searchDebounce.playFromStart());
+        toField.setOnKeyPressed(this::onToFieldKey);
+
         loadOwnedNumbers();
         loadConversations();
     }
@@ -169,7 +216,62 @@ public final class MessagesController {
 
     @FXML
     private void onNewMessage() {
-        showNewMessageDialog();
+        startNewMessage();
+    }
+
+    /** Open the inline New-message composer and show the recent shortlist. Any-thread safe. */
+    public void startNewMessage() {
+        Platform.runLater(() -> {
+            newMessageOverlay.setVisible(true);
+            toField.clear();
+            loadRecentShortlist();
+            toField.requestFocus();
+        });
+    }
+
+    @FXML
+    private void onCancelNewMessage() {
+        exitNewMessage();
+    }
+
+    /** Enter in the To: field resolves the selected suggestion (or the top one — paste-and-go). */
+    @FXML
+    private void onToFieldEnter() {
+        pickSelectedSuggestion();
+    }
+
+    private void exitNewMessage() {
+        newMessageOverlay.setVisible(false);
+        suggestions.clear();
+        toField.clear();
+    }
+
+    private void onToFieldKey(KeyEvent e) {
+        switch (e.getCode()) {
+            case DOWN -> {
+                if (!suggestions.isEmpty()) {
+                    suggestionList.getSelectionModel().select(0);
+                    suggestionList.requestFocus();
+                    e.consume();
+                }
+            }
+            case ESCAPE -> {
+                if (!toField.getText().isEmpty()) toField.clear();
+                else exitNewMessage();
+                e.consume();
+            }
+            default -> { }
+        }
+    }
+
+    private void pickSelectedSuggestion() {
+        ContactSuggestion picked = suggestionList.getSelectionModel().getSelectedItem();
+        if (picked == null && !suggestions.isEmpty()) picked = suggestions.get(0);
+        if (picked == null) return;
+        sessionIdentity = picked.lead();
+        final PhoneNumber number = picked.number();
+        exitNewMessage();
+        openConversation(number);
     }
 
     /**
@@ -241,16 +343,22 @@ public final class MessagesController {
         selectedRemote = Optional.of(remoteNumber);
         hasRemote.set(true);
         CompletableFuture.supplyAsync(() -> {
-            Optional<Lead> lead = leadService == null
-                    ? Optional.empty() : leadService.findByPhone(remoteNumber);
+            Optional<Lead> lead = sessionIdentity.filter(l -> l.phone().equals(remoteNumber))
+                    .or(() -> leadService == null ? Optional.empty() : leadService.findByPhone(remoteNumber));
             Optional<Country> country = CountryLookup.byE164(CountryCatalog.ALL, remoteNumber.value());
             List<SmsMessage> msgs = smsService.findThread(remoteNumber);
-            return new ThreadLoad(lead, country, msgs);
+            List<OwnedNumber> owned = phoneNumberService == null ? List.of() : phoneNumberService.listOwned();
+            Optional<PhoneNumberId> continuity = smsService.threadNumber(remoteNumber);
+            Optional<OwnedNumber> pinned = phoneNumberService == null
+                    ? Optional.empty() : phoneNumberService.getPinnedOutbound();
+            Optional<OwnedNumber> defaultFrom = FromNumberDefault.resolve(owned, continuity, pinned);
+            return new ThreadLoad(lead, country, msgs, defaultFrom);
         }).thenAcceptAsync(load -> {
             applyThreadHeader(remoteNumber, load.lead(), load.country());
             boolean leadOptedOut = load.lead().map(Lead::dnc).orElse(false);
             optedOut.set(leadOptedOut);
             optOutBanner.setVisible(leadOptedOut);
+            load.defaultFrom().ifPresent(this::selectFrom);
             markNewBubbles(sameThread && !animateListIn, load.messages());
             thread.setAll(load.messages());
             if (!load.messages().isEmpty()) threadList.scrollTo(load.messages().size() - 1);
@@ -279,7 +387,8 @@ public final class MessagesController {
         fade.playFromStart();
     }
 
-    private record ThreadLoad(Optional<Lead> lead, Optional<Country> country, List<SmsMessage> messages) {}
+    private record ThreadLoad(Optional<Lead> lead, Optional<Country> country, List<SmsMessage> messages,
+                              Optional<OwnedNumber> defaultFrom) {}
 
     private void applyThreadHeader(PhoneNumber remote, Optional<Lead> lead, Optional<Country> country) {
         threadHeader.setText(lead.map(Lead::displayName).filter(s -> !s.isBlank()).orElse(remote.value()));
@@ -322,47 +431,64 @@ public final class MessagesController {
                 }, Platform::runLater);
     }
 
-    private void showNewMessageDialog() {
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("New Message");
-        dialog.setHeaderText("Start a new conversation");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+    /** Blank field → recent shortlist; otherwise debounced lead search + a raw-number row. */
+    private void runContactSearch() {
+        final String query = toField.getText() == null ? "" : toField.getText().strip();
+        if (query.isBlank()) { loadRecentShortlist(); return; }
+        if (leadService == null) return;
+        CompletableFuture.supplyAsync(() -> buildSuggestions(query))
+                .thenAcceptAsync(this::showSuggestions, Platform::runLater);
+    }
 
-        final OwnedNumber from = fromNumberCombo.getSelectionModel().getSelectedItem();
-
-        VBox content = new VBox(8);
-        content.setPadding(new Insets(16));
-        TextField toField   = new TextField();
-        toField.setPromptText("+15550001234 (E.164 required)");
-        TextField bodyField = new TextField();
-        bodyField.setPromptText("Message body");
-        content.getChildren().addAll(new Label("To:"), toField, new Label("Message:"), bodyField);
-        dialog.getDialogPane().setContent(content);
-
-        Button okBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
-        okBtn.setDisable(true);
-        Runnable validate = () -> okBtn.setDisable(
-                toField.getText().strip().isBlank() || bodyField.getText().strip().isBlank());
-        toField.textProperty().addListener((o, a, b) -> validate.run());
-        bodyField.textProperty().addListener((o, a, b) -> validate.run());
-
-        dialog.showAndWait().ifPresent(result -> {
-            if (result != ButtonType.OK || from == null) return;
-            String rawTo = toField.getText().strip()
-                    .replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
-            try {
-                PhoneNumber to = new PhoneNumber(rawTo);
-                String body = bodyField.getText().strip();
-                CompletableFuture.runAsync(() -> smsService.send(from.number(), to, body))
-                        .thenRunAsync(() -> { loadConversations(); loadThread(to, true); },
-                                Platform::runLater);
-            } catch (IllegalArgumentException e) {
-                Alert err = new Alert(Alert.AlertType.ERROR);
-                err.setTitle("Invalid Number");
-                err.setHeaderText("\"" + rawTo + "\" is not a valid E.164 number");
-                err.showAndWait();
+    private List<ContactSuggestion> buildSuggestions(String query) {
+        List<ContactSuggestion> out = new ArrayList<>(
+                leadService.search(query).stream().map(ContactSuggestion::ofLead).toList());
+        parseNumber(query).ifPresent(num -> {
+            if (out.stream().noneMatch(s -> s.number().equals(num))) {
+                out.add(ContactSuggestion.ofNumber(num));
             }
         });
+        return out;
+    }
+
+    /** The recent shortlist (most-recently called or texted) shown when the To: field is empty. */
+    private void loadRecentShortlist() {
+        if (callService == null || smsService == null || leadService == null) {
+            suggestions.clear();
+            return;
+        }
+        CompletableFuture.supplyAsync(() ->
+                RecentContacts.recent(callService.findRecent(50), smsService.findConversations(), RECENT_LIMIT)
+                        .stream().map(this::suggestionFor).toList())
+                .thenAcceptAsync(this::showSuggestions, Platform::runLater);
+    }
+
+    private ContactSuggestion suggestionFor(PhoneNumber number) {
+        return leadService.findByPhone(number).map(ContactSuggestion::ofLead)
+                .orElseGet(() -> ContactSuggestion.ofNumber(number));
+    }
+
+    private void showSuggestions(List<ContactSuggestion> items) {
+        suggestions.setAll(items);
+        if (!items.isEmpty()) suggestionList.getSelectionModel().select(0);
+    }
+
+    private static Optional<PhoneNumber> parseNumber(String raw) {
+        String cleaned = raw.replace(" ", "").replace("-", "").replace("(", "").replace(")", "");
+        try {
+            return Optional.of(new PhoneNumber(cleaned));
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    private void selectFrom(OwnedNumber target) {
+        for (OwnedNumber n : fromNumberCombo.getItems()) {
+            if (n.id().equals(target.id())) {
+                fromNumberCombo.getSelectionModel().select(n);
+                return;
+            }
+        }
     }
 
     private static Label caption(String text) {

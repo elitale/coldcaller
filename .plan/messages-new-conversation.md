@@ -41,6 +41,45 @@ from memory in 2026 "feels broken."
 
 ---
 
+## 0.2 VA-agent validation (daily operator — second lens)
+
+Run past the `va` agent (the SDR clicking "New" dozens of times between dials). Verdict: "right
+direction and it's not close — picker-first, kill the modal, From visible, DNC at pick: build it. But
+the plan gets the 70% case *almost* right and parks the thing that makes it zero-effort (the recent
+shortlist) in P1 — backwards. And the whole flow lives or dies on **focus + async row-stability**,
+which aren't called out as acceptance criteria." Five changes before we lock it:
+
+1. **Promote the recent / recently-called shortlist to P0.** Most "New" clicks are to someone I dialed
+   in the last 20 minutes. Empty "To:" field must show my **last ~8 leads (recently called *or*
+   texted, newest first)** so the common case is **zero typing** — New → Enter on the top row →
+   already typing. Autocomplete *without* this still makes me type a name 40×/day for people the app
+   knows I just called.
+2. **Focus + non-reflowing keyboard nav are hard P0 acceptance criteria, not polish.** The "To:" field
+   **must auto-grab focus** on open (or the first 3 keystrokes go into the void / the previous thread).
+   Suggestion rows **must not reorder under the cursor** as async DB results stream in — render the
+   first set, refine without moving the selected row, so `type → ↓ → Enter` is 100% reliable and never
+   needs the mouse. Acceptance budget: **`Cmd/Ctrl+N → 2-3 chars → ↓/Enter → cursor already blinking
+   in the compose bar`** (no click to focus compose).
+3. **Exact-number paste resolves on Enter — don't make me arrow a one-item list.** Paste `+15125550142`
+   → if it matches a lead, top row is that lead and Enter opens it; if no lead, Enter opens the **raw
+   row** straight into the thread.
+4. **One shortcut + funnel every "text" entry point.** `Cmd/Ctrl+N` opens New from anywhere in
+   Messages; add a **"Text" affordance on lead rows and call-history rows** that lands in the *same*
+   `resolveAndOpen` thread (most texts follow a call — fire it from where I already am).
+5. **Decide duplicate-number handling now.** Two leads share one number constantly (company main line,
+   gatekeeper). When I pick "Dave Park" the **picked lead's identity must stick to that compose
+   session** and show in the header — never silently resolve to whoever the thread was last keyed to.
+
+Operator notes: **DNC badge, don't block selection** — reps still open opted-out threads to *read*
+history. **Esc clears the field first, then exits** (one stray Esc must not nuke a half-typed name).
+**New must never steal focus from a ringing/active call** (dropped-call-grade, not a nit). Create-lead
+and templates stay P1 — "I'll text the unknown number now and tidy the lead later." The **brand-new-lead
+From default is the weak spot**: for a multi-client rep "pinned / first active" is *confidently wrong*;
+keep From visually prominent on a fresh thread and flag per-client/tag→number as a **known gap, not
+solved.**
+
+---
+
 ## 1. Current state
 
 `MessagesController.showNewMessageDialog()` opens a generic modal `Dialog`:
@@ -78,10 +117,14 @@ What already exists to reuse (so v1 is wiring, not new infra):
 - **From-number is explicit and lead-aware in the flow.** Show the From selector; default it by
   priority: **(1) the number this conversation already uses** (SMS thread continuity) → **(2) pinned /
   default outbound** → **(3) first active**. (Call-continuity + local-area-match = P1, reusing
-  `CallerIdSelector`.) Never inherit a hidden From from another screen.
+  `CallerIdSelector`.) Never inherit a hidden From from another screen. **On a brand-new thread the
+  fall-through default is a known weak spot for multi-client reps** ("pinned / first" can be confidently
+  wrong) — keep the From control **visually prominent on a fresh thread**, and treat per-client/tag →
+  number as a flagged gap, not "solved."
 - **DNC/opt-out is gated at *pick* time, visibly** — red badge on the suggestion row, opt-out banner +
   disabled compose in the opened thread (already built). The send-time block stays as the floor, but
-  the rep must see it *before* composing. (Legal floor — Lisa/Jake veto otherwise.)
+  the rep must see it *before* composing. **Badge only — don't block selecting an opted-out lead**
+  (reps still open those threads to read history). (Legal floor — Lisa/Jake veto otherwise.)
 - **Unify entry points.** `onNewMessage`'s pick funnels through the **same** `resolveAndOpen(remote)`
   as the call→Message path. One resolver, one behavior, **no duplicate-thread forking** (threads are
   keyed by remote number; routing through `openConversation` always surfaces existing history first).
@@ -89,6 +132,19 @@ What already exists to reuse (so v1 is wiring, not new infra):
   isn't orphaned (bare-number thread header, split history, broken roll-up reporting).
 - **Bulk / multi-recipient is out of scope** — a separate campaign surface with throttling, rotation,
   opt-out footer, per-number caps. Conflating it here is how a rep nukes a number's reputation.
+- **Zero-typing for the common case (P0).** The empty "To:" field shows a **recent shortlist** (last
+  ~8 leads recently called *or* texted, newest first) so New → Enter → typing covers the ~70% "text
+  someone I just dialed" job without a keystroke.
+- **Focus + keyboard nav are acceptance criteria.** The "To:" field **auto-focuses** on open; async
+  suggestion results **never reorder the row under the selection**; `type → ↓ → Enter` is mouse-free
+  and lands the cursor **in the compose bar** (no click). Exact-number paste resolves on **Enter**.
+- **Reachable from everywhere.** `Cmd/Ctrl+N` opens New; a **"Text" affordance on lead and call-history
+  rows** funnels through the same `resolveAndOpen`. Most texts follow a call — start them in place.
+- **The picked lead owns the session.** When a number maps to >1 lead, the **identity the rep picked
+  sticks to that compose session and header** — never silently re-resolve to whoever the thread was
+  last keyed to.
+- **Non-destructive exit, call-safe.** Esc **clears the field first, then exits**; entering/leaving New
+  **never steals focus from a ringing or active call**.
 
 ---
 
@@ -134,10 +190,13 @@ What already exists to reuse (so v1 is wiring, not new infra):
 
 ## 4. UX / flow spec
 
-### 4.1 Entry (click "New")
-- The thread pane swaps its header for a **"To:"** field (placeholder *"Name, company, or number"*),
-  cursor focused. The compose bar is hidden until a target is picked. A subtle **back/✕** returns to the
-  previous thread (or the empty state).
+### 4.1 Entry (click "New" / `Cmd/Ctrl+N`)
+- The thread pane swaps its header for a **"To:"** field (placeholder *"Name, company, or number"*)
+  that **auto-grabs focus**. The compose bar is hidden until a target is picked. **Esc clears the field
+  first, then exits** to the previous thread; entering/leaving New never disturbs a ringing/active call.
+- **Empty field shows the recent shortlist** — the last ~8 leads recently called or texted (newest
+  first), each a one-Enter pick, so the common "text someone I just dialed" path is **zero typing**:
+  `Cmd/Ctrl+N → ↓/Enter → already in the compose bar`.
 
 ### 4.2 Typing → suggestions
 ```
@@ -148,8 +207,11 @@ To: dav|
 │  #    Text +1 512 555 0142  (no lead)            │   ← only if it parses
 └───────────────────────────────────────────────┘
 ```
-- Each lead row: avatar · **name** · company · number, plus a **red "Opted out" badge** when DNC.
-- Empty field (P1): show a **recent-leads / recently-called shortlist** so most picks are zero-typing.
+- Each lead row: avatar · **name** · company · number, plus a **red "Opted out" badge** when DNC (the
+  badge marks it; it stays **selectable** so the rep can open it to read history).
+- **Keyboard-first:** `type → ↓ → Enter` picks without the mouse; results **must not reorder the row
+  under the selection** as async matches stream in. **Pasting a full E.164** puts the match (or the raw
+  row) on top and **Enter resolves it** — no arrowing a one-item list.
 
 ### 4.3 Pick → resolved thread
 - Transition into the normal thread for that person: header shows **name · company · flag · local
@@ -175,30 +237,38 @@ To: dav|
 
 ## 6. Phasing (each slice green via `./gradlew test`)
 
-- **P0 — the right flow, inline, safe (must-have):**
-  1. **Inline To-composer** replacing the modal (kills the popup).
-  2. **Lead autocomplete** (`ContactSuggestion` + `ContactSuggestionCell`), raw-number fallback row.
-  3. **`resolveAndOpen` unification** — `onNewMessage` and the call→Message path share one resolver;
-     existing thread opens in place (no fork).
-  4. **From selector, lead-aware default** (`FromNumberDefault` + `SmsService.threadNumber`), applied
-     on every thread open.
-  5. **DNC at pick time** — badge in suggestions + the already-built opt-out banner / disabled compose
-     in the opened thread.
+- **P0 — the right flow, inline, safe, zero-typing (must-have):**
+  1. **Inline To-composer** replacing the modal — **auto-focuses on open** (acceptance criterion).
+  2. **Recent shortlist on the empty field** (last ~8 called/texted, newest first) — the zero-typing
+     path for the ~70% job. *(Promoted from P1 by the VA.)*
+  3. **Lead autocomplete** (`ContactSuggestion` + `ContactSuggestionCell`), raw-number fallback row;
+     **keyboard-first, non-reflowing rows, paste-resolves-on-Enter** (acceptance criteria).
+  4. **`resolveAndOpen` unification** — `onNewMessage`, the call→Message path, **and new "Text"
+     affordances on lead / call-history rows** share one resolver; existing thread opens in place (no
+     fork); the **picked lead's identity owns the session** (duplicate-number safe).
+  5. **From selector, lead-aware default** (`FromNumberDefault` + `SmsService.threadNumber`), applied
+     on every thread open; **visually prominent on a fresh thread**.
+  6. **DNC at pick time** — badge in suggestions (selectable) + the opt-out banner / disabled compose.
+  7. **`Cmd/Ctrl+N`** opens New from anywhere in Messages.
 - **P1 — less friction, no orphans:**
-  6. **Create/link lead** inline for unknown numbers.
-  7. **Recent-leads / recently-called shortlist** on the empty To-field.
-  8. **From default v2** — call-continuity + local-area-code match (reuse `CallerIdSelector`).
-  9. **Templates** available on the first message (rides the redesign's templates item).
+  8. **Create/link lead** inline for unknown numbers (skippable).
+  9. **From default v2** — call-continuity + local-area-code match (reuse `CallerIdSelector`); the real
+     fix for the multi-client fresh-thread gap.
+  10. **Templates** available on the first message (rides the redesign's templates item).
 - **P2 / later:**
-  10. Full **"To:" token field** polish (multi-token visuals) — only meaningful alongside multi-recipient.
+  11. Full **"To:" token field** polish (multi-token visuals) — only meaningful alongside multi-recipient.
 
 ---
 
 ## 7. Testing
 - **Tested (headless):** `ContactSuggestionTest` (lead display/subtitle/dnc; raw-number row; blank
   guards), `FromNumberDefaultTest` (continuity wins → pinned → first → empty; ignores numbers not in
-  owned). Service: `SmsService.threadNumber` returns the most-recent message's number, empty when no
-  thread (in-memory DB / mock).
+  owned), `RecentContactsTest` (merge calls+texts, dedup per number, newest-first, cap ~8). Service:
+  `SmsService.threadNumber` returns the most-recent message's number, empty when no thread (in-memory
+  DB / mock).
+- **Behavior to verify (view):** `resolveAndOpen` carries the **picked lead** so a shared number shows
+  the chosen identity; the To: field **auto-focuses**; async results don't reorder the selected row;
+  Enter on a pasted number resolves directly.
 - **Not tested:** the inline composer, `ContactSuggestionCell`, FXML (JavaFX views).
 - Coverage per `AGENTS.md` (services ≥90%, UI support is the tested surface).
 
@@ -223,10 +293,20 @@ To: dav|
    luck. *Fix: badge at pick + banner/disabled compose at open.*
 3. **Fat-fingered E.164 → text to a stranger** — no verification loop. *Fix: picker-first; for a raw
    number, echo the resolved/created lead name back before the rep commits.*
-4. **Duplicate / unseen existing thread** — same person, history not surfaced, broken roll-up. *Fix:
-   route through `openConversation`, which selects the existing thread first.*
+4. **Duplicate / unseen existing thread** — same person, history not surfaced, broken roll-up; and a
+   number shared by two leads resolving to the wrong identity. *Fix: route through `openConversation`
+   (existing thread selected first); the **picked lead's identity owns the session / header**.*
 5. **Wrong "Dave"** at volume — *Fix: every suggestion row shows name · company · number · DNC, never
    a bare name.*
+6. **No auto-focus / reflowing rows** — first keystrokes vanish, or the selection lands on the wrong
+   row as async results stream. *Fix: auto-focus the To: field; never reorder the row under the cursor;
+   keyboard pick (type→↓→Enter) is the tested happy path.*
+7. **Fresh-thread wrong-From for multi-client reps** — "pinned / first active" is *confidently wrong*
+   for Priya. *Fix (interim): From prominent on a fresh thread + flagged; real fix is the
+   per-client/tag → number signal (deferred).*
+8. **Focus-steal / lost input** — New stealing focus from a ringing/active call (dropped-call-grade),
+   or one stray Esc nuking a half-typed name. *Fix: never grab focus during a ring/live call; Esc
+   clears the field before it exits.*
 - **Open question:** does `MessagesController` get a `CallerIdSelector` (for From v2 call-continuity /
   local presence) injected, or stay on the simpler continuity→pinned→first default for v1? Recommend
   v1 simple, inject in P1.

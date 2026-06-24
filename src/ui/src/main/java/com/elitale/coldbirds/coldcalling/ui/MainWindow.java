@@ -1,15 +1,17 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
-import com.elitale.coldbirds.coldcalling.services.CallService;
-import com.elitale.coldbirds.coldcalling.services.CallListService;
-import com.elitale.coldbirds.coldcalling.services.LeadImportService;
-import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
-import com.elitale.coldbirds.coldcalling.services.LeadService;
-import com.elitale.coldbirds.coldcalling.services.PhoneNormalizer;
-import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
-import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
-import com.elitale.coldbirds.coldcalling.services.SettingsService;
-import com.elitale.coldbirds.coldcalling.services.SmsService;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.model.PowerDialerSession;
@@ -18,24 +20,35 @@ import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
+import com.elitale.coldbirds.coldcalling.services.CallListService;
+import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
+import com.elitale.coldbirds.coldcalling.services.CallService;
+import com.elitale.coldbirds.coldcalling.services.LeadImportService;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.PhoneNormalizer;
+import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
+import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
+import com.elitale.coldbirds.coldcalling.services.SettingsService;
+import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.ui.controller.ActiveCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.CallHistoryController;
-import com.elitale.coldbirds.coldcalling.ui.controller.LeadsController;
 import com.elitale.coldbirds.coldcalling.ui.controller.DialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.IncomingCallController;
+import com.elitale.coldbirds.coldcalling.ui.controller.LeadsController;
 import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.QuickAddPopover;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
-import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
-import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
-import com.elitale.coldbirds.coldcalling.ui.support.SidebarStatusModel;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
+import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
+import com.elitale.coldbirds.coldcalling.ui.support.SidebarStatusModel;
 import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
+
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.SequentialTransition;
@@ -49,26 +62,16 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
-import javafx.scene.layout.*;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.util.Duration;
-
-import java.io.IOException;
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * Main application window — fixed sidebar + swappable centre pane.
@@ -579,6 +582,7 @@ public final class MainWindow {
         messagesController.setSmsService(smsService);
         messagesController.setPhoneNumberService(phoneNumberService);
         messagesController.setLeadService(leadService);
+        messagesController.setCallService(callService);
         messagesView = loadFxml("/fxml/messages-view.fxml", messagesController);
 
         // ── Power Dialer
@@ -698,6 +702,11 @@ public final class MainWindow {
         scene.getAccelerators().put(
                 new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
                 this::openQuickAdd);
+
+        // Start a new SMS from anywhere in Messages (Cmd/Ctrl+N).
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN),
+                () -> { if (root.getCenter() == messagesView) messagesController.startNewMessage(); });
 
         scene.setOnKeyPressed(event -> {
             if (root.getCenter() == incomingCallView) {

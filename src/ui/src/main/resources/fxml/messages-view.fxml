@@ -32,8 +32,9 @@
                 <ListView fx:id="conversationList" VBox.vgrow="ALWAYS" styleClass="messages-list"/>
             </VBox>
 
-            <!-- ── Right: thread + compose ────────────────────────────────── -->
-            <BorderPane HBox.hgrow="ALWAYS" styleClass="thread-pane">
+            <!-- ── Right: thread + compose (with inline New overlay) ───────── -->
+            <StackPane HBox.hgrow="ALWAYS">
+            <BorderPane styleClass="thread-pane">
 
                 <!-- Thread header -->
                 <top>
@@ -79,6 +80,25 @@
                 </bottom>
 
             </BorderPane>
+
+            <!-- Inline "New message" composer — covers the thread while active -->
+            <VBox fx:id="newMessageOverlay" styleClass="new-message-overlay"
+                  visible="false" spacing="10">
+                <padding><Insets top="14" bottom="14" left="18" right="18"/></padding>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="New Message" styleClass="title-2"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Cancel" styleClass="flat" onAction="#onCancelNewMessage"/>
+                </HBox>
+                <HBox spacing="8" alignment="CENTER_LEFT">
+                    <Label text="To:" styleClass="compose-from"/>
+                    <TextField fx:id="toField" promptText="Name, company, or number"
+                               HBox.hgrow="ALWAYS" styleClass="compose-field"
+                               onAction="#onToFieldEnter"/>
+                </HBox>
+                <ListView fx:id="suggestionList" VBox.vgrow="ALWAYS" styleClass="messages-list"/>
+            </VBox>
+            </StackPane>
         </HBox>
     </center>
 

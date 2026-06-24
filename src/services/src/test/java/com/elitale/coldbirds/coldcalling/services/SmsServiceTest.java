@@ -1,25 +1,38 @@
 package com.elitale.coldbirds.coldcalling.services;
 
-import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
-import com.elitale.coldbirds.coldcalling.domain.model.Lead;
-import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
-import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.*;
-
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
+
+import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.value.AreaCode;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadStatus;
+import com.elitale.coldbirds.coldcalling.domain.value.NumberReputation;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.domain.value.SmsId;
+import com.elitale.coldbirds.coldcalling.domain.value.SmsStatus;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
 
 class SmsServiceTest {
 
@@ -154,6 +167,28 @@ class SmsServiceTest {
     @Test
     void stopReceiving_whenNotPolling_isNoOp() {
         service.stopReceiving();  // must not throw
+    }
+
+    @Test
+    void threadNumber_returnsMostRecentMessagesNumber() {
+        PhoneNumberId n1 = new PhoneNumberId(1L);
+        PhoneNumberId n2 = new PhoneNumberId(2L);
+        when(smsRepo.findByRemoteNumber(TO)).thenReturn(List.of(
+                msg(n1, Instant.parse("2024-01-01T00:00:00Z")),
+                msg(n2, Instant.parse("2024-01-02T00:00:00Z"))));
+        assertThat(service.threadNumber(TO)).contains(n2);
+    }
+
+    @Test
+    void threadNumber_emptyWhenNoThread() {
+        when(smsRepo.findByRemoteNumber(TO)).thenReturn(List.of());
+        assertThat(service.threadNumber(TO)).isEmpty();
+    }
+
+    private static com.elitale.coldbirds.coldcalling.domain.model.SmsMessage msg(PhoneNumberId on, Instant at) {
+        return new com.elitale.coldbirds.coldcalling.domain.model.SmsMessage(
+                new SmsId(1L), CallDirection.INBOUND, on, Optional.empty(),
+                TO, "hi", new SmsStatus.Delivered(), at, at, at);
     }
 
     private void stubOwnedNumber(PhoneNumber number, PhoneNumberId id) {

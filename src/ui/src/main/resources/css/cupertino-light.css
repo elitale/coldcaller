@@ -1235,6 +1235,9 @@
 .thread-pane {
     -fx-background-color: #FFFFFF;
 }
+.new-message-overlay {
+    -fx-background-color: #FFFFFF;
+}
 
 /* Conversation list (left) */
 .messages-list {

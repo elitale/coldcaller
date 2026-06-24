@@ -1,18 +1,5 @@
 package com.elitale.coldbirds.coldcalling.services;
 
-import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
-import com.elitale.coldbirds.coldcalling.domain.model.Lead;
-import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
-import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
-import com.elitale.coldbirds.coldcalling.domain.value.*;
-import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
-import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
-import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -24,6 +11,26 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
+import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumberId;
+import com.elitale.coldbirds.coldcalling.domain.value.Result;
+import com.elitale.coldbirds.coldcalling.domain.value.SmsId;
+import com.elitale.coldbirds.coldcalling.domain.value.SmsStatus;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
 
 /**
  * Handles outbound SMS via {@link TwilioClient} and inbound SMS by polling the Twilio
@@ -194,6 +201,18 @@ public final class SmsService {
         return smsRepo.findByRemoteNumber(remoteNumber).stream()
                 .sorted(Comparator.comparing(SmsMessage::sentAt))
                 .toList();
+    }
+
+    /**
+     * The owned number this conversation is currently on — the {@code phoneNumberId} of the most
+     * recent message (inbound or outbound) with {@code remote}. Drives From-number continuity when a
+     * thread is opened. Empty when no messages exist yet. Blocking I/O — never call on the FX thread.
+     */
+    public Optional<PhoneNumberId> threadNumber(PhoneNumber remote) {
+        Objects.requireNonNull(remote, "remote must not be null");
+        return smsRepo.findByRemoteNumber(remote).stream()
+                .max(Comparator.comparing(SmsMessage::sentAt))
+                .map(SmsMessage::phoneNumberId);
     }
 
     // ── Private ───────────────────────────────────────────────────────────────
