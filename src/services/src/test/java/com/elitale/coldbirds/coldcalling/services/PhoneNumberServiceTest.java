@@ -60,6 +60,35 @@ class PhoneNumberServiceTest {
     }
 
     @Test
+    void getPinnedOutbound_returnsNumber_whenSet() {
+        when(settings.get("outbound.pinned_number")).thenReturn(Optional.of(NUMBER.value()));
+        when(repo.findByNumber(NUMBER)).thenReturn(Optional.of(stubOwned()));
+
+        assertThat(service.getPinnedOutbound()).map(OwnedNumber::number).contains(NUMBER);
+    }
+
+    @Test
+    void getPinnedOutbound_emptyWhenBlankOrAbsent() {
+        when(settings.get("outbound.pinned_number")).thenReturn(Optional.of("  "));
+        assertThat(service.getPinnedOutbound()).isEmpty();
+
+        when(settings.get("outbound.pinned_number")).thenReturn(Optional.empty());
+        assertThat(service.getPinnedOutbound()).isEmpty();
+    }
+
+    @Test
+    void setPinnedOutbound_persistsToSettings() {
+        service.setPinnedOutbound(NUMBER);
+        verify(settings).set("outbound.pinned_number", NUMBER.value());
+    }
+
+    @Test
+    void clearPinnedOutbound_deletesSetting() {
+        service.clearPinnedOutbound();
+        verify(settings).delete("outbound.pinned_number");
+    }
+
+    @Test
     void fetchAndSync_savesNewNumbers() {
         when(twilio.listPhoneNumbers()).thenReturn(
                 Result.ok(List.of(new TwilioNumberData("PN1", NUMBER.value(), "in-use")))

@@ -13,6 +13,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -47,6 +48,7 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
     private final ZoneId localZone;
     private final Consumer<String> onCall;
     private final Consumer<String> onMessage;
+    private final Consumer<String> onOpen;
 
     private final Label     primaryLabel = new Label();
     private final Label     numberLabel  = new Label();
@@ -57,16 +59,19 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
     private final Label     timeLabel    = new Label();
     private final Button    callButton   = new Button("Call");
     private final Button    messageButton = new Button("Message");
-    private final VBox      root;
+    private final FontIcon  chevron      = new FontIcon("bi-chevron-right");
+    private final HBox      root;
 
     private String currentNumber = "";
 
     public RecentCallCell(final ZoneId localZone,
                           final Consumer<String> onCall,
-                          final Consumer<String> onMessage) {
+                          final Consumer<String> onMessage,
+                          final Consumer<String> onOpen) {
         this.localZone = (localZone != null) ? localZone : ZoneId.systemDefault();
         this.onCall = Objects.requireNonNull(onCall, "onCall must not be null");
         this.onMessage = Objects.requireNonNull(onMessage, "onMessage must not be null");
+        this.onOpen = Objects.requireNonNull(onOpen, "onOpen must not be null");
 
         primaryLabel.getStyleClass().add("recent-number");
         numberLabel.getStyleClass().add("caption");
@@ -105,7 +110,21 @@ public final class RecentCallCell extends ListCell<RecentCallRow> {
         final HBox line2 = new HBox(6, flagView, countryLabel, timeLabel, bottomSpacer, actions);
         line2.setAlignment(Pos.CENTER_LEFT);
 
-        root = new VBox(4, line1, line2);
+        final VBox textBlock = new VBox(4, line1, line2);
+        textBlock.setMinWidth(0);
+        textBlock.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(textBlock, Priority.ALWAYS);
+
+        // Trailing disclosure chevron — signals the row opens a detail panel (a
+        // discoverable single-click path alongside the existing double-click / Enter).
+        chevron.getStyleClass().add("recent-chevron");
+        chevron.setOnMouseClicked(e -> {
+            onOpen.accept(currentNumber);
+            e.consume();
+        });
+
+        root = new HBox(8, textBlock, chevron);
+        root.setAlignment(Pos.CENTER_LEFT);
         // Clamp the cell to the list viewport width so content shrinks instead
         // of overflowing (which previously clipped the Call/Message buttons).
         setMaxWidth(Double.MAX_VALUE);

@@ -661,6 +661,17 @@
     -fx-min-height: 26px;
 }
 
+/* Disclosure chevron — signals a recent-call row opens its detail panel */
+.recent-chevron {
+    -fx-icon-color: -cc-text-tertiary;
+    -fx-icon-size: 14px;
+    -fx-cursor: hand;
+    -fx-padding: 0 2px;
+}
+.recent-chevron:hover {
+    -fx-icon-color: -cc-text-secondary;
+}
+
 /* ── Number-detail side panel ─────────────────────────────────────────── */
 
 .detail-panel {
@@ -1689,4 +1700,89 @@
     -fx-font-weight: 600;
     -fx-text-fill: -cc-success;
 }
+
+/* --------------------------------------------------------------------------
+   Sidebar / navigation rail
+   -------------------------------------------------------------------------- */
+.nav-rail {
+    -fx-background-color: -cc-bg-secondary;
+}
+
+/* SIP registration status dot (honest 3-state) */
+.status-dot {
+    -fx-min-width: 9px;  -fx-min-height: 9px;
+    -fx-pref-width: 9px; -fx-pref-height: 9px;
+    -fx-max-width: 9px;  -fx-max-height: 9px;
+    -fx-background-radius: 5px;
+    -fx-background-color: -cc-text-tertiary;
+}
+.status-dot.ok   { -fx-background-color: -cc-success; }
+.status-dot.warn { -fx-background-color: -cc-warning; }
+.status-dot.off  { -fx-background-color: -cc-error; }
+
+/* Nav items — icon + label, single active state */
+.button.nav-item {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8px;
+    -fx-border-width: 0 0 0 3;
+    -fx-border-color: transparent;
+    -fx-padding: 8px 10px 8px 9px;
+    -fx-cursor: hand;
+}
+.button.nav-item:hover   { -fx-background-color: -cc-bg-overlay; }
+.button.nav-item:pressed { -fx-background-color: rgba(0, 0, 0, 0.10); }
+.button.nav-item:focused { -fx-background-color: rgba(0, 113, 227, 0.10); }
+.button.nav-item.active {
+    -fx-background-color: rgba(0, 113, 227, 0.10);
+    -fx-border-color: -cc-accent;
+}
+.nav-item .label     { -fx-text-fill: -cc-text-primary; -fx-font-size: 15px; }
+.nav-item .nav-icon  { -fx-icon-color: -cc-text-secondary; -fx-icon-size: 16px; }
+.nav-item.active .label    { -fx-text-fill: -cc-accent; -fx-font-weight: 600; }
+.nav-item.active .nav-icon { -fx-icon-color: -cc-accent; }
+
+/* Messages activity presence dot (P0 — presence only, never a count) */
+.nav-badge {
+    -fx-min-width: 8px;  -fx-min-height: 8px;
+    -fx-pref-width: 8px; -fx-pref-height: 8px;
+    -fx-max-width: 8px;  -fx-max-height: 8px;
+    -fx-background-radius: 4px;
+    -fx-background-color: -cc-accent;
+}
+
+/* Return-to-call row (inbound ring / live call / power dialer) */
+.button.live-pill {
+    -fx-background-insets: 0;
+    -fx-background-radius: 8px;
+    -fx-border-color: transparent;
+    -fx-padding: 8px 10px;
+    -fx-alignment: center-left;
+    -fx-font-size: 13px;
+    -fx-font-weight: 600;
+    -fx-text-fill: white;
+    -fx-cursor: hand;
+}
+.button.live-pill.ring  { -fx-background-color: -cc-error; }
+.button.live-pill.live  { -fx-background-color: -cc-success; }
+.button.live-pill.power { -fx-background-color: -cc-accent; }
+.button.live-pill:hover { -fx-opacity: 0.92; }
+
+/* "Dialing from" account chip (number picker) */
+.account-chip {
+    -fx-font-size: 12px;
+    -fx-text-fill: -cc-text-secondary;
+    -fx-padding: 4px 4px;
+}
+.menu-button.account-chip {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6px;
+    -fx-border-color: transparent;
+    -fx-padding: 4px 6px;
+    -fx-cursor: hand;
+}
+.menu-button.account-chip:hover  { -fx-background-color: -cc-bg-overlay; }
+.menu-button.account-chip .label { -fx-text-fill: -cc-text-secondary; -fx-font-size: 12px; }
+.menu-button.account-chip .arrow { -fx-background-color: -cc-text-tertiary; }
 

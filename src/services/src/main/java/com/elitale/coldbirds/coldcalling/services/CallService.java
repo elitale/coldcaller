@@ -89,6 +89,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
     private BiConsumer<String, String>    onCallEndedCb      = (id, r) -> {};
     private BiConsumer<String, String>    onCallFailedCb     = (n, r) -> {};
     private Consumer<Boolean>             onRegistrationCb   = reg -> {};
+    private volatile boolean              lastRegistered     = false;
 
     public CallService(
             TelephonyService      telephony,
@@ -152,6 +153,9 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     public void setOnRegistrationChanged(Consumer<Boolean> cb) {
         this.onRegistrationCb = Objects.requireNonNull(cb);
+        // Replay the last known state so a registration that completed before this listener
+        // attached (the SIP stack starts before the UI) is never lost.
+        cb.accept(lastRegistered);
     }
 
     // ── Call control API ──────────────────────────────────────────────────────
@@ -500,6 +504,7 @@ public final class CallService implements TelephonyService.TelephonyListener {
 
     @Override
     public void onRegistrationChanged(boolean registered) {
+        lastRegistered = registered;
         onRegistrationCb.accept(registered);
     }
 

@@ -58,6 +58,31 @@ class CallServiceTest {
         verify(telephony).dial(LOCAL, REMOTE);
     }
 
+    // ── registration replay ─────────────────────────────────────────────────
+
+    @Test
+    void setOnRegistrationChanged_replaysLastKnownTrue_whenRegisteredBeforeAttach() {
+        callService.onRegistrationChanged(true);   // SIP registered before the UI listener attaches
+        AtomicBoolean got = new AtomicBoolean(false);
+        callService.setOnRegistrationChanged(got::set);
+        assertThat(got.get()).isTrue();
+    }
+
+    @Test
+    void setOnRegistrationChanged_replaysFalse_whenNeverRegistered() {
+        AtomicBoolean got = new AtomicBoolean(true);
+        callService.setOnRegistrationChanged(got::set);
+        assertThat(got.get()).isFalse();
+    }
+
+    @Test
+    void onRegistrationChanged_forwardsToAttachedListener() {
+        AtomicReference<Boolean> got = new AtomicReference<>();
+        callService.setOnRegistrationChanged(got::set);
+        callService.onRegistrationChanged(true);
+        assertThat(got.get()).isTrue();
+    }
+
     @Test
     void dial_dnc_doesNotDelegate() {
         stubLeadDnc(REMOTE, true);

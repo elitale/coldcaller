@@ -68,6 +68,25 @@ class CallerIdSelectorTest {
     }
 
     @Test
+    void pinned_overridesStickyAndRotation() {
+        when(phoneNumbers.listOwned()).thenReturn(List.of(owned(ID_A, NUM_A), owned(ID_B, NUM_B)));
+        when(phoneNumbers.getPinnedOutbound()).thenReturn(Optional.of(owned(ID_B, NUM_B)));
+
+        assertThat(selector.selectFor(REMOTE).map(OwnedNumber::id)).contains(ID_B);
+        assertThat(selector.selectFor(REMOTE2).map(OwnedNumber::id)).contains(ID_B);
+        verify(calls, never()).findByRemoteNumber(any()); // pin short-circuits before sticky
+    }
+
+    @Test
+    void pinnedNumberNotInActivePool_isIgnored_fallsBackToRotation() {
+        when(phoneNumbers.listOwned()).thenReturn(List.of(owned(ID_A, NUM_A)));
+        when(phoneNumbers.getPinnedOutbound()).thenReturn(Optional.of(owned(ID_B, NUM_B)));
+        when(calls.findByRemoteNumber(any())).thenReturn(List.of());
+
+        assertThat(selector.selectFor(REMOTE).map(OwnedNumber::id)).contains(ID_A);
+    }
+
+    @Test
     void repeatCall_reusesStickyNumber_withoutAdvancingCursor() {
         when(phoneNumbers.listOwned()).thenReturn(List.of(owned(ID_A, NUM_A), owned(ID_B, NUM_B)));
         // This prospect was last called from B → sticky to B.

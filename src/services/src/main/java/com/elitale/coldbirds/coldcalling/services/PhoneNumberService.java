@@ -24,6 +24,7 @@ public final class PhoneNumberService {
     private static final Logger LOG = LoggerFactory.getLogger(PhoneNumberService.class);
 
     static final String DEFAULT_NUMBER_KEY = "default_number";
+    static final String PINNED_NUMBER_KEY  = "outbound.pinned_number";
 
     private final PhoneNumberRepository repo;
     private final TwilioClient          twilio;
@@ -70,6 +71,33 @@ public final class PhoneNumberService {
      */
     public void setDefault(PhoneNumber number) {
         settings.set(DEFAULT_NUMBER_KEY, Objects.requireNonNull(number).value());
+    }
+
+    /**
+     * The number the user pinned to dial from, overriding rotation, if it is set and still
+     * present in storage. Empty means "rotate automatically".
+     */
+    public Optional<OwnedNumber> getPinnedOutbound() {
+        return settings.get(PINNED_NUMBER_KEY)
+                .filter(raw -> !raw.isBlank())
+                .flatMap(raw -> {
+                    try {
+                        return repo.findByNumber(new PhoneNumber(raw));
+                    } catch (IllegalArgumentException e) {
+                        LOG.warn("Pinned number setting '{}' is not valid E.164", raw);
+                        return Optional.empty();
+                    }
+                });
+    }
+
+    /** Pin a specific owned number as the outbound caller-ID (overrides rotation). */
+    public void setPinnedOutbound(PhoneNumber number) {
+        settings.set(PINNED_NUMBER_KEY, Objects.requireNonNull(number).value());
+    }
+
+    /** Clear the pin and return to automatic per-prospect rotation. */
+    public void clearPinnedOutbound() {
+        settings.delete(PINNED_NUMBER_KEY);
     }
 
     /**

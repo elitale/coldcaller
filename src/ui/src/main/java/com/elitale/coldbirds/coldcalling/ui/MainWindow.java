@@ -17,6 +17,7 @@ import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
 import com.elitale.coldbirds.coldcalling.ui.controller.ActiveCallController;
@@ -29,6 +30,8 @@ import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.QuickAddPopover;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
+import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
+import com.elitale.coldbirds.coldcalling.ui.support.SidebarStatusModel;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
@@ -48,7 +51,6 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.Separator;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -63,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -90,7 +93,6 @@ public final class MainWindow {
             BiConsumer<String, String> onApplyAudioDevices,
             BiConsumer<String, String> onSwitchAudioDevices) {}
 
-    private static final double SIDEBAR_WIDTH  = 190;
     private static final double MIN_WINDOW_W   = 960;
     private static final double MIN_WINDOW_H   = 640;
     private static final double DEFAULT_WIDTH  = 1280;
@@ -161,6 +163,12 @@ public final class MainWindow {
     // Root layout
     private BorderPane root;
 
+    /** The left navigation + ambient-status rail. */
+    private SidebarView sidebar;
+
+    /** Last SIP registration value seen before the sidebar existed; applied on build. */
+    private Boolean pendingRegistration;
+
     /** Top-right stack that holds transient toast notifications. */
     private VBox toastLayer;
 
@@ -192,6 +200,11 @@ public final class MainWindow {
             incomingCallController.setOnAnswer(onAnswer);
             incomingCallController.setOnReject(onReject);
             incomingCallController.showCaller(callerName, callerNumber);
+            if (sidebar != null) {
+                final String ringLabel = callerName != null && !callerName.isBlank()
+                        ? callerName : callerNumber;
+                sidebar.onInboundRing(Optional.ofNullable(ringLabel).filter(s -> !s.isBlank()));
+            }
             root.setCenter(incomingCallView);
         });
     }
@@ -387,6 +400,11 @@ public final class MainWindow {
      * FX thread, where the focus and mute state are read.
      */
     private void updateHud() {
+        Platform.runLater(() -> {
+            if (sidebar != null) {
+                sidebar.onLiveCall(callLive, callConnectedAt);
+            }
+        });
         if (callHud == null) {
             return;
         }
@@ -585,8 +603,21 @@ public final class MainWindow {
         callHud.setRecordingState(callService::isRecording);
 
         root = new BorderPane();
-        root.setLeft(buildSidebar());
+        sidebar = new SidebarView(sidebarListener(), this::powerDialerProgress);
+        root.setLeft(sidebar.node());
         root.setCenter(dialerView);
+
+        // Clear the inbound-ring affordance whenever the centre leaves the incoming overlay
+        // (answered → active call, rejected → dialer, or any manual navigation).
+        root.centerProperty().addListener((obs, was, now) -> {
+            if (sidebar != null && now != incomingCallView) {
+                sidebar.onInboundRing(Optional.empty());
+            }
+        });
+        if (pendingRegistration != null) {
+            sidebar.onRegistrationChanged(pendingRegistration);
+        }
+        refreshOutbound();
 
         // Overlay layer for toasts; lets clicks pass through empty areas.
         toastLayer = new VBox(10);
@@ -699,58 +730,94 @@ public final class MainWindow {
         root.setCenter(view);
     }
 
-    private VBox buildSidebar() {
-        VBox sidebar = new VBox(2);
-        sidebar.setPrefWidth(SIDEBAR_WIDTH);
-        sidebar.setPadding(new Insets(20, 12, 16, 12));
-        sidebar.getStyleClass().add("bg-subtle");
+    private SidebarView.Listener sidebarListener() {
+        return new SidebarView.Listener() {
+            @Override public void onNavigate(NavSelectionModel.Destination dest) {
+                navigate(dest);
+            }
 
-        Label appName = new Label("coldCalling");
-        appName.getStyleClass().add("title-2");
-        appName.setPadding(new Insets(0, 0, 12, 4));
+            @Override public void onReturnRow(SidebarStatusModel.ReturnKind kind) {
+                switch (kind) {
+                    case INBOUND_RING -> root.setCenter(incomingCallView);
+                    case LIVE_CALL    -> root.setCenter(activeCallView);
+                    case POWER_DIALER -> navigate(NavSelectionModel.Destination.POWER_DIALER);
+                    case NONE         -> { }
+                }
+            }
 
-        Button dialerBtn      = navButton("Dialer",       () -> showCenter(dialerView));
-        Button leadsBtn       = navButton("Leads",        () -> showCenter(leadsView));
-        Button historyBtn     = navButton("Call History", () -> showCenter(callHistoryView));
-        Button messagesBtn    = navButton("Messages",     () -> {
-            messagesController.refresh();
-            showCenter(messagesView);
-        });
-        Button powerDialerBtn = navButton("Power Dialer", () -> {
-            powerDialerController.refresh();
-            showCenter(powerDialerView);
-        });
-
-        Region spacer = new Region();
-        VBox.setVgrow(spacer, Priority.ALWAYS);
-
-        Button settingsBtn = navButton("Settings", () -> {
-            settingsController.refresh();
-            root.setCenter(settingsView);
-        });
-
-        sidebar.getChildren().addAll(
-                appName, new Separator(), gap(8),
-                dialerBtn, leadsBtn, historyBtn, messagesBtn, powerDialerBtn,
-                spacer,
-                new Separator(), gap(4),
-                settingsBtn
-        );
-        return sidebar;
+            @Override public void onSelectOutbound(Optional<String> e164) {
+                selectOutbound(e164);
+            }
+        };
     }
 
-    private static Button navButton(String text, Runnable onClick) {
-        Button btn = new Button(text);
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.getStyleClass().add("flat");
-        btn.setOnAction(e -> onClick.run());
-        return btn;
+    /** Route a sidebar navigation choice to the matching centre view, then refresh state. */
+    private void navigate(NavSelectionModel.Destination dest) {
+        switch (dest) {
+            case DIALER       -> showCenter(dialerView);
+            case LEADS        -> showCenter(leadsView);
+            case CALL_HISTORY -> showCenter(callHistoryView);
+            case MESSAGES     -> { messagesController.refresh(); sidebar.markMessagesSeen(); showCenter(messagesView); }
+            case POWER_DIALER -> { powerDialerController.refresh(); showCenter(powerDialerView); }
+            case SETTINGS     -> { settingsController.refresh(); root.setCenter(settingsView); }
+        }
+        sidebar.setActive(dest);
+        refreshOutbound();
     }
 
-    private static Region gap(double height) {
-        Region r = new Region();
-        r.setPrefHeight(height);
-        return r;
+    /** Snapshot active owned numbers + current pin for the sidebar picker — off the FX thread. */
+    private void refreshOutbound() {
+        CompletableFuture
+                .supplyAsync(() -> {
+                    final List<SidebarView.NumberOption> options = phoneNumberService.listOwned().stream()
+                            .map(n -> new SidebarView.NumberOption(
+                                    n.number().value(),
+                                    n.friendlyName().filter(s -> !s.isBlank()).orElse(n.number().value())))
+                            .toList();
+                    final Optional<String> pinned =
+                            phoneNumberService.getPinnedOutbound().map(n -> n.number().value());
+                    return new OutboundSnapshot(options, pinned);
+                })
+                .thenAcceptAsync(snap -> {
+                    if (sidebar != null) {
+                        sidebar.setOutboundOptions(snap.options(), snap.pinned());
+                    }
+                }, Platform::runLater);
+    }
+
+    /** Off-thread snapshot for the outbound-number picker. */
+    private record OutboundSnapshot(List<SidebarView.NumberOption> options, Optional<String> pinned) { }
+
+    /** Apply the user's outbound-number pick (empty = automatic rotation), then refresh the chip. */
+    private void selectOutbound(Optional<String> e164) {
+        CompletableFuture
+                .runAsync(() -> {
+                    if (e164.isEmpty()) {
+                        phoneNumberService.clearPinnedOutbound();
+                    } else {
+                        phoneNumberService.setPinnedOutbound(new PhoneNumber(e164.get()));
+                    }
+                })
+                .thenRun(this::refreshOutbound);
+    }
+
+    /** In-memory power-dialer progress label for the sidebar return row (no DB). */
+    private Optional<String> powerDialerProgress() {
+        return powerDialerService.getCurrentSession().flatMap(session -> switch (session.state()) {
+            case PowerDialerState.Running ignored -> Optional.of("Dialing · #" + (session.currentPosition() + 1));
+            case PowerDialerState.Paused ignored  -> Optional.of("Paused · #" + (session.currentPosition() + 1));
+            case PowerDialerState.Stopped ignored -> Optional.empty();
+        });
+    }
+
+    /** Update the SIP registration status dot. Safe to call from any thread. */
+    public void onRegistrationChanged(boolean registered) {
+        pendingRegistration = registered;
+        Platform.runLater(() -> {
+            if (sidebar != null) {
+                sidebar.onRegistrationChanged(registered);
+            }
+        });
     }
 
     // ── FXML loading ──────────────────────────────────────────────────────────

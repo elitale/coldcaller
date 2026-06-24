@@ -184,7 +184,8 @@ public final class DialerController {
     /** Render rows by their display string and open detail on double-click / Enter. */
     private void configureRecentCalls() {
         recentCallsList.setCellFactory(list ->
-                new RecentCallCell(ZoneId.systemDefault(), onRecentCall, onRecentMessage));
+                new RecentCallCell(ZoneId.systemDefault(), onRecentCall, onRecentMessage,
+                        number -> onRecentSelected.accept(number)));
         recentCallsList.setOnMouseClicked(event -> {
             if (event.getClickCount() == 2) {
                 openSelectedRecent();

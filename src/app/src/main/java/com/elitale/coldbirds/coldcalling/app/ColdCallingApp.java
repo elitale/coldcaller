@@ -255,6 +255,9 @@ public final class ColdCallingApp extends Application {
             );
         });
 
+        // SIP registration health → sidebar status dot (honest 3-state).
+        callService.setOnRegistrationChanged(mainWindow::onRegistrationChanged);
+
         // Continuously persist notes + disposition the rep types on the calling/wrap-up
         // screen so a call log is never lost if they forget to "Save & Close".
         mainWindow.setOnCallLogAutoSave((disposition, notes) -> {

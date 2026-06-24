@@ -15,8 +15,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Chooses which owned number places an outbound call.
  *
- * <p>Two rules, in order:
+ * <p>Rules, in order:
  * <ol>
+ *   <li><b>Pinned</b> — if the user pinned a specific number to dial from (and it is still in
+ *       the active pool), always use it. Explicit user choice overrides rotation.</li>
  *   <li><b>Sticky</b> — if this prospect was already called from one of our numbers and
  *       that number is still in the active pool, reuse it. The prospect always sees the
  *       same caller-ID on follow-up calls.</li>
@@ -51,6 +53,11 @@ public final class CallerIdSelector {
         Objects.requireNonNull(remote, "remote must not be null");
         final List<OwnedNumber> pool = phoneNumbers.listOwned();
         if (pool.isEmpty()) return phoneNumbers.getDefault();
+
+        // 0. Pinned override — the user explicitly chose a number to dial from.
+        final Optional<OwnedNumber> pinned = phoneNumbers.getPinnedOutbound()
+                .filter(p -> pool.stream().anyMatch(n -> n.id().equals(p.id())));
+        if (pinned.isPresent()) return pinned;
 
         final Optional<OwnedNumber> sticky = sticky(remote, pool);
         if (sticky.isPresent()) return sticky;
