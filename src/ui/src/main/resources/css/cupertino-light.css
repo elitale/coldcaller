@@ -1147,6 +1147,59 @@
 }
 
 /* --------------------------------------------------------------------------
+   Leads workbench — lists rail, bulk bar, quick-add bar
+   -------------------------------------------------------------------------- */
+.lists-rail {
+    -fx-background-color: -cc-bg-secondary;
+    -fx-border-color: rgba(0, 0, 0, 0.06);
+    -fx-border-width: 0 1px 0 0;
+}
+
+.lists-rail-row {
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+}
+
+.lists-rail-row:hover {
+    -fx-background-color: rgba(0, 0, 0, 0.04);
+}
+
+.lists-rail-row:selected {
+    -fx-background-color: -cc-accent;
+}
+
+.lists-rail-row:selected .lists-rail-name,
+.lists-rail-row:selected .lists-rail-badge {
+    -fx-text-fill: white;
+}
+
+.lists-rail-badge {
+    -fx-text-fill: -cc-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.bulk-bar {
+    -fx-background-color: -cc-bg-secondary;
+    -fx-background-radius: 10px;
+}
+
+.bulk-bar .button,
+.bulk-bar .menu-button {
+    -fx-font-size: 13px;
+}
+
+.quick-add-bar {
+    -fx-padding: 8px 32px;
+}
+
+.quick-add-bar .text-field:error {
+    -fx-border-color: -cc-error;
+    -fx-border-width: 1.5px;
+    -fx-border-radius: 6px;
+}
+
+
+/* --------------------------------------------------------------------------
    ListView on a card surface
    -------------------------------------------------------------------------- */
 .card-list {

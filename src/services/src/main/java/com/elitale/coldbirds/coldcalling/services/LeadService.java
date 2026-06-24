@@ -66,6 +66,23 @@ public final class LeadService {
         return repo.search(query);
     }
 
+    /** Filtered, keyset-paginated lookup. Filters AND together; never returns null. */
+    public Page<Lead> findPage(LeadFilter filter) {
+        Objects.requireNonNull(filter, "filter must not be null");
+        return repo.findPage(filter);
+    }
+
+    /** Distinct custom-field keys (optionally scoped to a list) for dynamic columns. */
+    public List<String> customFieldKeys(Optional<CallListId> listId) {
+        Objects.requireNonNull(listId, "listId must not be null");
+        return repo.customFieldKeys(listId);
+    }
+
+    /** Distinct tags across live leads — source for the tag filter facet. */
+    public List<String> distinctTags() {
+        return repo.distinctTags();
+    }
+
     /** Return a lead by phone number, if any. */
     public Optional<Lead> findByPhone(PhoneNumber phone) {
         return repo.findByPhone(Objects.requireNonNull(phone));
@@ -109,5 +126,37 @@ public final class LeadService {
     /** Soft-delete a lead by ID. */
     public Result<Void> delete(LeadId id) {
         return repo.delete(Objects.requireNonNull(id));
+    }
+
+    /** Soft-delete many leads at once. Returns the number actually deleted. */
+    public int bulkDelete(List<LeadId> ids) {
+        Objects.requireNonNull(ids, "ids must not be null");
+        return repo.bulkSoftDelete(ids);
+    }
+
+    /** Set the lifecycle status on many leads at once. Returns the number updated. */
+    public int bulkSetStatus(List<LeadId> ids, LeadStatus status) {
+        Objects.requireNonNull(ids, "ids must not be null");
+        Objects.requireNonNull(status, "status must not be null");
+        return repo.bulkSetStatus(ids, status);
+    }
+
+    /** Set the DNC flag on many leads at once. Returns the number updated. */
+    public int bulkSetDnc(List<LeadId> ids, boolean dnc) {
+        Objects.requireNonNull(ids, "ids must not be null");
+        return repo.bulkSetDnc(ids, dnc);
+    }
+
+    /**
+     * Set or clear a single custom field on one lead (inline-grid edit). A blank value
+     * clears the key. Returns the updated lead, or an error if it is missing/deleted.
+     */
+    public Result<Lead> setCustomField(LeadId id, String key, String value) {
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(key, "key must not be null");
+        if (key.isBlank()) return Result.err("custom field key must not be blank");
+        return repo.findById(id)
+                .map(lead -> repo.update(lead.withCustomField(key, value)))
+                .orElseGet(() -> Result.err("Lead not found: " + id.value()));
     }
 }

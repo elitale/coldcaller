@@ -123,4 +123,30 @@ final class DomainMappers {
             return java.util.List.of();
         }
     }
+
+    // ── Custom fields (JSON object of string values) ─────────────────────────
+
+    /** Serialize a custom-field map. Returns {@code null} for an empty map. */
+    static String customFieldsToJson(java.util.Map<String, String> fields) {
+        if (fields == null || fields.isEmpty()) return null;
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(fields);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static java.util.Map<String, String> jsonToCustomFields(String json) {
+        if (json == null || json.isBlank() || json.equals("{}")) return java.util.Map.of();
+        try {
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.Map<String, Object> raw = mapper.readValue(json, java.util.Map.class);
+            var out = new java.util.LinkedHashMap<String, String>();
+            raw.forEach((key, value) -> out.put(key, value == null ? "" : String.valueOf(value)));
+            return java.util.Map.copyOf(out);
+        } catch (Exception e) {
+            return java.util.Map.of();
+        }
+    }
 }

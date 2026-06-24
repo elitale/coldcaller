@@ -56,6 +56,8 @@ public final class ColdCallingApp extends Application {
     private SmsService         smsService;
     private CallService        callService;
     private LeadService        leadService;
+    private CallListService    callListService;
+    private LeadImportService  leadImportService;
     private PhoneNumberService phoneNumberService;
     private PowerDialerService powerDialerService;
     private SettingsService    settingsService;
@@ -112,6 +114,12 @@ public final class ColdCallingApp extends Application {
 
             // 4. Credential-independent services usable before onboarding.
             leadService = new LeadService(leadRepo);
+            callListService = new CallListService(callListRepo);
+            leadImportService = new LeadImportService(
+                    new PhoneNormalizer(),
+                    new SqliteLeadImportRepository(connection),
+                    new SqliteImportBatchRepository(connection),
+                    callListRepo);
             audioDeviceManager = new AudioDeviceManager();
             audioDeviceTester  = new AudioDeviceTester();
 
@@ -231,7 +239,7 @@ public final class ColdCallingApp extends Application {
                 });
 
         mainWindow = new MainWindow(stage, new MainWindow.Dependencies(
-                leadService, callService, smsService, phoneNumberService,
+                leadService, callListService, leadImportService, callService, smsService, phoneNumberService,
                 onDial, powerDialerService, settingsService,
                 new CallRoutingService(settingsService),
                 audioDeviceManager, audioDeviceTester, applyAudioDevices(),

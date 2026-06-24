@@ -13,6 +13,8 @@ jain-sip      = "1.3.0-91"
 jlibrtp       = "0.2"
 twilio        = "12.1.1"
 ikonli        = "12.3.1"
+libphonenumber = "8.13.50"
+commons-csv   = "1.11.0"
 
 [libraries]
 javafx-controls  = { module = "org.openjfx:javafx-controls",                            version.ref = "javafx" }
@@ -33,6 +35,8 @@ jlibrtp          = { module = "org.jvoicexml:org.jlibrtp",                      
 twilio           = { module = "com.twilio.sdk:twilio",                                  version.ref = "twilio" }
 ikonli-javafx          = { module = "org.kordamp.ikonli:ikonli-javafx",                  version.ref = "ikonli" }
 ikonli-bootstrapicons  = { module = "org.kordamp.ikonli:ikonli-bootstrapicons-pack",     version.ref = "ikonli" }
+libphonenumber   = { module = "com.googlecode.libphonenumber:libphonenumber",            version.ref = "libphonenumber" }
+commons-csv      = { module = "org.apache.commons:commons-csv",                          version.ref = "commons-csv" }
 
 [plugins]
 javafx = { id = "org.openjfx.javafxplugin", version = "0.1.0" }

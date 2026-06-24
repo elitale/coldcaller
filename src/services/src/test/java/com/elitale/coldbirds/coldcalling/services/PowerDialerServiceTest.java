@@ -11,6 +11,7 @@ import org.mockito.*;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -250,6 +251,7 @@ class PowerDialerServiceTest {
     private static Lead makeLead(LeadId id, PhoneNumber phone) {
         return new Lead(id, Optional.of("Test"), Optional.empty(), phone,
                 Optional.empty(), Optional.empty(), Optional.empty(),
-                List.of(), Optional.empty(), false, Instant.now(), Instant.now());
+                List.of(), Optional.empty(), false, Map.of(), LeadStatus.NEW,
+                Instant.now(), Instant.now());
     }
 }

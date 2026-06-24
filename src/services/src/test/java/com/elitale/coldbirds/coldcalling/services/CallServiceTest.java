@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -442,6 +443,7 @@ class CallServiceTest {
                 Optional.empty(), Optional.empty(), Optional.empty(),
                 List.of(), Optional.empty(),
                 isDnc,
+                Map.of(), LeadStatus.NEW,
                 Instant.now(), Instant.now()
         );
         when(leadRepo.findByPhone(number)).thenReturn(Optional.of(lead));

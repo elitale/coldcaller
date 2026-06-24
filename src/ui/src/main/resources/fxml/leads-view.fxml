@@ -4,35 +4,51 @@
 <?import javafx.geometry.*?>
 
 <!--
-  Leads view — searchable lead list with add / call / delete actions.
+  Leads view — lists rail + searchable, filterable, bulk-selectable, inline-editable grid.
   Controller: LeadsController (set via FXMLLoader.setController before load).
 -->
 <BorderPane xmlns:fx="http://javafx.com/fxml/1" styleClass="view-root">
 
-    <!-- ── Toolbar ─────────────────────────────────────────────────────────── -->
+    <!-- ── Toolbar + inline bars ───────────────────────────────────────────── -->
     <top>
-        <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
-            <Label text="Leads" styleClass="view-title"/>
+        <VBox>
+            <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
+                <Label text="Leads" styleClass="view-title"/>
 
-            <Region HBox.hgrow="ALWAYS"/>
+                <Region HBox.hgrow="ALWAYS"/>
 
-            <TextField fx:id="searchField"
-                       promptText="Search by name, company, or phone"
-                       prefWidth="280"
-                       styleClass="search-field"/>
+                <TextField fx:id="searchField"
+                           promptText="Search by name, company, phone, or email"
+                           prefWidth="280"
+                           styleClass="search-field"/>
 
-            <Button text="Add Lead" onAction="#onAdd" styleClass="accent"/>
-        </HBox>
+                <Button fx:id="filtersBtn" text="Filters" onAction="#onFilters" styleClass="flat"/>
+                <Button fx:id="addColumnBtn" text="+ Column" onAction="#onAddColumn" styleClass="flat"/>
+                <Button text="Import CSV" onAction="#onImport" styleClass="flat"/>
+                <Button text="Add Lead" onAction="#onAdd" styleClass="accent"/>
+            </HBox>
+
+            <!-- Inline quick-add bar + bulk-action bar are inserted here in code. -->
+            <VBox fx:id="topExtras"/>
+        </VBox>
     </top>
+
+    <!-- ── Lists rail ──────────────────────────────────────────────────────── -->
+    <left>
+        <VBox fx:id="railHost"/>
+    </left>
 
     <!-- ── Lead table ──────────────────────────────────────────────────────── -->
     <center>
         <TableView fx:id="table" styleClass="data-table">
-            <BorderPane.margin><Insets left="32" right="32" bottom="0"/></BorderPane.margin>
+            <BorderPane.margin><Insets left="16" right="32" bottom="0"/></BorderPane.margin>
             <columns>
-                <TableColumn fx:id="nameCol"    text="Name"    prefWidth="220"/>
-                <TableColumn fx:id="phoneCol"   text="Phone"   prefWidth="160"/>
-                <TableColumn fx:id="companyCol" text="Company" prefWidth="200"/>
+                <TableColumn fx:id="selectCol"  text=""        prefWidth="36" minWidth="36" maxWidth="36"/>
+                <TableColumn fx:id="nameCol"    text="Name"    prefWidth="190"/>
+                <TableColumn fx:id="phoneCol"   text="Phone"   prefWidth="150"/>
+                <TableColumn fx:id="companyCol" text="Company" prefWidth="170"/>
+                <TableColumn fx:id="statusCol"  text="Status"  prefWidth="120"/>
+                <TableColumn fx:id="tagsCol"    text="Tags"    prefWidth="150"/>
                 <TableColumn fx:id="dncCol"     text="DNC"     prefWidth="56"/>
             </columns>
         </TableView>
@@ -40,8 +56,12 @@
 
     <!-- ── Action bar ──────────────────────────────────────────────────────── -->
     <bottom>
-        <HBox spacing="8" alignment="CENTER_RIGHT">
+        <HBox spacing="8" alignment="CENTER_LEFT">
             <padding><Insets top="16" bottom="24" left="32" right="32"/></padding>
+
+            <Label fx:id="countLabel" styleClass="caption"/>
+
+            <Region HBox.hgrow="ALWAYS"/>
 
             <Button fx:id="callBtn"
                     text="Call"

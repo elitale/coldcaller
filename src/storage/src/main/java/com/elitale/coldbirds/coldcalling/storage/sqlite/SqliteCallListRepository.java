@@ -73,6 +73,26 @@ public final class SqliteCallListRepository implements CallListRepository {
     }
 
     @Override
+    public Result<CallList> rename(CallListId id, String name) {
+        Objects.requireNonNull(id, "id must not be null");
+        Objects.requireNonNull(name, "name must not be null");
+        if (name.isBlank()) return Result.err("name must not be blank");
+        String sql = "UPDATE call_lists SET name=?, updated_at=? WHERE id=? AND deleted_at IS NULL";
+        try (var stmt = connection.prepareStatement(sql)) {
+            stmt.setString(1, name.strip());
+            stmt.setLong(2, Instant.now().toEpochMilli());
+            stmt.setLong(3, id.value());
+            int rows = stmt.executeUpdate();
+            if (rows == 0) return Result.err("CallList not found or deleted: " + id.value());
+            return findById(id)
+                    .map(Result::ok)
+                    .orElse(Result.err("CallList not found after rename"));
+        } catch (SQLException e) {
+            return Result.err("Failed to rename call list: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public Optional<CallList> findById(CallListId id) {
         String listSql = "SELECT * FROM call_lists WHERE id=? AND deleted_at IS NULL";
         try (var stmt = connection.prepareStatement(listSql)) {
@@ -130,6 +150,67 @@ public final class SqliteCallListRepository implements CallListRepository {
             return Result.ok(null);
         } catch (SQLException e) {
             return Result.err("Failed to add entry: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public int countLeads(CallListId listId) {
+        Objects.requireNonNull(listId, "listId must not be null");
+        String sql = """
+            SELECT COUNT(*) FROM call_list_leads m
+              JOIN leads l ON l.id = m.lead_id
+             WHERE m.list_id = ? AND l.deleted_at IS NULL
+            """;
+        try (var stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, listId.value());
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException e) {
+            return 0;
+        }
+    }
+
+    @Override
+    public int addLeads(CallListId listId, List<LeadId> leadIds) {
+        Objects.requireNonNull(listId, "listId must not be null");
+        Objects.requireNonNull(leadIds, "leadIds must not be null");
+        if (leadIds.isEmpty()) return 0;
+        String sql = """
+            INSERT OR IGNORE INTO call_list_leads
+                (list_id, lead_id, position, status, created_at, updated_at)
+            VALUES (?, ?,
+                (SELECT COALESCE(MAX(position), -1) + 1 FROM call_list_leads WHERE list_id=?),
+                'pending', ?, ?)
+            """;
+        long now = Instant.now().toEpochMilli();
+        int inserted = 0;
+        try (var stmt = connection.prepareStatement(sql)) {
+            for (LeadId leadId : leadIds) {
+                stmt.setLong(1, listId.value());
+                stmt.setLong(2, leadId.value());
+                stmt.setLong(3, listId.value());
+                stmt.setLong(4, now);
+                stmt.setLong(5, now);
+                inserted += stmt.executeUpdate();
+            }
+        } catch (SQLException e) {
+            return inserted;
+        }
+        return inserted;
+    }
+
+    @Override
+    public boolean removeLead(CallListId listId, LeadId leadId) {
+        Objects.requireNonNull(listId, "listId must not be null");
+        Objects.requireNonNull(leadId, "leadId must not be null");
+        String sql = "DELETE FROM call_list_leads WHERE list_id=? AND lead_id=?";
+        try (var stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, listId.value());
+            stmt.setLong(2, leadId.value());
+            return stmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            return false;
         }
     }
 

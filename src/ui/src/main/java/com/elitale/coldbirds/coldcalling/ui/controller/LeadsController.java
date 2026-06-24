@@ -1,140 +1,188 @@
 package com.elitale.coldbirds.coldcalling.ui.controller;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
-import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.CallListId;
+import com.elitale.coldbirds.coldcalling.services.CallListService;
+import com.elitale.coldbirds.coldcalling.services.LeadImportService;
 import com.elitale.coldbirds.coldcalling.services.LeadService;
-import com.elitale.coldbirds.coldcalling.services.LeadService.NewLead;
+import com.elitale.coldbirds.coldcalling.services.SettingsService;
+import com.elitale.coldbirds.coldcalling.ui.support.LeadFilterState;
+import com.elitale.coldbirds.coldcalling.ui.support.LeadPhoneParser;
+import com.elitale.coldbirds.coldcalling.ui.support.LeadSelectionModel;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
-import javafx.geometry.Insets;
-import javafx.scene.control.*;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Label;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.input.Clipboard;
+import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * Controller for the Leads screen (leads-view.fxml).
- * <p>
- * Provides full-text search, async loading, an inline Add-Lead dialog,
- * soft delete, and one-click dial.
- * <p>
- * Threading: all methods must be called on the FX Application Thread except
- * where CompletableFuture dispatches to a background thread explicitly.
+ * Controller for the Leads workbench (leads-view.fxml).
+ *
+ * <p>Wires the lists rail ({@link LeadsListsRail}), faceted search/filter
+ * ({@link LeadFiltersPopover}), keyset infinite-scroll paging ({@link LeadsPageLoader}),
+ * bulk select/actions ({@link LeadBulkBar} + {@link LeadSelectionModel}), inline add-row
+ * ({@link LeadQuickAddBar}), clipboard paste, and editable custom-field columns whose
+ * layout persists via {@link SettingsService}.
+ *
+ * <p>Threading: all methods run on the FX Application Thread except where a
+ * {@link CompletableFuture} dispatches work off-thread and re-enters via
+ * {@link Platform#runLater}.
  */
 public final class LeadsController {
 
+    private static final Duration SEARCH_DEBOUNCE = Duration.millis(250);
+
     // ── FXML-injected fields ──────────────────────────────────────────────────
 
-    @FXML private TextField                   searchField;
-    @FXML private TableView<Lead>             table;
-    @FXML private TableColumn<Lead, String>   nameCol;
-    @FXML private TableColumn<Lead, String>   phoneCol;
-    @FXML private TableColumn<Lead, String>   companyCol;
-    @FXML private TableColumn<Lead, String>   dncCol;
-    @FXML private Button                      callBtn;
-    @FXML private Button                      deleteBtn;
+    @FXML private TextField                    searchField;
+    @FXML private Button                       filtersBtn;
+    @FXML private Button                       addColumnBtn;
+    @FXML private Label                        countLabel;
+    @FXML private VBox                         railHost;
+    @FXML private VBox                         topExtras;
+    @FXML private TableView<Lead>              table;
+    @FXML private TableColumn<Lead, Boolean>   selectCol;
+    @FXML private TableColumn<Lead, String>    nameCol;
+    @FXML private TableColumn<Lead, String>    phoneCol;
+    @FXML private TableColumn<Lead, String>    companyCol;
+    @FXML private TableColumn<Lead, String>    statusCol;
+    @FXML private TableColumn<Lead, String>    tagsCol;
+    @FXML private TableColumn<Lead, String>    dncCol;
+    @FXML private Button                       callBtn;
+    @FXML private Button                       deleteBtn;
 
     // ── State ─────────────────────────────────────────────────────────────────
 
     private LeadService      leadService;
+    private CallListService  callListService;
+    private LeadImportService importService;
+    private SettingsService  settingsService;
     private Consumer<String> onDial = ignored -> {};
 
     private final ObservableList<Lead> leads = FXCollections.observableArrayList();
+    private final LeadFilterState filterState = new LeadFilterState();
+    private final LeadSelectionModel selection = new LeadSelectionModel();
+    private final PauseTransition searchDebounce = new PauseTransition(SEARCH_DEBOUNCE);
+    private LeadFiltersPopover filtersPopover;
+    private LeadColumnManager columnManager;
+    private LeadsPageLoader pageLoader;
+    private LeadsListsRail rail;
+    private LeadBulkBar bulkBar;
+    private LeadQuickAddBar quickAddBar;
 
     /** Default no-arg constructor — required by FXMLLoader. */
     public LeadsController() {}
 
     // ── Configuration (called before FXMLLoader.load()) ───────────────────────
 
-    /**
-     * Inject the service. Must be called before {@code FXMLLoader.load()}.
-     */
     public void setLeadService(LeadService service) {
         this.leadService = Objects.requireNonNull(service, "service must not be null");
     }
 
-    /**
-     * Register a callback for when the user clicks Call on a lead.
-     * The callback receives the lead's E.164 phone number string.
-     */
+    public void setCallListService(CallListService service) {
+        this.callListService = Objects.requireNonNull(service, "service must not be null");
+    }
+
+    public void setLeadImportService(LeadImportService service) {
+        this.importService = Objects.requireNonNull(service, "service must not be null");
+    }
+
+    public void setSettingsService(SettingsService service) {
+        this.settingsService = Objects.requireNonNull(service, "service must not be null");
+    }
+
+    /** Register a callback invoked with the lead's E.164 number when the user dials. */
     public void setOnDial(Consumer<String> callback) {
         this.onDial = Objects.requireNonNull(callback, "callback must not be null");
+    }
+
+    /** Reload the grid + facets — used after an external add (e.g. mid-call quick-add). */
+    public void refresh() {
+        afterDataChanged();
     }
 
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
 
     @FXML
     private void initialize() {
-        // Column value factories
-        nameCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(cell.getValue().displayName()));
-        phoneCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(cell.getValue().phone().value()));
-        companyCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(cell.getValue().company().orElse("")));
-        dncCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(cell.getValue().dnc() ? "DNC" : ""));
+        LeadsTableColumns.configureStatic(nameCol, phoneCol, companyCol, statusCol, tagsCol, dncCol);
+        LeadsTableColumns.configureSelect(selectCol, selection, this::onSelectionChanged);
+        table.setEditable(true);
 
-        // DNC column — red bold text when set
-        dncCol.setCellFactory(col -> new TableCell<>() {
-            @Override
-            protected void updateItem(String item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null || item.isBlank()) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(item);
-                    setStyle("-fx-text-fill: #FF3B30; -fx-font-weight: bold;");
-                }
-            }
-        });
-
-        // Placeholder shown when the table has no rows
-        Label placeholder = new Label("No leads yet. Click \"Add Lead\" to get started.");
+        final Label placeholder = new Label("No leads yet. Use the quick-add bar above to get started.");
         placeholder.getStyleClass().add("caption");
         table.setPlaceholder(placeholder);
-
         table.setItems(leads);
 
-        // Button state bound to selection
-        callBtn.disableProperty().bind(
-                table.getSelectionModel().selectedItemProperty().isNull());
-        deleteBtn.disableProperty().bind(
-                table.getSelectionModel().selectedItemProperty().isNull());
+        callBtn.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+        deleteBtn.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
 
-        // Double-click a row to dial
-        table.setRowFactory(tv -> {
-            TableRow<Lead> row = new TableRow<>();
-            row.setOnMouseClicked(e -> {
-                if (e.getClickCount() == 2 && !row.isEmpty()) {
-                    onDial.accept(row.getItem().phone().value());
-                }
-            });
-            return row;
+        LeadsTableInteractions.install(
+                table,
+                lead -> onDial.accept(lead.phone().value()),
+                this::pasteClipboard,
+                idx -> { if (pageLoader != null) { pageLoader.onRowRealized(idx, leads.size()); } });
+
+        filtersPopover = new LeadFiltersPopover(filterState);
+        filtersPopover.setOnApply(() -> { updateFiltersButton(); applyFilter(); });
+
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            searchDebounce.setOnFinished(e -> { filterState.setSearch(newVal.strip()); applyFilter(); });
+            searchDebounce.playFromStart();
         });
 
-        // Reactive search — fires on every keystroke
-        searchField.textProperty().addListener(
-                (obs, oldVal, newVal) -> loadLeads(newVal.strip()));
+        if (leadService == null) {
+            return;
+        }
+        quickAddBar = new LeadQuickAddBar(leadService, LeadPhoneParser::parse);
+        quickAddBar.setOnAdded(this::afterDataChanged);
+        bulkBar = new LeadBulkBar(leadService, selection);
+        bulkBar.setOnChanged(this::afterBulkChanged);
+        bulkBar.setOnAddToList(this::onAddSelectedToList);
+        topExtras.getChildren().addAll(quickAddBar.node(), bulkBar.node());
 
-        // Initial load
-        loadLeads("");
+        if (callListService != null) {
+            rail = new LeadsListsRail(railHost, callListService);
+            rail.setOnSelect(this::onListSelected);
+        }
+        columnManager = new LeadColumnManager(
+                leadService, settingsService, table, filtersPopover, this::applyFilter);
+
+        pageLoader = new LeadsPageLoader(
+                leadService,
+                leads::addAll,
+                () -> { leads.clear(); countLabel.setText(""); },
+                () -> { updateCountLabel(); updatePlaceholder(); },
+                () -> ((Label) table.getPlaceholder()).setText("Failed to load leads."));
+        applyFilter();
+        columnManager.refresh();
     }
 
     // ── FXML event handlers ───────────────────────────────────────────────────
 
     @FXML
+    private void onFilters() {
+        filtersPopover.toggle(filtersBtn);
+    }
+
+    @FXML
     private void onCall() {
-        Lead selected = table.getSelectionModel().getSelectedItem();
+        final Lead selected = table.getSelectionModel().getSelectedItem();
         if (selected != null) {
             onDial.accept(selected.phone().value());
         }
@@ -142,15 +190,38 @@ public final class LeadsController {
 
     @FXML
     private void onAdd() {
-        showAddLeadDialog();
+        if (leadService == null) {
+            return;
+        }
+        AddLeadDialog.show().ifPresent(newLead -> CompletableFuture
+                .runAsync(() -> leadService.save(newLead))
+                .thenRunAsync(this::afterDataChanged, Platform::runLater));
+    }
+
+    @FXML
+    private void onAddColumn() {
+        if (columnManager != null) {
+            columnManager.promptAndAddColumn();
+        }
+    }
+
+    @FXML
+    private void onImport() {
+        if (importService == null || callListService == null) {
+            return;
+        }
+        LeadImportFlow.run(
+                table.getScene().getWindow(), importService, callListService,
+                filterState.listId(), result -> afterDataChanged());
     }
 
     @FXML
     private void onDelete() {
-        Lead selected = table.getSelectionModel().getSelectedItem();
-        if (selected == null) return;
-
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        final Lead selected = table.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            return;
+        }
+        final Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Delete Lead");
         confirm.setHeaderText("Delete " + selected.displayName() + "?");
         confirm.setContentText("This lead will be soft-deleted and hidden from all lists.");
@@ -158,108 +229,83 @@ public final class LeadsController {
             if (btn == ButtonType.OK) {
                 CompletableFuture
                         .runAsync(() -> leadService.delete(selected.id()))
-                        .thenRunAsync(() -> loadLeads(searchField.getText().strip()),
-                                Platform::runLater);
+                        .thenRunAsync(this::afterDataChanged, Platform::runLater);
             }
         });
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Rail / selection / bulk ────────────────────────────────────────────────
 
-    private void loadLeads(String query) {
-        if (leadService == null) return;
-
-        CompletableFuture
-                .supplyAsync(() -> query.isBlank()
-                        ? leadService.findAll()
-                        : leadService.search(query))
-                .thenAcceptAsync(list -> {
-                    leads.setAll(list);
-                    if (list.isEmpty()) {
-                        String msg = query.isBlank()
-                                ? "No leads yet. Click \"Add Lead\" to get started."
-                                : "No results for \"" + query + "\"";
-                        ((Label) table.getPlaceholder()).setText(msg);
-                    }
-                }, Platform::runLater);
+    private void onListSelected(Optional<CallListId> listId) {
+        filterState.setListId(listId);
+        applyFilter();
     }
 
-    private void showAddLeadDialog() {
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Add Lead");
-        dialog.setHeaderText("New Lead");
-        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+    private void onSelectionChanged() {
+        bulkBar.syncVisibility();
+    }
 
-        GridPane grid = new GridPane();
-        grid.setHgap(12);
-        grid.setVgap(8);
-        grid.setPadding(new Insets(16, 16, 8, 16));
+    private void afterBulkChanged() {
+        applyFilter();
+        if (rail != null) {
+            rail.refresh();
+        }
+    }
 
-        TextField firstNameField = new TextField();
-        firstNameField.setPromptText("First name");
-        TextField lastNameField = new TextField();
-        lastNameField.setPromptText("Last name");
-        TextField phoneField = new TextField();
-        phoneField.setPromptText("+15550001234 (E.164 required)");
-        TextField companyField = new TextField();
-        companyField.setPromptText("Company (optional)");
-
-        grid.add(new Label("First name:"), 0, 0); grid.add(firstNameField, 1, 0);
-        grid.add(new Label("Last name:"),  0, 1); grid.add(lastNameField,  1, 1);
-        grid.add(new Label("Phone:"),      0, 2); grid.add(phoneField,     1, 2);
-        grid.add(new Label("Company:"),    0, 3); grid.add(companyField,   1, 3);
-
-        GridPane.setHgrow(firstNameField, Priority.ALWAYS);
-        GridPane.setHgrow(lastNameField,  Priority.ALWAYS);
-        GridPane.setHgrow(phoneField,     Priority.ALWAYS);
-        GridPane.setHgrow(companyField,   Priority.ALWAYS);
-
-        dialog.getDialogPane().setContent(grid);
-
-        // Disable OK until a phone number is entered
-        Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
-        okButton.setDisable(true);
-        phoneField.textProperty().addListener((obs, o, n) ->
-                okButton.setDisable(n.strip().isBlank()));
-
-        dialog.showAndWait().ifPresent(result -> {
-            if (result != ButtonType.OK) return;
-
-            // Normalise: strip spaces and dashes before validation
-            String rawPhone = phoneField.getText().strip()
-                    .replace(" ", "")
-                    .replace("-", "")
-                    .replace("(", "")
-                    .replace(")", "");
-            try {
-                PhoneNumber phone = new PhoneNumber(rawPhone);
-                NewLead newLead = new NewLead(
-                        blankToEmpty(firstNameField.getText()),
-                        blankToEmpty(lastNameField.getText()),
-                        phone,
-                        blankToEmpty(companyField.getText()),
-                        Optional.empty(),
-                        Optional.empty(),
-                        List.of(),
-                        Optional.empty()
-                );
-                CompletableFuture
-                        .runAsync(() -> leadService.save(newLead))
-                        .thenRunAsync(() -> loadLeads(searchField.getText().strip()),
-                                Platform::runLater);
-            } catch (IllegalArgumentException e) {
-                Alert err = new Alert(Alert.AlertType.ERROR);
-                err.setTitle("Invalid Phone Number");
-                err.setHeaderText("\"" + rawPhone + "\" is not a valid E.164 number");
-                err.setContentText("Enter the number with country code, e.g. +15550001234");
-                err.showAndWait();
-            }
+    private void onAddSelectedToList() {
+        if (callListService == null) {
+            return;
+        }
+        LeadAddToListFlow.run(callListService, selection.selectedIds(), () -> {
+            selection.clear();
+            afterBulkChanged();
         });
     }
 
-    /** Convert a trimmed string to {@code Optional.empty()} if blank. */
-    private static Optional<String> blankToEmpty(String s) {
-        String trimmed = (s != null) ? s.strip() : "";
-        return trimmed.isBlank() ? Optional.empty() : Optional.of(trimmed);
+    private void pasteClipboard() {
+        if (leadService == null) {
+            return;
+        }
+        final String clip = Clipboard.getSystemClipboard().getString();
+        LeadClipboardImport.paste(clip, leadService, LeadPhoneParser::parse, this::afterDataChanged);
+    }
+
+    private void afterDataChanged() {
+        applyFilter();
+        if (columnManager != null) {
+            columnManager.refresh();
+        }
+        if (rail != null) {
+            rail.refresh();
+        }
+    }
+
+    // ── Paging + facet sources ────────────────────────────────────────────────
+
+    private void applyFilter() {
+        selection.clear();
+        if (pageLoader != null) {
+            pageLoader.apply(filterState.toFilter());
+        }
+        if (bulkBar != null) {
+            bulkBar.syncVisibility();
+        }
+    }
+
+    private void updateFiltersButton() {
+        filtersBtn.setText(filterState.hasActiveFacets() ? "Filters \u2022" : "Filters");
+    }
+
+    private void updateCountLabel() {
+        final int total = pageLoader.total();
+        countLabel.setText(total == 0 ? "" : "Showing " + leads.size() + " of " + total);
+    }
+
+    private void updatePlaceholder() {
+        final boolean filtered = filterState.hasActiveFacets() || !filterState.search().isBlank()
+                || filterState.listId().isPresent();
+        ((Label) table.getPlaceholder()).setText(filtered
+                ? "No leads match your filters."
+                : "No leads yet. Use the quick-add bar above to get started.");
     }
 }

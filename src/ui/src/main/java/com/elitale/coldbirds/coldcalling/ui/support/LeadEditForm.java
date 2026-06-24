@@ -84,7 +84,8 @@ public final class LeadEditForm {
             final Lead c = existing.get();
             final Lead updated = new Lead(
                     c.id(), opt(first), opt(last), c.phone(), opt(company), opt(title),
-                    opt(email), c.tags(), c.notes(), c.dnc(), c.createdAt(), Instant.now());
+                    opt(email), c.tags(), c.notes(), c.dnc(), c.customFields(), c.leadStatus(),
+                    c.createdAt(), Instant.now());
             return leadService.update(updated).isOk();
         }
         return leadService.save(new NewLead(

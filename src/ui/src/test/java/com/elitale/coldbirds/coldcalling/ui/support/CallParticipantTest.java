@@ -3,11 +3,13 @@ package com.elitale.coldbirds.coldcalling.ui.support;
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.LeadId;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
+import com.elitale.coldbirds.coldcalling.domain.value.LeadStatus;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,6 +79,7 @@ class CallParticipantTest {
                 Optional.ofNullable(first), Optional.ofNullable(last),
                 PHONE, company, title, Optional.empty(),
                 List.of(), Optional.empty(), false,
+                Map.of(), LeadStatus.NEW,
                 Instant.now(), Instant.now());
     }
 }

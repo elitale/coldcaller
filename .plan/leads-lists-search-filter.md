@@ -1,6 +1,6 @@
 # Plan — Leads: Lists, Search & Filtering (port from `sequence`)
 
-> Status: **PLANNED** (not started). Locked product decisions live here. Build bottom-up, TDD.
+> Status: **Phase 1 DONE** (2026-06-24, full build + test green). Phases 2–5 not started. Locked product decisions live here. Build bottom-up, TDD.
 > Layer order per AGENTS.md: domain → storage/providers → services → ui → app.
 > Goal: bring `sequence`-grade lead management (lists, search, filtering, CSV import, custom
 > fields) into coldCalling's **Leads** screen, adapted from email outreach to cold calling.
@@ -586,20 +586,23 @@ Wire in `LeadsController` (+ an app-level global for quick-add). Extends AGENTS 
 
 ## 12. Phasing (ship in slices, each green via `./gradlew test`)
 
-- **Phase 1 — Filter + paging core**: domain (`LeadFilter`, `Cursor`, `Page`,
-  `LeadStatus`, `Lead` extension) + migration V4 + `findPage`/`customFieldKeys` +
-  `LeadService.findPage` + Leads UI search/filter/infinite-scroll/dynamic columns.
-- **Phase 2 — Lists first-class + inline grid**: `CallListService` + lists rail (create/
+- **Phase 1 — Filter + paging core** ✅ **DONE (2026-06-24)**: domain (`LeadFilter`, `Cursor`, `Page`,
+  `LeadStatus`, `LeadColumn`, `Lead` extension) + migration V4 + `findPage`/`customFieldKeys`/`distinctTags` +
+  `LeadService.findPage` + Leads UI search/filter/infinite-scroll/dynamic columns. UI carved into
+  `LeadsPager`/`LeadFilterState`/`LeadStatusLabel` (headless, tested) +
+  `LeadsPageLoader`/`LeadsTableColumns`/`LeadFiltersPopover`/`AddLeadDialog` (view helpers) to keep
+  `LeadsController` ≤250 lines.
+- **Phase 2 — Lists first-class + inline grid** ✅ **DONE**: `CallListService` + lists rail (create/
   rename/delete, counts) + add/remove + bulk select + **editable grid** (inline add-row,
   inline add-column + presets, column reorder/pin/persist, clipboard paste). Inline editing
   is now core (operator-validated), not deferred.
-- **Phase 3 — Calling-grade CSV import**: `PhoneNormalizer` (libphonenumber) + 4-step wizard
+- **Phase 3 — Calling-grade CSV import** ✅ **DONE** (templates UI deferred): `PhoneNormalizer` (libphonenumber) + 4-step wizard
   (Drop→Map→Review→Summary) + default-country + **multi-phone primary** + **non-destructive
   dedupe against DB** + **DNC scrub** + **bad-row review tray** + reconciling summary + error
-  CSV + **saved mapping templates** (V5 infra).
-- **Phase 3.5 — Undo last import** (`import_batch_id` revert of created rows).
-- **Phase 4 — Mid-call quick-add** popover + global `Cmd/Ctrl+Shift+A` accelerator
-  (high-priority fast-follow — the operator-named retention lever).
+  CSV + **saved mapping templates** (V5 infra; service+repo+tests ready, wizard auto-apply UI deferred).
+- **Phase 3.5 — Undo last import** ✅ **DONE** (`import_batch_id` revert of created rows; surfaced on wizard Summary).
+- **Phase 4 — Mid-call quick-add** ✅ **DONE**: popover + global `Cmd/Ctrl+Shift+A` accelerator
+  (the operator-named retention lever).
 - **Phase 5 (optional)**: XLSX; proper **multi-number table** (dial secondaries, dedupe-on-
   any-number); smart/dynamic lists (saved filter → membership); auto-update `lead_status`
   from latest call disposition.

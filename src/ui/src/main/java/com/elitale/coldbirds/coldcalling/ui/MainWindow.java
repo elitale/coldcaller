@@ -1,14 +1,18 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
 import com.elitale.coldbirds.coldcalling.services.CallService;
+import com.elitale.coldbirds.coldcalling.services.CallListService;
+import com.elitale.coldbirds.coldcalling.services.LeadImportService;
 import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
 import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.PhoneNormalizer;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
 import com.elitale.coldbirds.coldcalling.services.SettingsService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.model.PowerDialerSession;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
 import com.elitale.coldbirds.coldcalling.domain.value.Country;
 import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
@@ -22,6 +26,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.DialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.IncomingCallController;
 import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
+import com.elitale.coldbirds.coldcalling.ui.controller.QuickAddPopover;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
@@ -44,6 +49,9 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -68,6 +76,8 @@ public final class MainWindow {
     /** All services the window and its controllers need. */
     public record Dependencies(
             LeadService        leadService,
+            CallListService    callListService,
+            LeadImportService  leadImportService,
             CallService        callService,
             SmsService         smsService,
             PhoneNumberService phoneNumberService,
@@ -88,6 +98,8 @@ public final class MainWindow {
 
     private final Stage              stage;
     private final LeadService        leadService;
+    private final CallListService    callListService;
+    private final LeadImportService  leadImportService;
     private final CallService        callService;
     private final SmsService         smsService;
     private final PhoneNumberService phoneNumberService;
@@ -156,6 +168,8 @@ public final class MainWindow {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
         Objects.requireNonNull(deps, "deps must not be null");
         this.leadService        = Objects.requireNonNull(deps.leadService(),        "leadService");
+        this.callListService    = Objects.requireNonNull(deps.callListService(),    "callListService");
+        this.leadImportService  = Objects.requireNonNull(deps.leadImportService(),  "leadImportService");
         this.callService        = Objects.requireNonNull(deps.callService(),        "callService");
         this.smsService         = Objects.requireNonNull(deps.smsService(),         "smsService");
         this.phoneNumberService = Objects.requireNonNull(deps.phoneNumberService(), "phoneNumberService");
@@ -479,6 +493,9 @@ public final class MainWindow {
         // ── Leads
         leadsController = new LeadsController();
         leadsController.setLeadService(leadService);
+        leadsController.setCallListService(callListService);
+        leadsController.setLeadImportService(leadImportService);
+        leadsController.setSettingsService(settingsService);
         leadsController.setOnDial(onDial);
         leadsView = loadFxml("/fxml/leads-view.fxml", leadsController);
 
@@ -587,6 +604,12 @@ public final class MainWindow {
         );
         TextInputShortcuts.install(scene);
 
+        // Global mid-call quick-add ("call my colleague") — works from any screen,
+        // including the active call, without navigating or moving the dialer position.
+        scene.getAccelerators().put(
+                new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
+                this::openQuickAdd);
+
         scene.setOnKeyPressed(event -> {
             if (root.getCenter() == incomingCallView) {
                 incomingCallController.handleKeyPress(event);
@@ -604,9 +627,31 @@ public final class MainWindow {
         stage.show();
     }
 
-    // ── Toasts ────────────────────────────────────────────────────────────────
+    // ── Mid-call quick-add ──────────────────────────────────────────────────────
 
-    /** Build, show, and auto-dismiss an error toast in the overlay layer. */
+    /** Open the global quick-add overlay, pre-targeting the list currently being dialed. */
+    private void openQuickAdd() {
+        final String country = java.util.Locale.getDefault().getCountry();
+        final Optional<String> region = country.isBlank() ? Optional.empty() : Optional.of(country);
+        new QuickAddPopover(new PhoneNormalizer(), leadService, callListService)
+                .show(stage, region, currentDialList(), () -> {
+                    if (leadsController != null) {
+                        leadsController.refresh();
+                    }
+                });
+    }
+
+    /** The list the power dialer is currently working through, if a session is running. */
+    private Optional<QuickAddPopover.CurrentList> currentDialList() {
+        return powerDialerService.getCurrentSession()
+                .map(PowerDialerSession::callListId)
+                .flatMap(id -> callListService.listsWithCounts().stream()
+                        .filter(ls -> ls.list().id().equals(id))
+                        .findFirst()
+                        .map(ls -> new QuickAddPopover.CurrentList(ls.list().id(), ls.list().name())));
+    }
+
+    // ── Toasts ────────────────────────────────────────────────────────────────
     private void addToast(String message) {
         Node toast = buildToast(message);
         toast.setOpacity(0);
