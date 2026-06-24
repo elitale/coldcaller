@@ -1,0 +1,50 @@
+<?xml version="1.0" ?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+        "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  jpackage Info.plist override for the macOS app bundle.
+
+  This is jpackage's standard JDK 21 template; the DEPLOY_* tokens are substituted
+  at package time (bundle id, name, version, icon, copyright, category). The only
+  deliberate customisation is NSMicrophoneUsageDescription: a cold-calling app must
+  declare microphone usage with a clear, honest string, otherwise macOS TCC kills the
+  process the first time it opens an audio input line. Keep the DEPLOY_* tokens intact.
+-->
+<plist version="1.0">
+ <dict>
+  <key>LSMinimumSystemVersion</key>
+  <string>10.11</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>English</string>
+  <key>CFBundleAllowMixedLocalizations</key>
+  <true/>
+  <key>CFBundleExecutable</key>
+  <string>DEPLOY_LAUNCHER_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>DEPLOY_ICON_FILE</string>
+  <key>CFBundleIdentifier</key>
+  <string>DEPLOY_BUNDLE_IDENTIFIER</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>DEPLOY_BUNDLE_NAME</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>DEPLOY_BUNDLE_SHORT_VERSION</string>
+  <key>CFBundleSignature</key>
+  <string>????</string>
+  <key>LSApplicationCategoryType</key>
+  <string>DEPLOY_APP_CATEGORY</string>
+  <key>CFBundleVersion</key>
+  <string>DEPLOY_BUNDLE_CFBUNDLE_VERSION</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>DEPLOY_BUNDLE_COPYRIGHT</string>DEPLOY_FILE_ASSOCIATIONS
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
+  <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>coldCalling uses your microphone to place and receive phone calls.</string>
+ </dict>
+</plist>

@@ -1,8 +1,14 @@
-# coldCalling
+<p align="center">
+  <img src="branding/coldcalling.svg" alt="coldCalling" width="120" height="120">
+</p>
+
+<h1 align="center">coldCalling</h1>
 
 A cross-platform desktop application for outbound and inbound cold calling. Part of the [coldBirds](https://coldbirds.com) outreach suite alongside [sequence](../sequence) (cold email).
 
 Built with Java 21 + JavaFX 21. Pure SIP + RTP — no browser, no WebRTC. Ships as a native installer (DMG / MSI / DEB).
+
+> **Permissions:** coldCalling needs **microphone** access to place and receive calls. On first call macOS prompts for it (declared via `NSMicrophoneUsageDescription`); Windows and Linux grant audio access without a prompt.
 
 ---
 

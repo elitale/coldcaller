@@ -41,6 +41,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.MessagesController;
 import com.elitale.coldbirds.coldcalling.ui.controller.PowerDialerController;
 import com.elitale.coldbirds.coldcalling.ui.controller.QuickAddPopover;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
+import com.elitale.coldbirds.coldcalling.ui.support.AppIcons;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallReadiness;
@@ -736,6 +737,7 @@ public final class MainWindow {
         });
 
         stage.setTitle("coldCalling");
+        AppIcons.applyTo(stage);
         stage.setScene(scene);
         stage.setMinWidth(MIN_WINDOW_W);
         stage.setMinHeight(MIN_WINDOW_H);

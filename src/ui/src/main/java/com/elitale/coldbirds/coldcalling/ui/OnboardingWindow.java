@@ -1,16 +1,18 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
+import java.io.IOException;
+import java.util.Objects;
+
 import com.elitale.coldbirds.coldcalling.services.OnboardingService;
 import com.elitale.coldbirds.coldcalling.ui.controller.OnboardingController;
+import com.elitale.coldbirds.coldcalling.ui.support.AppIcons;
 import com.elitale.coldbirds.coldcalling.ui.support.TextInputShortcuts;
+
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
-
-import java.io.IOException;
-import java.util.Objects;
 
 /**
  * Standalone first-run setup wizard window. Owns the stage until onboarding
@@ -56,6 +58,7 @@ public final class OnboardingWindow {
         TextInputShortcuts.install(scene);
 
         stage.setTitle("coldCalling — Setup");
+        AppIcons.applyTo(stage);
         stage.setScene(scene);
         stage.setMinWidth(MIN_WIDTH);
         stage.centerOnScreen();

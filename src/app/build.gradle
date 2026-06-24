@@ -69,15 +69,32 @@ tasks.register('jpackage', Exec) {
     def destDir     = layout.buildDirectory.dir('jpackage')
     def jpackageBin = "${System.getProperty('java.home')}/bin/jpackage"
 
+    // Branding + installer metadata. The Windows upgrade UUID must stay constant across
+    // releases so the MSI treats new versions as in-place upgrades, not separate products.
+    def iconsDir       = project.file('packaging/icons')
+    def macResources   = project.file('packaging/macos')   // holds the Info.plist override
+    def licenseFile    = rootProject.file('LICENSE')
+    def bundleId       = 'com.elitale.coldbirds.coldcalling'
+    def appDescription = 'Cross-platform cold calling — SIP calls, SMS, and power dialing.'
+    def appCopyright   = '\u00A9 2026 Elitale \u2014 Apache-2.0'
+    def upgradeUuid    = '4DCC1B7C-097B-4168-BE2C-83668F093A23'
+    def iconFile       = currentOs.windows ? new File(iconsDir, 'coldcalling.ico')
+                       : currentOs.macOsX  ? new File(iconsDir, 'coldcalling.icns')
+                       :                      new File(iconsDir, 'coldcalling.png')
+
     doFirst {
         delete destDir
         destDir.get().asFile.mkdirs()
-        commandLine(
+
+        def args = [
             jpackageBin,
             '--type',        packageType,
             '--name',        appName,
             '--app-version', appVersion,
             '--vendor',      'Elitale',
+            '--copyright',   appCopyright,
+            '--description', appDescription,
+            '--icon',        iconFile.absolutePath,
             '--input',       libDir.get().asFile.absolutePath,
             '--main-jar',    tasks.named('jar').get().archiveFileName.get(),
             '--main-class',  application.mainClass.get(),
@@ -88,6 +105,33 @@ tasks.register('jpackage', Exec) {
             '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.management,' +
                              'java.net.http,java.logging,java.xml,jdk.crypto.ec,' +
                              'jdk.unsupported,jdk.zipfs,jdk.localedata'
-        )
+        ]
+        if (licenseFile.exists()) {
+            args += ['--license-file', licenseFile.absolutePath]
+        }
+        if (currentOs.macOsX) {
+            // Stable bundle id + Business category; --resource-dir supplies the Info.plist
+            // that declares NSMicrophoneUsageDescription (required to open an audio line).
+            args += ['--mac-package-identifier', bundleId,
+                     '--mac-package-name',       appName,
+                     '--mac-app-category',       'business']
+            if (macResources.exists()) {
+                args += ['--resource-dir', macResources.absolutePath]
+            }
+        } else if (currentOs.windows) {
+            args += ['--win-menu', '--win-menu-group', appName,
+                     '--win-shortcut', '--win-dir-chooser',
+                     '--win-per-user-install',
+                     '--win-upgrade-uuid', upgradeUuid]
+        } else {
+            // --linux-app-category is the DEB "Section"/RPM "Group" (use a real Debian
+            // section: comm = communications); --linux-menu-group is the freedesktop
+            // .desktop "Categories" entry shown in the application menu.
+            args += ['--linux-package-name', 'coldcalling',
+                     '--linux-app-category', 'comm',
+                     '--linux-menu-group',   'Office;Network;Telephony;',
+                     '--linux-shortcut']
+        }
+        commandLine(args)
     }
 }
