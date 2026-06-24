@@ -1,5 +1,6 @@
 package com.elitale.coldbirds.coldcalling.app;
 
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
 import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
@@ -164,7 +165,7 @@ public final class ColdCallingApp extends Application {
 
         // Services
         phoneNumberService = new PhoneNumberService(phoneNumberRepo, twilio, settingsRepo);
-        smsService         = new SmsService(twilio, smsRepo, phoneNumberRepo, settingsService);
+        smsService         = new SmsService(twilio, smsRepo, phoneNumberRepo, leadRepo, settingsService);
 
         // Telephony — callService is the TelephonyListener. The circular dependency is
         // broken with a two-step approach (no-op listener, then setListener()).
@@ -359,10 +360,21 @@ public final class ColdCallingApp extends Application {
         mainWindow.show();
         mainWindow.refreshRecentCalls();
 
-        // Twilio inbound SMS polling is disabled for now. To re-enable, restore:
-        //   smsService.startReceiving(sms -> mainWindow.refreshMessages());
-        // Until then, the Messages view refreshes when the user opens it. Numbers
-        // can be re-synced on demand via the Refresh button in Settings.
+        // Auto-receive inbound SMS (no manual Refresh): poll Twilio on a background thread so
+        // replies arrive on their own. Every new message refreshes the Messages list and lights
+        // the sidebar unread dot; a toast is raised only for messages that arrive after launch
+        // (the startup backlog stays silent) and never during a live call (DND, in MainWindow).
+        final Instant smsWatchSince = Instant.now();
+        smsService.startReceiving(sms ->
+                mainWindow.onInboundSms(inboundLabel(sms.from()), sms.occurredAt().isAfter(smsWatchSince)));
+    }
+
+    /** Best-effort display label for an inbound sender: the lead's name, else the raw number. */
+    private String inboundLabel(PhoneNumber from) {
+        return leadService.findByPhone(from)
+                .map(Lead::displayName)
+                .filter(s -> !s.isBlank())
+                .orElseGet(from::value);
     }
 
     /** Surface an error to the user as a toast (no-op if the window isn't up yet). */

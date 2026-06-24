@@ -475,6 +475,22 @@ public final class MainWindow {
     }
 
     /**
+     * React to an auto-received inbound SMS: always refresh the Messages list and light the
+     * sidebar unread dot; raise a toast only when {@code fresh} (the message arrived after launch)
+     * and no call is live (DND — never steal focus or pop a toast mid-call). Any thread.
+     */
+    public void onInboundSms(String fromLabel, boolean fresh) {
+        Platform.runLater(() -> {
+            if (messagesController != null) messagesController.refresh();
+            if (sidebar != null) sidebar.notifyInboundSms();
+            if (fresh && !callLive) {
+                final String who = (fromLabel == null || fromLabel.isBlank()) ? "" : " from " + fromLabel;
+                addToast("New message" + who);
+            }
+        });
+    }
+
+    /**
      * Reload the dialer's "Recent Calls" list from the database. Safe to call from
      * any thread — the DB read runs off the FX thread, the list update runs on it.
      */
@@ -562,6 +578,7 @@ public final class MainWindow {
         messagesController = new MessagesController();
         messagesController.setSmsService(smsService);
         messagesController.setPhoneNumberService(phoneNumberService);
+        messagesController.setLeadService(leadService);
         messagesView = loadFxml("/fxml/messages-view.fxml", messagesController);
 
         // ── Power Dialer

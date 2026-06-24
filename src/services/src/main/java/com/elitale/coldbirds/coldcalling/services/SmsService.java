@@ -1,10 +1,12 @@
 package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
 import com.elitale.coldbirds.coldcalling.domain.model.SmsMessage;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
@@ -37,6 +39,7 @@ public final class SmsService {
     private final TwilioClient          twilio;
     private final SmsRepository         smsRepo;
     private final PhoneNumberRepository phoneNumberRepo;
+    private final LeadRepository        leadRepo;
     private final SettingsService       settings;
 
     /** Active inbound poller, or null when not polling. Guarded by {@code this}. */
@@ -46,10 +49,12 @@ public final class SmsService {
             TwilioClient          twilio,
             SmsRepository         smsRepo,
             PhoneNumberRepository phoneNumberRepo,
+            LeadRepository        leadRepo,
             SettingsService       settings) {
         this.twilio          = Objects.requireNonNull(twilio,          "twilio must not be null");
         this.smsRepo         = Objects.requireNonNull(smsRepo,         "smsRepo must not be null");
         this.phoneNumberRepo = Objects.requireNonNull(phoneNumberRepo, "phoneNumberRepo must not be null");
+        this.leadRepo        = Objects.requireNonNull(leadRepo,        "leadRepo must not be null");
         this.settings        = Objects.requireNonNull(settings,        "settings must not be null");
     }
 
@@ -72,32 +77,32 @@ public final class SmsService {
             return Result.err("from number not owned: " + from.value());
         }
 
+        final Optional<Lead> lead = leadRepo.findByPhone(to);
+        if (lead.map(Lead::dnc).orElse(false)) {
+            LOG.warn("Blocked SMS to do-not-contact number {}", to.value());
+            return Result.err("recipient is on the do-not-contact list");
+        }
+        final Optional<LeadId> leadId = lead.map(Lead::id);
+        final PhoneNumberId fromId = owned.get().id();
+
         final Result<String> apiResult = twilio.sendSms(from, to, body);
         return switch (apiResult) {
             case Result.Err<?> err -> {
                 LOG.error("Twilio sendSms failed: {}", err.message());
+                // Persist the attempt as Failed so the rep sees it didn't go and can retry — a
+                // silently dropped follow-up is the worst correctness bug on this screen.
+                persist(CallDirection.OUTBOUND, fromId, leadId, to, body,
+                        new SmsStatus.Failed(err.message()), Instant.now());
                 yield Result.err(err.message());
             }
-            case Result.Ok<?> ignored -> {
-                final NewSmsMessage record = new NewSmsMessage(
-                        CallDirection.OUTBOUND,
-                        owned.get().id(),
-                        Optional.empty(),  // leadId resolved at UI layer
-                        to,
-                        body,
-                        new SmsStatus.Delivered(),
-                        java.time.Instant.now()
-                );
-                final var saved = smsRepo.save(record);
-                yield switch (saved) {
-                    case Result.Ok<com.elitale.coldbirds.coldcalling.domain.model.SmsMessage> ok ->
-                            Result.ok(ok.value().id());
-                    case Result.Err<?> err -> {
-                        LOG.error("Failed to persist outbound SMS: {}", err.message());
-                        yield Result.err(err.message());
-                    }
-                };
-            }
+            case Result.Ok<?> ignored -> switch (persist(CallDirection.OUTBOUND, fromId, leadId, to,
+                    body, new SmsStatus.Delivered(), Instant.now())) {
+                case Result.Ok<SmsMessage> ok -> Result.ok(ok.value().id());
+                case Result.Err<?> err -> {
+                    LOG.error("Failed to persist outbound SMS: {}", err.message());
+                    yield Result.err(err.message());
+                }
+            };
         };
     }
 
@@ -199,18 +204,23 @@ public final class SmsService {
             LOG.warn("Inbound SMS to unrecognised number {}", event.to().value());
             return;
         }
-        final NewSmsMessage record = new NewSmsMessage(
-                CallDirection.INBOUND,
-                owned.get().id(),
-                Optional.empty(),
-                event.from(),
-                event.body(),
-                new SmsStatus.Delivered(),
-                event.occurredAt()
-        );
-        final var result = smsRepo.save(record);
+        final Optional<Lead> lead = leadRepo.findByPhone(event.from());
+        if (OptOutDetector.isOptOut(event.body())) {
+            lead.ifPresent(l -> {
+                leadRepo.bulkSetDnc(List.of(l.id()), true);
+                LOG.info("Lead {} opted out of SMS (STOP) from {}", l.id().value(), event.from().value());
+            });
+        }
+        final Result<SmsMessage> result = persist(CallDirection.INBOUND, owned.get().id(),
+                lead.map(Lead::id), event.from(), event.body(),
+                new SmsStatus.Delivered(), event.occurredAt());
         if (result instanceof Result.Err<?> err) {
             LOG.error("Failed to persist inbound SMS: {}", err.message());
         }
+    }
+
+    private Result<SmsMessage> persist(CallDirection direction, PhoneNumberId phoneNumberId,
+            Optional<LeadId> leadId, PhoneNumber remote, String body, SmsStatus status, Instant sentAt) {
+        return smsRepo.save(new NewSmsMessage(direction, phoneNumberId, leadId, remote, body, status, sentAt));
     }
 }

@@ -1,16 +1,20 @@
 package com.elitale.coldbirds.coldcalling.services;
 
 import com.elitale.coldbirds.coldcalling.domain.event.DomainEvent;
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.value.*;
 import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
 import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository.NewSmsMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +26,7 @@ class SmsServiceTest {
     @Mock TwilioClient          twilio;
     @Mock SmsRepository         smsRepo;
     @Mock PhoneNumberRepository phoneNumberRepo;
+    @Mock LeadRepository        leadRepo;
     @Mock SettingsService       settings;
 
     SmsService service;
@@ -33,7 +38,7 @@ class SmsServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new SmsService(twilio, smsRepo, phoneNumberRepo, settings);
+        service = new SmsService(twilio, smsRepo, phoneNumberRepo, leadRepo, settings);
     }
 
     @Test
@@ -57,13 +62,47 @@ class SmsServiceTest {
     }
 
     @Test
-    void send_twilioFailure_doesNotPersist() {
+    void send_twilioFailure_persistsFailedStatus() {
         stubOwnedNumber(FROM, FROM_ID);
         when(twilio.sendSms(FROM, TO, "Hello")).thenReturn(Result.err("api error"));
+        when(smsRepo.save(any())).thenReturn(Result.err("stub"));
 
-        service.send(FROM, TO, "Hello");
+        Result<SmsId> result = service.send(FROM, TO, "Hello");
 
+        ArgumentCaptor<NewSmsMessage> captor = ArgumentCaptor.forClass(NewSmsMessage.class);
+        verify(smsRepo).save(captor.capture());
+        assertThat(captor.getValue().status()).isInstanceOf(SmsStatus.Failed.class);
+        assertThat(result).isInstanceOf(Result.Err.class);
+    }
+
+    @Test
+    void send_toDoNotContact_blocksAndDoesNotDelegate() {
+        stubOwnedNumber(FROM, FROM_ID);
+        when(leadRepo.findByPhone(TO)).thenReturn(Optional.of(leadWithDnc(TO, true)));
+
+        Result<SmsId> result = service.send(FROM, TO, "Hello");
+
+        assertThat(result).isInstanceOf(Result.Err.class);
+        verify(twilio, never()).sendSms(any(), any(), any());
         verify(smsRepo, never()).save(any());
+    }
+
+    @Test
+    void pollInbound_stopKeyword_marksLeadOptedOut() {
+        Instant since = Instant.parse("2024-01-01T00:00:00Z");
+        Instant sentAt = Instant.parse("2024-01-02T10:00:00Z");
+        when(settings.getSmsLastPolledAt()).thenReturn(since);
+        // inbound STOP from the lead (from=TO) to our owned number FROM
+        DomainEvent.IncomingSms event = new DomainEvent.IncomingSms(TO, FROM, "STOP", sentAt);
+        when(twilio.fetchInboundSince(since)).thenReturn(Result.ok(List.of(event)));
+        stubOwnedNumber(FROM, FROM_ID);
+        Lead lead = leadWithDnc(TO, false);
+        when(leadRepo.findByPhone(TO)).thenReturn(Optional.of(lead));
+        when(smsRepo.save(any())).thenReturn(Result.err("stub"));
+
+        service.pollInbound();
+
+        verify(leadRepo).bulkSetDnc(List.of(lead.id()), true);
     }
 
     @Test
@@ -125,5 +164,13 @@ class SmsServiceTest {
                 java.time.Instant.now(), java.time.Instant.now()
         );
         when(phoneNumberRepo.findByNumber(number)).thenReturn(Optional.of(owned));
+    }
+
+    private static Lead leadWithDnc(PhoneNumber phone, boolean dnc) {
+        return new Lead(
+                new LeadId(7L), Optional.of("Test"), Optional.empty(), phone,
+                Optional.empty(), Optional.empty(), Optional.empty(),
+                List.of(), Optional.empty(), dnc, Map.of(), LeadStatus.NEW,
+                Instant.now(), Instant.now());
     }
 }

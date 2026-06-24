@@ -13,7 +13,7 @@
     <top>
         <HBox spacing="12" alignment="CENTER_LEFT" styleClass="view-header">
             <Label text="Messages" styleClass="view-title"/>            <Region HBox.hgrow="ALWAYS"/>
-            <Button fx:id="refreshBtn" text="Refresh" onAction="#onRefresh"/>        </HBox>
+            <Button fx:id="refreshBtn" text="Refresh" styleClass="flat" onAction="#onRefresh"/>        </HBox>
     </top>
 
     <!-- ── Two-pane body ───────────────────────────────────────────────────── -->
@@ -21,7 +21,7 @@
         <HBox spacing="0">
 
             <!-- ── Left: conversation list ────────────────────────────────── -->
-            <VBox prefWidth="260" minWidth="200" styleClass="sidebar" spacing="0">
+            <VBox prefWidth="300" minWidth="220" styleClass="sidebar" spacing="0">
                 <HBox spacing="8" alignment="CENTER_LEFT">
                     <padding><Insets top="14" bottom="10" left="16" right="12"/></padding>
                     <Label text="Conversations" styleClass="section-title"/>
@@ -29,11 +29,11 @@
                     <Button fx:id="newMessageBtn" text="New"
                             styleClass="accent" onAction="#onNewMessage"/>
                 </HBox>
-                <ListView fx:id="conversationList" VBox.vgrow="ALWAYS" styleClass="card-list"/>
+                <ListView fx:id="conversationList" VBox.vgrow="ALWAYS" styleClass="messages-list"/>
             </VBox>
 
             <!-- ── Right: thread + compose ────────────────────────────────── -->
-            <BorderPane HBox.hgrow="ALWAYS">
+            <BorderPane HBox.hgrow="ALWAYS" styleClass="thread-pane">
 
                 <!-- Thread header -->
                 <top>
@@ -42,6 +42,9 @@
                         <Label fx:id="threadHeader" text="Select a conversation"
                                styleClass="title-2"/>
                         <Label fx:id="threadSubtitle" text="" styleClass="caption"/>
+                        <Label fx:id="optOutBanner" visible="false"
+                               text="Opted out — texting disabled"
+                               styleClass="opt-out-banner"/>
                         <Separator>
                             <VBox.margin><Insets top="10"/></VBox.margin>
                         </Separator>
@@ -50,31 +53,28 @@
 
                 <!-- Thread messages -->
                 <center>
-                    <ListView fx:id="threadList" styleClass="card-list">
-                        <BorderPane.margin><Insets left="16" right="16"/></BorderPane.margin>
+                    <ListView fx:id="threadList" styleClass="thread-list">
+                        <BorderPane.margin><Insets left="8" right="8"/></BorderPane.margin>
                     </ListView>
                 </center>
 
                 <!-- Compose bar -->
                 <bottom>
-                    <VBox spacing="10">
-                        <padding><Insets top="0" bottom="20" left="28" right="28"/></padding>
-                        <Separator/>
-                        <HBox spacing="8" alignment="CENTER_LEFT">
-                            <padding><Insets top="6" bottom="0"/></padding>
-                            <Label text="From:" styleClass="caption"/>
+                    <VBox spacing="7" styleClass="compose-bar">
+                        <HBox spacing="6" alignment="CENTER_LEFT">
+                            <Label text="From" styleClass="compose-from"/>
                             <ComboBox fx:id="fromNumberCombo" promptText="Select number"
-                                      prefWidth="200"/>
+                                      prefWidth="190"/>
                         </HBox>
                         <HBox spacing="10" alignment="CENTER">
                             <TextField fx:id="composeField"
-                                       promptText="Type a message…"
+                                       promptText="Message"
                                        HBox.hgrow="ALWAYS"
-                                       styleClass="search-field"
+                                       styleClass="compose-field"
                                        onAction="#onSend"/>
-                            <Button fx:id="sendBtn" text="Send"
-                                    styleClass="accent" onAction="#onSend"/>
+                            <Button fx:id="sendBtn" onAction="#onSend"/>
                         </HBox>
+                        <Label fx:id="composeHint" visible="false" styleClass="caption"/>
                     </VBox>
                 </bottom>
 
