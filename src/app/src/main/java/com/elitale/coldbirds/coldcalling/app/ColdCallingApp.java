@@ -11,6 +11,7 @@ import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
 import com.elitale.coldbirds.coldcalling.services.*;
 import com.elitale.coldbirds.coldcalling.storage.DatabaseManager;
 import com.elitale.coldbirds.coldcalling.storage.sqlite.*;
+import com.elitale.coldbirds.coldcalling.telephony.NetworkMonitor;
 import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
 import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
@@ -28,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -55,6 +57,7 @@ public final class ColdCallingApp extends Application {
     private DatabaseManager    db;
     private TelephonyService   telephonyService;
     private SmsService         smsService;
+    private NetworkMonitor     networkMonitor;
     private CallService        callService;
     private LeadService        leadService;
     private CallListService    callListService;
@@ -219,6 +222,12 @@ public final class ColdCallingApp extends Application {
         // to CallService on a background thread (never blocks the FX Application Thread).
         final Consumer<String> onDial = rawNumber ->
                 CompletableFuture.runAsync(() -> {
+                    // Click-time pre-flight: fail fast in the offline grace window instead of
+                    // firing a dead INVITE that hangs for ~10s before timing out.
+                    if (networkMonitor != null && !networkMonitor.probeNow()) {
+                        notifyError("Offline \u2014 can't connect. Check your internet and try again.");
+                        return;
+                    }
                     PhoneNumber remote;
                     try {
                         remote = new PhoneNumber(rawNumber);
@@ -367,6 +376,14 @@ public final class ColdCallingApp extends Application {
         final Instant smsWatchSince = Instant.now();
         smsService.startReceiving(sms ->
                 mainWindow.onInboundSms(inboundLabel(sms.from()), sms.occurredAt().isAfter(smsWatchSince)));
+
+        // Connectivity monitor — a real TCP connect to Twilio (captive-portal-proof) feeds the merged
+        // "can I call?" readiness signal in the sidebar.
+        networkMonitor = new NetworkMonitor(
+                NetworkMonitor.reachabilityProbe("api.twilio.com", 443, Duration.ofSeconds(3)),
+                Duration.ofSeconds(5),
+                mainWindow::onConnectivityChanged);
+        networkMonitor.start();
     }
 
     /** Best-effort display label for an inbound sender: the lead's name, else the raw number. */
@@ -451,6 +468,7 @@ public final class ColdCallingApp extends Application {
     public void stop() {
         LOG.info("coldCalling shutting down");
         if (smsService         != null) smsService.stopReceiving();
+        if (networkMonitor     != null) networkMonitor.stop();
         if (telephonyService   != null) telephonyService.close();
         if (powerDialerService != null) powerDialerService.close();
         try {

@@ -35,6 +35,7 @@ public final class SidebarStatusModel {
     private final List<Runnable> listeners = new ArrayList<>();
 
     private RegistrationHealth.State registration = RegistrationHealth.State.OFFLINE;
+    private ConnectivityHealth.State connectivity = ConnectivityHealth.State.ONLINE;
     private Optional<String> inboundRing = Optional.empty();
     private boolean liveCall;
     private Optional<String> powerDialer = Optional.empty();
@@ -54,6 +55,14 @@ public final class SidebarStatusModel {
         Objects.requireNonNull(state, "state must not be null");
         if (state != registration) {
             registration = state;
+            fire();
+        }
+    }
+
+    public void setConnectivity(ConnectivityHealth.State state) {
+        Objects.requireNonNull(state, "state must not be null");
+        if (state != connectivity) {
+            connectivity = state;
             fire();
         }
     }
@@ -92,6 +101,15 @@ public final class SidebarStatusModel {
 
     public RegistrationHealth.State registration() {
         return registration;
+    }
+
+    public ConnectivityHealth.State connectivity() {
+        return connectivity;
+    }
+
+    /** The merged "can I call right now?" signal (internet reachability + SIP registration). */
+    public CallReadiness.Readiness readiness() {
+        return CallReadiness.resolve(connectivity, registration);
     }
 
     public boolean messagesActivity() {

@@ -43,6 +43,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.QuickAddPopover;
 import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
+import com.elitale.coldbirds.coldcalling.ui.support.CallReadiness;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
@@ -54,6 +55,8 @@ import javafx.animation.PauseTransition;
 import javafx.animation.SequentialTransition;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXMLLoader;
@@ -177,6 +180,12 @@ public final class MainWindow {
 
     /** Top-right stack that holds transient toast notifications. */
     private VBox toastLayer;
+
+    /** Merged "can I call right now?" gate — Dial/Send bind their availability to this. */
+    private final BooleanProperty callable = new SimpleBooleanProperty(false);
+
+    /** When readiness first went not-ready, for the duration-gated "Back online" toast. */
+    private Instant notReadySince;
 
     public MainWindow(Stage stage, Dependencies deps) {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
@@ -583,6 +592,7 @@ public final class MainWindow {
         messagesController.setPhoneNumberService(phoneNumberService);
         messagesController.setLeadService(leadService);
         messagesController.setCallService(callService);
+        messagesController.setCallable(callable);
         messagesView = loadFxml("/fxml/messages-view.fxml", messagesController);
 
         // ── Power Dialer
@@ -608,6 +618,7 @@ public final class MainWindow {
         dialerController.setOnRecentCall(onDial);
         dialerController.setOnRecentMessage(this::openMessageThread);
         dialerController.setOnDial(onDial);
+        dialerController.setCallable(callable);
         dialerController.setCountries(CountryCatalog.ALL);
         dialerController.selectCountryByIso(settingsService.getDefaultCountryIso());
         dialerController.setOnCountrySelected(country ->
@@ -666,6 +677,8 @@ public final class MainWindow {
 
         root = new BorderPane();
         sidebar = new SidebarView(sidebarListener(), this::powerDialerProgress);
+        sidebar.setOnReadinessChanged(this::onReadiness);
+        onReadiness(sidebar.currentReadiness());
         root.setLeft(sidebar.node());
         root.setCenter(dialerView);
 
@@ -885,6 +898,29 @@ public final class MainWindow {
                 sidebar.onRegistrationChanged(registered);
             }
         });
+    }
+
+    /** Feed a network reachability probe result into the merged readiness signal. Any thread. */
+    public void onConnectivityChanged(boolean reachable) {
+        Platform.runLater(() -> {
+            if (sidebar != null) {
+                sidebar.onConnectivityChanged(reachable);
+            }
+        });
+    }
+
+    /** Update the Dial/Send availability gate + raise a duration-gated "Back online" toast. FX thread. */
+    private void onReadiness(CallReadiness.Readiness r) {
+        callable.set(r == CallReadiness.Readiness.READY);
+        if (r != CallReadiness.Readiness.READY) {
+            if (notReadySince == null) notReadySince = Instant.now();
+        } else {
+            if (notReadySince != null
+                    && java.time.Duration.between(notReadySince, Instant.now()).toSeconds() >= 20) {
+                addToast("Back online");
+            }
+            notReadySince = null;
+        }
     }
 
     // ── FXML loading ──────────────────────────────────────────────────────────

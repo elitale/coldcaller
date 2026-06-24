@@ -95,6 +95,9 @@ public final class MessagesController {
     /** True when the open thread's contact has opted out / is on DNC — compose is blocked. */
     private final BooleanProperty optedOut = new SimpleBooleanProperty(false);
 
+    /** True when the merged readiness gate says we're offline — Send is blocked with a hint. */
+    private final BooleanProperty offline = new SimpleBooleanProperty(false);
+
     private static final DateTimeFormatter LOCAL_TIME = DateTimeFormatter.ofPattern("h:mm a");
 
     /** Message ids that should "pop in" on the next thread render (newly sent/received). */
@@ -136,6 +139,13 @@ public final class MessagesController {
         this.callService = Objects.requireNonNull(callService, "callService must not be null");
     }
 
+    /** Gate Send on the merged readiness signal; offline shows a hint instead of a silent fail. */
+    public void setCallable(javafx.beans.value.ObservableValue<? extends Boolean> callable) {
+        Objects.requireNonNull(callable, "callable must not be null");
+        offline.set(!Boolean.TRUE.equals(callable.getValue()));
+        callable.addListener((obs, old, now) -> offline.set(!Boolean.TRUE.equals(now)));
+    }
+
     // ── FXMLLoader lifecycle ──────────────────────────────────────────────────
 
     @FXML
@@ -160,7 +170,8 @@ public final class MessagesController {
                 composeField.textProperty().isEmpty()
                         .or(fromNumberCombo.getSelectionModel().selectedItemProperty().isNull())
                         .or(hasRemote.not())
-                        .or(optedOut));
+                        .or(optedOut)
+                        .or(offline));
         composeField.disableProperty().bind(optedOut);
         optOutBanner.managedProperty().bind(optOutBanner.visibleProperty());
         optOutBanner.setVisible(false);
@@ -168,6 +179,7 @@ public final class MessagesController {
         composeHint.setVisible(false);
         composeField.textProperty().addListener((o, a, b) -> updateComposeHint());
         optedOut.addListener((o, a, b) -> updateComposeHint());
+        offline.addListener((o, a, b) -> updateComposeHint());
 
         conversationList.getSelectionModel().selectedItemProperty().addListener(
                 (obs, old, selected) -> {
@@ -414,6 +426,11 @@ public final class MessagesController {
     private void updateComposeHint() {
         if (optedOut.get()) {
             composeHint.setText("This contact opted out \u2014 texting is disabled.");
+            composeHint.setVisible(true);
+            return;
+        }
+        if (offline.get()) {
+            composeHint.setText("Offline \u2014 will send when you're back online.");
             composeHint.setVisible(true);
             return;
         }

@@ -1,5 +1,7 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
+import com.elitale.coldbirds.coldcalling.ui.support.CallReadiness;
+import com.elitale.coldbirds.coldcalling.ui.support.ConnectivityHealth;
 import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
 import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel.Destination;
 import com.elitale.coldbirds.coldcalling.ui.support.RegistrationHealth;
@@ -24,6 +26,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.util.Duration;
 import org.kordamp.ikonli.javafx.FontIcon;
 
@@ -32,6 +35,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -70,6 +74,7 @@ final class SidebarView {
     private final NavSelectionModel nav = new NavSelectionModel();
     private final SidebarStatusModel status = new SidebarStatusModel();
     private final RegistrationHealth health = new RegistrationHealth();
+    private final ConnectivityHealth connectivity = new ConnectivityHealth();
 
     private final Listener listener;
     private final Supplier<Optional<String>> powerDialerProgress;
@@ -85,6 +90,9 @@ final class SidebarView {
     private Instant liveSince;
     private FadeTransition dotPulse;
     private FadeTransition ringPulse;
+
+    private Consumer<CallReadiness.Readiness> onReadiness = r -> {};
+    private CallReadiness.Readiness lastReadiness;
 
     SidebarView(Listener listener, Supplier<Optional<String>> powerDialerProgress) {
         this.listener = Objects.requireNonNull(listener, "listener must not be null");
@@ -117,6 +125,21 @@ final class SidebarView {
     void onCredentialsAbsent() {
         health.onCredentialsAbsent();
         status.setRegistration(health.current());
+    }
+
+    /** Feed one network reachability probe result into the merged readiness signal. */
+    void onConnectivityChanged(boolean reachable) {
+        connectivity.onProbe(reachable);
+        status.setConnectivity(connectivity.current());
+    }
+
+    /** Subscribe to merged-readiness changes (the Dial/Send gate + back-online toast live in MainWindow). */
+    void setOnReadinessChanged(Consumer<CallReadiness.Readiness> sink) {
+        this.onReadiness = Objects.requireNonNull(sink, "sink must not be null");
+    }
+
+    CallReadiness.Readiness currentReadiness() {
+        return status.readiness();
     }
 
     void onLiveCall(boolean live, Instant connectedAt) {
@@ -261,6 +284,7 @@ final class SidebarView {
 
     private void onTick() {
         status.setRegistration(health.current());           // grace-window escalation
+        status.setConnectivity(connectivity.current());      // connectivity grace / stability
         status.setPowerDialer(powerDialerProgress.get());    // session start/stop/advance
         renderReturnRow();                                   // advance the live timer
     }
@@ -270,22 +294,44 @@ final class SidebarView {
         renderReturnRow();
         messagesBadge.setVisible(status.messagesActivity());
         messagesBadge.setManaged(status.messagesActivity());
+        CallReadiness.Readiness r = status.readiness();
+        if (r != lastReadiness) {
+            lastReadiness = r;
+            onReadiness.accept(r);
+        }
     }
 
     private void renderDot() {
-        RegistrationHealth.State state = status.registration();
+        CallReadiness.Readiness r = status.readiness();
         statusDot.getStyleClass().removeAll("ok", "warn", "off");
-        switch (state) {
-            case REGISTERED -> { statusDot.getStyleClass().add("ok"); statusLabel.setText("Connected"); }
-            case RECONNECTING -> { statusDot.getStyleClass().add("warn"); statusLabel.setText("Reconnecting…"); }
-            case OFFLINE -> { statusDot.getStyleClass().add("off"); statusLabel.setText("Offline"); }
-        }
-        statusLabel.setTooltip(new Tooltip(switch (state) {
-            case REGISTERED -> "SIP registered — your line is ready.";
-            case RECONNECTING -> "Re-registering with your SIP provider…";
-            case OFFLINE -> "Not registered — check your Twilio/SIP credentials in Settings.";
+        statusDot.getStyleClass().add(switch (r) {
+            case READY -> "ok";
+            case RECONNECTING -> "warn";
+            case OFFLINE -> "off";
+        });
+        statusLabel.setText(switch (r) {
+            case READY -> "Ready to call";
+            case RECONNECTING -> "Reconnecting\u2026";
+            case OFFLINE -> "Offline \u2014 calls unavailable";
+        });
+        statusLabel.setGraphic(switch (r) {
+            case READY -> wifiIcon("bi-wifi", "#34C759");
+            case RECONNECTING -> wifiIcon("bi-wifi", "#FF9F0A");
+            case OFFLINE -> wifiIcon("bi-wifi-off", "#FF3B30");
+        });
+        statusLabel.setTooltip(new Tooltip(switch (r) {
+            case READY -> "Internet + line ready.";
+            case RECONNECTING -> "Reconnecting \u2014 hold tight.";
+            case OFFLINE -> "No connection \u2014 calls & texts unavailable.";
         }));
-        pulse(statusDot, dotPulse, state == RegistrationHealth.State.RECONNECTING, p -> dotPulse = p);
+        pulse(statusDot, dotPulse, r == CallReadiness.Readiness.RECONNECTING, p -> dotPulse = p);
+    }
+
+    private static FontIcon wifiIcon(String literal, String hex) {
+        FontIcon icon = new FontIcon(literal);
+        icon.setIconSize(13);
+        icon.setIconColor(Color.web(hex));
+        return icon;
     }
 
     private void renderReturnRow() {

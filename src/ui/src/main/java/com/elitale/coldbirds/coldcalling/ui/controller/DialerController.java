@@ -14,6 +14,7 @@ import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
@@ -103,6 +104,23 @@ public final class DialerController {
     /** Register a callback for when the user initiates a call. */
     public void setOnDial(Consumer<String> callback) {
         this.onDial = Objects.requireNonNull(callback, "callback must not be null");
+    }
+
+    /**
+     * Bind dial availability to the merged readiness gate. While not callable the button
+     * is disabled and its label reads "Offline" so the dead control explains itself.
+     */
+    public void setCallable(ObservableValue<? extends Boolean> callable) {
+        Objects.requireNonNull(callable, "callable must not be null");
+        callButton.disableProperty().unbind();
+        callButton.disableProperty().bind(Bindings.createBooleanBinding(
+                () -> !DialNumberFormatter.isDialable(numberField.getText())
+                        || !Boolean.TRUE.equals(callable.getValue()),
+                numberField.textProperty(), callable));
+        Runnable applyText = () ->
+                callButton.setText(Boolean.TRUE.equals(callable.getValue()) ? "Call" : "Offline");
+        callable.addListener((obs, old, now) -> applyText.run());
+        applyText.run();
     }
 
     /** Register a callback invoked whenever the selected country changes. */
