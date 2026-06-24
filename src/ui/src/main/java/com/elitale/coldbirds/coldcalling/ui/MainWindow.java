@@ -44,6 +44,7 @@ import com.elitale.coldbirds.coldcalling.ui.controller.SettingsController;
 import com.elitale.coldbirds.coldcalling.ui.support.CallHudVisibility;
 import com.elitale.coldbirds.coldcalling.ui.support.CallParticipant;
 import com.elitale.coldbirds.coldcalling.ui.support.CallReadiness;
+import com.elitale.coldbirds.coldcalling.ui.support.PowerDialerResumePrompt;
 import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
 import com.elitale.coldbirds.coldcalling.ui.support.NavSelectionModel;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallRow;
@@ -65,6 +66,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -186,6 +188,9 @@ public final class MainWindow {
 
     /** When readiness first went not-ready, for the duration-gated "Back online" toast. */
     private Instant notReadySince;
+
+    /** True while a running power-dialer session is paused-and-held because we went offline. */
+    private boolean powerDialerHeldOffline;
 
     public MainWindow(Stage stage, Dependencies deps) {
         this.stage              = Objects.requireNonNull(stage, "stage must not be null");
@@ -801,6 +806,38 @@ public final class MainWindow {
         return box;
     }
 
+    /**
+     * A persistent, actionable toast: a message plus a primary action and a dismiss. Used for the
+     * named power-dialer resume prompt — it never auto-dismisses, so the rep decides deliberately.
+     */
+    private void addResumeToast(String message, Runnable onAccept) {
+        Label text = new Label(message);
+        text.setWrapText(true);
+        text.setMaxWidth(320);
+        text.getStyleClass().add("toast-message");
+
+        Button accept = new Button("Resume");
+        accept.getStyleClass().add("accent");
+        Button dismiss = new Button("Keep paused");
+        HBox actions = new HBox(8, accept, dismiss);
+        actions.setAlignment(Pos.CENTER_RIGHT);
+
+        VBox box = new VBox(8, text, actions);
+        box.setMaxWidth(360);
+        box.getStyleClass().addAll("toast", "toast-error");
+        box.setOpacity(0);
+        toastLayer.getChildren().add(box);
+
+        final Runnable remove = () -> toastLayer.getChildren().remove(box);
+        accept.setOnAction(e -> { remove.run(); onAccept.run(); });
+        dismiss.setOnAction(e -> remove.run());
+
+        FadeTransition in = new FadeTransition(Duration.millis(180), box);
+        in.setFromValue(0);
+        in.setToValue(1);
+        in.play();
+    }
+
     // ── Sidebar ───────────────────────────────────────────────────────────────
 
     /** Swap the centre pane, stopping any live mic test left running in Settings. */
@@ -912,6 +949,13 @@ public final class MainWindow {
     /** Update the Dial/Send availability gate + raise a duration-gated "Back online" toast. FX thread. */
     private void onReadiness(CallReadiness.Readiness r) {
         callable.set(r == CallReadiness.Readiness.READY);
+        // Pause-and-hold a running power dialer the moment we drop fully offline, so it never
+        // launches fresh dials into a dead network. It is never auto-resumed.
+        if (r == CallReadiness.Readiness.OFFLINE && !powerDialerHeldOffline && powerDialerRunning()) {
+            powerDialerService.pause();
+            powerDialerHeldOffline = true;
+            addToast("Power dialer paused \u2014 you're offline.");
+        }
         if (r != CallReadiness.Readiness.READY) {
             if (notReadySince == null) notReadySince = Instant.now();
         } else {
@@ -920,7 +964,28 @@ public final class MainWindow {
                 addToast("Back online");
             }
             notReadySince = null;
+            if (powerDialerHeldOffline) {
+                powerDialerHeldOffline = false;
+                promptResumePowerDialer();
+            }
         }
+    }
+
+    private boolean powerDialerRunning() {
+        return powerDialerService.getCurrentSession()
+                .map(s -> s.state() instanceof PowerDialerState.Running)
+                .orElse(false);
+    }
+
+    /** Offer (never force) a named resume after an offline pause; no-op if the session is gone. */
+    private void promptResumePowerDialer() {
+        final Optional<PowerDialerSession> session = powerDialerService.getCurrentSession();
+        if (session.isEmpty() || !(session.get().state() instanceof PowerDialerState.Paused)) return;
+        final String name = powerDialerService.getCurrentLead().map(Lead::displayName).orElse("");
+        final int remaining = powerDialerService.getStats()
+                .map(PowerDialerService.SessionStats::remaining).orElse(0);
+        addResumeToast(PowerDialerResumePrompt.message(name, session.get().currentPosition(), remaining),
+                powerDialerService::resume);
     }
 
     // ── FXML loading ──────────────────────────────────────────────────────────
