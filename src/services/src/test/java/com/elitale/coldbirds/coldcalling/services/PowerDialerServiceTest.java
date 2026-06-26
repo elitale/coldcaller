@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -120,6 +121,28 @@ class PowerDialerServiceTest {
         service.start(LIST_ID);
         service.notifyCallAnswered("c1");
         assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(1);
+    }
+
+    @Test
+    void notifyCallAnswered_duplicateEvent_doesNotExceedDialedCount() {
+        stubTwoLeadList();
+        service.start(LIST_ID);                 // dialedCount = 1
+        service.notifyCallAnswered("c1");
+        service.notifyCallAnswered("c1");       // duplicate "answered" for the same call
+        assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(1);
+        // Regression: a second connect must not push connectedCount past dialedCount,
+        // which would make the PowerDialerSession record throw on every UI tick.
+        assertThatCode(service::getCurrentSession).doesNotThrowAnyException();
+        assertThat(service.getCurrentSession()).isPresent();
+    }
+
+    @Test
+    void notifyCallAnswered_whilePaused_isIgnored() {
+        stubTwoLeadList();
+        service.start(LIST_ID);
+        service.pause();
+        service.notifyCallAnswered("c1");
+        assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(0);
     }
 
     @Test

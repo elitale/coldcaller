@@ -291,6 +291,12 @@ public final class PowerDialerService {
 
     public synchronized void notifyCallAnswered(String callId) {
         if (session == null) return;
+        // Only count a connect for the dialer's own in-flight call: ignore events while
+        // paused/stopped, and ignore duplicate "answered" notifications for the same call.
+        // Without this, connectedCount can exceed dialedCount and the PowerDialerSession
+        // record throws on every UI tick.
+        if (!(session.state instanceof PowerDialerState.Running)) return;
+        if (session.currentCallAnswered) return;
         cancelTimeout();
         session.currentCallAnswered = true;
         session.connectedCount++;
