@@ -5,10 +5,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.ui.support.ExternalLinks;
 import com.elitale.coldbirds.coldcalling.ui.support.LeadFieldDigest;
 
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -98,17 +103,63 @@ public final class LeadGlanceCard {
         return new VBox(4, toggle, rows);
     }
 
-    private static HBox fieldRow(final LeadFieldDigest.Field field) {
-        final Label label = new Label(field.label());
-        label.getStyleClass().add("detail-field-label");
-        label.setMinWidth(96);
-        label.setPrefWidth(96);
-        final Label value = new Label(field.value());
-        value.getStyleClass().add("detail-field-value");
-        value.setWrapText(true);
+    private static Node fieldRow(final LeadFieldDigest.Field field) {
+        final Label label = fieldLabel(field.label());
+        final Region value = switch (field.kind()) {
+            case TEXT  -> textValue(field.value());
+            case EMAIL -> linkValue(field.value(), () -> ExternalLinks.openMail(field.value()));
+            case LINK  -> linkValue(field.value(), () -> ExternalLinks.open(field.value()));
+            case IMAGE -> imageValue(field.value());
+        };
         HBox.setHgrow(value, Priority.ALWAYS);
         final HBox row = new HBox(8, label, value);
+        row.setAlignment(Pos.TOP_LEFT);
         return row;
+    }
+
+    private static Label fieldLabel(final String text) {
+        final Label label = new Label(text);
+        label.getStyleClass().add("detail-field-label");
+        label.setMinWidth(120);
+        label.setPrefWidth(120);
+        label.setMaxWidth(120);
+        label.setWrapText(true);
+        return label;
+    }
+
+    private static Label textValue(final String text) {
+        final Label value = new Label(text);
+        value.getStyleClass().add("detail-field-value");
+        value.setWrapText(true);
+        return value;
+    }
+
+    private static Hyperlink linkValue(final String text, final Runnable onOpen) {
+        final Hyperlink link = new Hyperlink(text);
+        link.getStyleClass().add("detail-field-link");
+        link.setWrapText(true);
+        link.setOnAction(e -> onOpen.run());
+        return link;
+    }
+
+    /** A clickable URL with a best-effort inline preview that hides itself if the load fails. */
+    private static VBox imageValue(final String url) {
+        final VBox box = new VBox(4, linkValue(url, () -> ExternalLinks.open(url)));
+        final ImageView view = new ImageView();
+        view.getStyleClass().add("detail-field-image");
+        view.setFitWidth(140);
+        view.setPreserveRatio(true);
+        view.setSmooth(true);
+        // Background loading never blocks the FX thread; drop the preview on error.
+        final Image image = new Image(url, 140, 0, true, true, true);
+        image.errorProperty().addListener((obs, was, isError) -> {
+            if (Boolean.TRUE.equals(isError)) {
+                box.getChildren().remove(view);
+            }
+        });
+        view.setImage(image);
+        box.getChildren().add(view);
+        return box;
     }
 
     private static Label badge(final String text, final String styleClass) {

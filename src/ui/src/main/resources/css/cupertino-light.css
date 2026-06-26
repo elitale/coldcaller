@@ -794,6 +794,27 @@
     -fx-text-fill: #1D1D1F;
 }
 
+/* Clickable email/URL values in the "all fields" tier */
+.detail-field-link {
+    -fx-font-size: 13px;
+    -fx-text-fill: #0A84FF;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.detail-field-link:hover {
+    -fx-underline: true;
+}
+
+.detail-field-link:visited {
+    -fx-text-fill: #0A84FF;
+}
+
+/* Inline image preview for image-URL custom fields */
+.detail-field-image {
+    -fx-background-radius: 6px;
+}
+
 /* Read-only hint shown above the lead while a call is live */
 .detail-livehint {
     -fx-font-size: 12px;

@@ -115,7 +115,82 @@ class LeadFieldDigestTest {
         assertThat(added.value()).isNotBlank();
     }
 
+    // ── field-kind classification ─────────────────────────────────────────────
+
+    @Test
+    void emailFieldIsClassifiedAsEmailKind() {
+        final LeadFieldDigest.Field email = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.email = Optional.of("jane@acme.com"))), "Email");
+        assertThat(email.kind()).isEqualTo(LeadFieldDigest.FieldKind.EMAIL);
+        assertThat(email.value()).isEqualTo("jane@acme.com");
+    }
+
+    @Test
+    void httpUrlCustomFieldIsClassifiedAsLink() {
+        final LeadFieldDigest.Field link = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.custom =
+                        orderedMap("linkedin", "http://www.linkedin.com/in/jane"))), "linkedin");
+        assertThat(link.kind()).isEqualTo(LeadFieldDigest.FieldKind.LINK);
+        assertThat(link.value()).isEqualTo("http://www.linkedin.com/in/jane");
+    }
+
+    @Test
+    void imageUrlWithoutExtensionIsClassifiedByLabelHint() {
+        final LeadFieldDigest.Field img = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.custom = orderedMap(
+                        "person_photo_url", "https://static.licdn.com/aero-v1/sc/h/abc123"))),
+                "person_photo_url");
+        assertThat(img.kind()).isEqualTo(LeadFieldDigest.FieldKind.IMAGE);
+    }
+
+    @Test
+    void imageUrlWithExtensionIsClassifiedAsImage() {
+        final LeadFieldDigest.Field img = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.custom =
+                        orderedMap("avatar", "https://cdn.example.com/p/jane.JPG?v=2"))), "avatar");
+        assertThat(img.kind()).isEqualTo(LeadFieldDigest.FieldKind.IMAGE);
+    }
+
+    @Test
+    void isoDatetimeCustomValueIsHumanized() {
+        final LeadFieldDigest.Field created = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.custom =
+                        orderedMap("createdAt", "2026-05-16T17:00:22.712Z"))), "createdAt");
+        assertThat(created.value()).matches("\\d{1,2} \\w{3} \\d{4}");
+        assertThat(created.kind()).isEqualTo(LeadFieldDigest.FieldKind.TEXT);
+    }
+
+    @Test
+    void isoDateCustomValueIsHumanized() {
+        final LeadFieldDigest.Field d = fieldNamed(
+                LeadFieldDigest.of(lead(b -> b.custom = orderedMap("signup_date", "2026-05-16"))),
+                "signup_date");
+        assertThat(d.value()).isEqualTo("16 May 2026");
+        assertThat(d.kind()).isEqualTo(LeadFieldDigest.FieldKind.TEXT);
+    }
+
+    @Test
+    void plainTextAndNumericValuesStayText() {
+        final LeadFieldDigest digest = LeadFieldDigest.of(lead(b ->
+                b.custom = orderedMap("employees", "2", "city", "Los Angeles")));
+        assertThat(fieldNamed(digest, "employees").kind()).isEqualTo(LeadFieldDigest.FieldKind.TEXT);
+        assertThat(fieldNamed(digest, "city").kind()).isEqualTo(LeadFieldDigest.FieldKind.TEXT);
+    }
+
+    @Test
+    void addedFieldIsTextKind() {
+        assertThat(fieldNamed(LeadFieldDigest.of(lead(b -> {})), "Added").kind())
+                .isEqualTo(LeadFieldDigest.FieldKind.TEXT);
+    }
+
     // ── fixture ──────────────────────────────────────────────────────────────
+
+    private static LeadFieldDigest.Field fieldNamed(final LeadFieldDigest digest, final String label) {
+        return digest.detailFields().stream()
+                .filter(f -> f.label().equals(label))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no field labelled " + label));
+    }
 
     private static Map<String, String> orderedMap(String... kv) {
         final LinkedHashMap<String, String> map = new LinkedHashMap<>();

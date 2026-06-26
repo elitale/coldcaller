@@ -1,12 +1,18 @@
 package com.elitale.coldbirds.coldcalling.ui.support;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
@@ -37,11 +43,24 @@ public record LeadFieldDigest(
     private static final DateTimeFormatter ADDED_FMT =
             DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH);
 
+    /** ISO date/date-time values begin with {@code yyyy-MM-dd}; gate parsing on that. */
+    private static final Pattern ISO_DATE_PREFIX = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}");
+    private static final Pattern EMAIL =
+            Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final Pattern IMAGE_LABEL = Pattern.compile(
+            ".*(photo|image|avatar|picture|logo|thumbnail|headshot).*", Pattern.CASE_INSENSITIVE);
+    private static final Set<String> IMAGE_EXT =
+            Set.of(".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg");
+
+    /** How a detail value should be rendered: plain text, a mailto, a web link, or an image. */
+    public enum FieldKind { TEXT, EMAIL, LINK, IMAGE }
+
     /** A single label:value row in the collapsed "all fields" tier. */
-    public record Field(String label, String value) {
+    public record Field(String label, String value, FieldKind kind) {
         public Field {
             Objects.requireNonNull(label, "label must not be null");
             Objects.requireNonNull(value, "value must not be null");
+            Objects.requireNonNull(kind, "kind must not be null");
         }
     }
 
@@ -59,19 +78,19 @@ public record LeadFieldDigest(
 
         final List<Field> detail = new ArrayList<>();
         lead.email().map(String::trim).filter(s -> !s.isEmpty())
-                .ifPresent(e -> detail.add(new Field("Email", e)));
+                .ifPresent(e -> detail.add(new Field("Email", e, FieldKind.EMAIL)));
 
         lead.customFields().entrySet().stream()
                 .filter(e -> e.getKey() != null && !e.getKey().isBlank())
                 .filter(e -> e.getValue() != null && !e.getValue().isBlank())
                 .sorted((a, b) -> a.getKey().compareToIgnoreCase(b.getKey()))
-                .forEach(e -> detail.add(new Field(e.getKey().trim(), e.getValue().trim())));
+                .forEach(e -> detail.add(classify(e.getKey().trim(), e.getValue().trim())));
 
         lead.notes().map(String::trim).filter(s -> !s.isEmpty())
-                .ifPresent(n -> detail.add(new Field("Notes", n)));
+                .ifPresent(n -> detail.add(new Field("Notes", n, FieldKind.TEXT)));
 
         detail.add(new Field("Added",
-                ADDED_FMT.format(lead.createdAt().atZone(ZoneId.systemDefault()))));
+                ADDED_FMT.format(lead.createdAt().atZone(ZoneId.systemDefault())), FieldKind.TEXT));
 
         return new LeadFieldDigest(
                 lead.displayName(),
@@ -84,6 +103,63 @@ public record LeadFieldDigest(
 
     private static LeadStatus orStatus(final LeadStatus status) {
         return status == null ? LeadStatus.NEW : status;
+    }
+
+    /** Decide how a raw custom value should be displayed and rendered. */
+    private static Field classify(final String label, final String value) {
+        final Optional<String> humanizedDate = humanizeDate(value);
+        if (humanizedDate.isPresent()) {
+            return new Field(label, humanizedDate.get(), FieldKind.TEXT);
+        }
+        if (EMAIL.matcher(value).matches()) {
+            return new Field(label, value, FieldKind.EMAIL);
+        }
+        if (isHttpUrl(value)) {
+            return new Field(label, value, isImageUrl(label, value) ? FieldKind.IMAGE : FieldKind.LINK);
+        }
+        return new Field(label, value, FieldKind.TEXT);
+    }
+
+    /** Humanize an ISO instant/date-time/date to {@code d MMM yyyy}; empty if not a date. */
+    private static Optional<String> humanizeDate(final String value) {
+        if (!ISO_DATE_PREFIX.matcher(value).lookingAt()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(ADDED_FMT.format(Instant.parse(value).atZone(ZoneId.systemDefault())));
+        } catch (DateTimeParseException ignored) {
+            // not an instant
+        }
+        try {
+            return Optional.of(ADDED_FMT.format(
+                    LocalDateTime.parse(value).atZone(ZoneId.systemDefault())));
+        } catch (DateTimeParseException ignored) {
+            // not a local date-time
+        }
+        try {
+            return Optional.of(ADDED_FMT.format(LocalDate.parse(value)));
+        } catch (DateTimeParseException ignored) {
+            // not a local date
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isHttpUrl(final String value) {
+        final String lower = value.toLowerCase(Locale.ROOT);
+        return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    private static boolean isImageUrl(final String label, final String url) {
+        if (IMAGE_LABEL.matcher(label).matches()) {
+            return true;
+        }
+        String path = url.toLowerCase(Locale.ROOT);
+        final int query = path.indexOf('?');
+        if (query >= 0) {
+            path = path.substring(0, query);
+        }
+        final String stripped = path;
+        return IMAGE_EXT.stream().anyMatch(stripped::endsWith);
     }
 
     private static Optional<String> joinNonBlank(final Optional<String> a, final Optional<String> b) {

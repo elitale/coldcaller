@@ -1,33 +1,5 @@
 package com.elitale.coldbirds.coldcalling.app;
 
-import com.elitale.coldbirds.coldcalling.domain.model.Lead;
-import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
-import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
-import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
-import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
-import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
-import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
-import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
-import com.elitale.coldbirds.coldcalling.services.*;
-import com.elitale.coldbirds.coldcalling.storage.DatabaseManager;
-import com.elitale.coldbirds.coldcalling.storage.sqlite.*;
-import com.elitale.coldbirds.coldcalling.telephony.NetworkMonitor;
-import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
-import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
-import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
-import com.elitale.coldbirds.coldcalling.telephony.sip.SipCredentials;
-import com.elitale.coldbirds.coldcalling.telephony.sip.SipTester;
-import com.elitale.coldbirds.coldcalling.storage.repository.*;
-import com.elitale.coldbirds.coldcalling.ui.MainWindow;
-import com.elitale.coldbirds.coldcalling.ui.OnboardingWindow;
-import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
-import com.elitale.coldbirds.coldcalling.ui.support.Motion;
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.stage.Stage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,6 +7,60 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.elitale.coldbirds.coldcalling.domain.model.Lead;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDirection;
+import com.elitale.coldbirds.coldcalling.domain.value.CallDisposition;
+import com.elitale.coldbirds.coldcalling.domain.value.CountryLookup;
+import com.elitale.coldbirds.coldcalling.domain.value.PhoneNumber;
+import com.elitale.coldbirds.coldcalling.domain.value.PowerDialerState;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioClient;
+import com.elitale.coldbirds.coldcalling.providers.twilio.TwilioConfig;
+import com.elitale.coldbirds.coldcalling.services.CallListService;
+import com.elitale.coldbirds.coldcalling.services.CallRoutingService;
+import com.elitale.coldbirds.coldcalling.services.CallService;
+import com.elitale.coldbirds.coldcalling.services.CallerIdSelector;
+import com.elitale.coldbirds.coldcalling.services.LeadImportService;
+import com.elitale.coldbirds.coldcalling.services.LeadService;
+import com.elitale.coldbirds.coldcalling.services.OnboardingService;
+import com.elitale.coldbirds.coldcalling.services.PhoneNormalizer;
+import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
+import com.elitale.coldbirds.coldcalling.services.PowerDialerService;
+import com.elitale.coldbirds.coldcalling.services.SettingsService;
+import com.elitale.coldbirds.coldcalling.services.SmsService;
+import com.elitale.coldbirds.coldcalling.storage.DatabaseManager;
+import com.elitale.coldbirds.coldcalling.storage.repository.CallListRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.CallRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.LeadRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.PhoneNumberRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SettingsRepository;
+import com.elitale.coldbirds.coldcalling.storage.repository.SmsRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteCallListRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteCallRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteImportBatchRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteLeadImportRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteLeadRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqlitePhoneNumberRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteSettingsRepository;
+import com.elitale.coldbirds.coldcalling.storage.sqlite.SqliteSmsRepository;
+import com.elitale.coldbirds.coldcalling.telephony.NetworkMonitor;
+import com.elitale.coldbirds.coldcalling.telephony.TelephonyService;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceManager;
+import com.elitale.coldbirds.coldcalling.telephony.audio.AudioDeviceTester;
+import com.elitale.coldbirds.coldcalling.telephony.sip.SipCredentials;
+import com.elitale.coldbirds.coldcalling.telephony.sip.SipTester;
+import com.elitale.coldbirds.coldcalling.ui.MainWindow;
+import com.elitale.coldbirds.coldcalling.ui.OnboardingWindow;
+import com.elitale.coldbirds.coldcalling.ui.support.CountryCatalog;
+import com.elitale.coldbirds.coldcalling.ui.support.ExternalLinks;
+import com.elitale.coldbirds.coldcalling.ui.support.Motion;
+
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.stage.Stage;
 
 /**
  * Application entry point.
@@ -146,6 +172,9 @@ public final class ColdCallingApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        // Bridge external-link opening to the platform browser/mail client (JavaFX-native,
+        // no AWT). Wired once here so leaf views can open links without plumbing HostServices.
+        ExternalLinks.configure(getHostServices()::showDocument);
         if (onboardingService.isOnboardingComplete()) {
             launchMainApp(stage);
         } else {
