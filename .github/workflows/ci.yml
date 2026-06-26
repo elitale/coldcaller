@@ -23,6 +23,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.0
+        with:
+          # Spotless `ratchetFrom 'origin/main'` diffs against main, so the full
+          # history (and the origin/main ref) must be present — not a shallow clone.
+          fetch-depth: 0
 
       # Verify the checked-in Gradle wrapper jar is the genuine, untampered binary.
       - name: Validate Gradle wrapper

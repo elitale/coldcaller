@@ -1,0 +1,52 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+
+# Project formatters and gates. These are `local`/`system` hooks because this is a
+# Gradle + Java repo: they shell out to the project's own black + Gradle tasks.
+# Note: `./gradlew build` already runs `test` + `spotlessCheck`, so the separate
+# `gradle-test` hook (and the check side of spotless) is redundant with it — it is
+# kept here only because it was explicitly requested. Drop it, or move the heavy
+# `gradle-build`/`gradle-test` hooks to `stages: [pre-push]`, for faster commits.
+-   repo: local
+    hooks:
+    # Format the Python packaging helper with black (the same binary Spotless drives).
+    -   id: black
+        name: black (python)
+        entry: black
+        language: system
+        types: [python]
+
+    # Auto-format Java + misc files via Spotless (ratchets against origin/main).
+    -   id: spotless
+        name: spotless apply
+        entry: ./gradlew spotlessApply
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+
+    # Run the full JUnit suite.
+    -   id: gradle-test
+        name: gradle test
+        entry: ./gradlew test
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+
+    # Full multi-module build (compiles every module; also runs test + spotlessCheck).
+    -   id: gradle-build
+        name: gradle build
+        entry: ./gradlew build
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true

@@ -16,6 +16,7 @@ Outputs (all committed so CI runners need no image tooling):
 Run from anywhere:  python3 src/app/packaging/generate-icons.py
 Requires Pillow. Uses macOS `iconutil` for .icns, falling back to Pillow.
 """
+
 from __future__ import annotations
 
 import math
@@ -34,18 +35,18 @@ UI_ICONS = ROOT / "src" / "ui" / "src" / "main" / "resources" / "icons"
 BRANDING = ROOT / "branding"
 
 # ── Brand constants ──────────────────────────────────────────────────────────
-BASE = 1024          # master canvas, px
-SS = 4               # supersample factor for crisp anti-aliasing
-TILE_RADIUS = 228    # squircle corner radius at BASE
-GRAD_TOP = (10, 132, 255)    # #0A84FF  (system blue, light)
-GRAD_BOTTOM = (0, 86, 214)   # #0056D6  (system blue, deep)
+BASE = 1024  # master canvas, px
+SS = 4  # supersample factor for crisp anti-aliasing
+TILE_RADIUS = 228  # squircle corner radius at BASE
+GRAD_TOP = (10, 132, 255)  # #0A84FF  (system blue, light)
+GRAD_BOTTOM = (0, 86, 214)  # #0056D6  (system blue, deep)
 
 # Telephone receiver, expressed in the BASE frame (y grows downward).
-ARC_CX, ARC_CY = 512, 524    # centre of the receiver arc
-ARC_RO, ARC_RI = 322, 188    # outer / inner radius of the curved body
-ARC_A1, ARC_A2 = 32, 214     # sweep, degrees clockwise from 3 o'clock
-BULB_R = 116                 # ear / mouth piece radius
-RECEIVER_ROT = -6            # whole-handset tilt, degrees (negative = CCW)
+ARC_CX, ARC_CY = 512, 524  # centre of the receiver arc
+ARC_RO, ARC_RI = 322, 188  # outer / inner radius of the curved body
+ARC_A1, ARC_A2 = 32, 214  # sweep, degrees clockwise from 3 o'clock
+BULB_R = 116  # ear / mouth piece radius
+RECEIVER_ROT = -6  # whole-handset tilt, degrees (negative = CCW)
 
 # Three outbound signal arcs emanating from the upper-right.
 WAVE_CX, WAVE_CY = 470, 560
@@ -106,7 +107,9 @@ def _receiver_layer(size: int) -> Image.Image:
         bx, by = _pt(ARC_CX, ARC_CY, rm, ang)
         d.ellipse(box(bx, by, BULB_R), fill=white)
 
-    layer = layer.rotate(RECEIVER_ROT, resample=Image.BICUBIC, center=(ARC_CX * k, ARC_CY * k))
+    layer = layer.rotate(
+        RECEIVER_ROT, resample=Image.BICUBIC, center=(ARC_CX * k, ARC_CY * k)
+    )
     return layer.resize((size, size), Image.LANCZOS)
 
 
@@ -156,8 +159,8 @@ def _svg() -> str:
     )
     waves = "\n".join(
         f'    <path d="M{_pt(WAVE_CX, WAVE_CY, r, WAVE_A1)[0]:.1f},'
-        f'{_pt(WAVE_CX, WAVE_CY, r, WAVE_A1)[1]:.1f} '
-        f'A{r},{r} 0 0 1 {_pt(WAVE_CX, WAVE_CY, r, WAVE_A2)[0]:.1f},'
+        f"{_pt(WAVE_CX, WAVE_CY, r, WAVE_A1)[1]:.1f} "
+        f"A{r},{r} 0 0 1 {_pt(WAVE_CX, WAVE_CY, r, WAVE_A2)[0]:.1f},"
         f'{_pt(WAVE_CX, WAVE_CY, r, WAVE_A2)[1]:.1f}" '
         f'fill="none" stroke="#fff" stroke-width="{WAVE_WIDTH}" '
         f'stroke-linecap="round" opacity="{a / 255:.2f}"/>'
@@ -192,7 +195,9 @@ def _write_icns(master: Image.Image, dest: Path) -> None:
             iconset = Path(tmp) / "coldcalling.iconset"
             iconset.mkdir()
             for px in (16, 32, 128, 256, 512):
-                master.resize((px, px), Image.LANCZOS).save(iconset / f"icon_{px}x{px}.png")
+                master.resize((px, px), Image.LANCZOS).save(
+                    iconset / f"icon_{px}x{px}.png"
+                )
                 master.resize((px * 2, px * 2), Image.LANCZOS).save(
                     iconset / f"icon_{px}x{px}@2x.png"
                 )
@@ -213,7 +218,15 @@ def main() -> None:
     master.resize((512, 512), Image.LANCZOS).save(PKG_ICONS / "coldcalling.png")
     master.save(
         PKG_ICONS / "coldcalling.ico",
-        sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+        sizes=[
+            (16, 16),
+            (24, 24),
+            (32, 32),
+            (48, 48),
+            (64, 64),
+            (128, 128),
+            (256, 256),
+        ],
     )
     _write_icns(master, PKG_ICONS / "coldcalling.icns")
 

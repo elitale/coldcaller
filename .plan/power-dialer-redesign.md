@@ -48,7 +48,7 @@ The current Power Dialer screen fails its one job — "pick a list, start dialin
 1. **Power Dialer is a pure *consumer* of lists.** It does **not** create or delete lists. Authoring + deletion live on the **Leads** screen (`CallListService` already supports `create` / `delete` / `addLeads` / `removeLead`).
    - Remove **"+ New"** and **"Delete"** from the Power Dialer.
    - Empty state (no lists, or selected list has 0 leads) → guided message + a **"Build a list on Leads →"** button that navigates to the Leads screen.
-2. **Start is never a raw error.** If the selected list has 0 pending leads, **Start is disabled** with a tooltip ("This list has no leads to dial — add leads on the Leads screen"). 
+2. **Start is never a raw error.** If the selected list has 0 pending leads, **Start is disabled** with a tooltip ("This list has no leads to dial — add leads on the Leads screen").
 3. **Resume by default; never silently re-dial reached leads.** The single primary button always starts at the first `PENDING` entry and skips `DIALED`/`SKIPPED`. **There is no "Start over"** — a fully-dialed list is complete (re-run by rebuilding/re-importing on Leads).
 4. **Remember last-used list + position** across navigations and app restarts (persist last list id; per-lead status already persisted).
 5. **No automatic dialing.** Resume/Start is always operator-initiated. The app never dials on open. (Compliance gate from Jake/Lisa.)
