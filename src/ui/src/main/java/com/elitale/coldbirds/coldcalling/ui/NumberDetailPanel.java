@@ -1,5 +1,25 @@
 package com.elitale.coldbirds.coldcalling.ui;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.elitale.coldbirds.coldcalling.domain.model.Call;
 import com.elitale.coldbirds.coldcalling.domain.model.Lead;
 import com.elitale.coldbirds.coldcalling.domain.model.OwnedNumber;
@@ -14,11 +34,12 @@ import com.elitale.coldbirds.coldcalling.services.CallService;
 import com.elitale.coldbirds.coldcalling.services.LeadService;
 import com.elitale.coldbirds.coldcalling.services.PhoneNumberService;
 import com.elitale.coldbirds.coldcalling.services.SmsService;
-import com.elitale.coldbirds.coldcalling.ui.support.LeadEditForm;
 import com.elitale.coldbirds.coldcalling.ui.support.CallbackWhen;
 import com.elitale.coldbirds.coldcalling.ui.support.FlagImages;
+import com.elitale.coldbirds.coldcalling.ui.support.LeadEditForm;
 import com.elitale.coldbirds.coldcalling.ui.support.RecentCallFormatter;
 import com.elitale.coldbirds.coldcalling.ui.support.RecordingPlayer;
+
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -41,26 +62,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * Non-blocking, in-window side panel showing everything known about one phone
@@ -109,6 +110,7 @@ public final class NumberDetailPanel {
     private Optional<PhoneNumber> currentNumber = Optional.empty();
     private Optional<Call> latestCall = Optional.empty();
     private boolean editingLead = false;
+    private boolean liveCall = false;
 
     public NumberDetailPanel(
             final CallService callService,
@@ -152,8 +154,24 @@ public final class NumberDetailPanel {
         return root;
     }
 
-    /** Load and render the panel for {@code rawNumber}. Call on the FX thread. */
+    /** Load and render the panel for {@code rawNumber} in editable history mode. */
     public void show(final String rawNumber) {
+        this.liveCall = false;
+        load(rawNumber);
+    }
+
+    /**
+     * Load and render the panel in read-only live-call mode: disposition, note, and
+     * edit controls are hidden (the call screen owns those during a call) and the
+     * panel never steals keyboard focus, so call shortcuts keep reaching the scene.
+     */
+    public void showForCall(final String rawNumber) {
+        this.liveCall = true;
+        this.editingLead = false;
+        load(rawNumber);
+    }
+
+    private void load(final String rawNumber) {
         Objects.requireNonNull(rawNumber, "rawNumber");
         // Only drop edit mode when switching to a different number; re-showing the
         // same number (e.g. after pressing Edit) must preserve the editing flag.
@@ -162,7 +180,10 @@ public final class NumberDetailPanel {
         }
         this.currentRaw = rawNumber;
         body.getChildren().setAll(muted("Loading…"));
-        Platform.runLater(root::requestFocus);
+        root.setFocusTraversable(!liveCall);
+        if (!liveCall) {
+            Platform.runLater(root::requestFocus);
+        }
 
         Optional<PhoneNumber> parsed;
         try {
@@ -252,17 +273,27 @@ public final class NumberDetailPanel {
                 .filter(s -> !s.equals(currentRaw))
                 .orElse(currentRaw);
 
-        body.getChildren().setAll(
-                headerBar(primary),
-                subHeader(),
-                actionBar(data.lead()),
-                new Separator());
+        body.getChildren().setAll(headerBar(primary), subHeader());
+
+        if (liveCall) {
+            body.getChildren().addAll(
+                    liveCallHint(),
+                    new Separator(),
+                    statsStrip(data.calls()),
+                    new LeadGlanceCard(data.lead()).getRoot(),
+                    new Separator(),
+                    timeline(data.calls(), data.sms(), data.ownedNumbers()));
+            refreshPlayButtons();
+            return;
+        }
+
+        body.getChildren().addAll(actionBar(data.lead()), new Separator());
 
         if (editingLead) {
             body.getChildren().add(new LeadEditForm(
                     leadService, currentNumber.orElseThrow(), data.lead(),
-                    () -> { editingLead = false; onChanged.run(); show(currentRaw); },
-                    () -> { editingLead = false; show(currentRaw); }).getRoot());
+                    () -> { editingLead = false; onChanged.run(); load(currentRaw); },
+                    () -> { editingLead = false; load(currentRaw); }).getRoot());
             return;
         }
 
@@ -271,10 +302,24 @@ public final class NumberDetailPanel {
                 noteZone(),
                 new Separator(),
                 statsStrip(data.calls()),
-                leadCard(data.lead()),
+                new LeadGlanceCard(data.lead()).getRoot(),
                 new Separator(),
                 timeline(data.calls(), data.sms(), data.ownedNumbers()));
         refreshPlayButtons();
+    }
+
+    /** Read-only banner shown above the lead while a call is live. */
+    private VBox liveCallHint() {
+        final VBox box = new VBox(6, sectionTitle("On this call"));
+        latestCall.ifPresent(call -> call.disposition().ifPresent(d -> {
+            final String when = RecentCallFormatter.timeAgo(call.startedAt(), Instant.now(), localZone);
+            box.getChildren().add(muted("Previous outcome: " + dispositionLabel(d) + "  ·  " + when));
+        }));
+        final Label hint = new Label("Set disposition & notes on the call screen →");
+        hint.getStyleClass().add("detail-livehint");
+        hint.setWrapText(true);
+        box.getChildren().add(hint);
+        return box;
     }
 
     private HBox headerBar(final String primary) {
@@ -450,32 +495,6 @@ public final class NumberDetailPanel {
         return new VBox(6, strip);
     }
 
-    private VBox leadCard(final Optional<Lead> lead) {
-        final VBox box = new VBox(4, sectionTitle("Lead"));
-        if (lead.isEmpty()) {
-            box.getChildren().add(muted("No lead saved for this number."));
-            return box;
-        }
-        final Lead c = lead.get();
-        final Label name = new Label(c.displayName() + (c.dnc() ? "   • DNC" : ""));
-        name.getStyleClass().add("detail-lead-name");
-        box.getChildren().add(name);
-
-        final String org = List.of(c.company().orElse(""), c.title().orElse("")).stream()
-                .filter(s -> !s.isBlank())
-                .reduce((a, b) -> a + " · " + b)
-                .orElse("");
-        if (!org.isBlank()) box.getChildren().add(muted(org));
-        c.email().filter(s -> !s.isBlank()).ifPresent(e -> box.getChildren().add(muted(e)));
-        if (!c.tags().isEmpty()) box.getChildren().add(muted("Tags: " + String.join(", ", c.tags())));
-        c.notes().filter(s -> !s.isBlank()).ifPresent(n -> {
-            final Label notes = new Label(n);
-            notes.setWrapText(true);
-            box.getChildren().add(notes);
-        });
-        return box;
-    }
-
     private VBox timeline(final List<Call> calls, final List<SmsMessage> sms,
                           final Map<PhoneNumberId, String> ownedNumbers) {
         final int total = calls.size() + sms.size();
@@ -577,7 +596,7 @@ public final class NumberDetailPanel {
     private void openLeadEditor() {
         if (currentNumber.isEmpty()) return;
         editingLead = true;
-        show(currentRaw);
+        load(currentRaw);
     }
 
     private void copyNumber() {
@@ -596,6 +615,11 @@ public final class NumberDetailPanel {
     // ── Keyboard ────────────────────────────────────────────────────────────────
 
     private void onKey(final KeyEvent event) {
+        // Live-call mode is read-only: stay out of the way so call-screen shortcuts
+        // (Esc hang up, M mute, V voicemail, K keypad) bubble to the scene handler.
+        if (liveCall) {
+            return;
+        }
         if (event.getCode() == KeyCode.ESCAPE) {
             onClose.run();
             event.consume();
@@ -626,7 +650,7 @@ public final class NumberDetailPanel {
         if (latestCall.isEmpty()) return false;
         latestCall.ifPresent(call -> CompletableFuture
                 .supplyAsync(() -> callService.updateDisposition(call.id(), disposition))
-                .thenAccept(r -> Platform.runLater(() -> { onChanged.run(); show(currentRaw); })));
+                .thenAccept(r -> Platform.runLater(() -> { onChanged.run(); load(currentRaw); })));
         return true;
     }
 

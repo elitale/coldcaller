@@ -106,6 +106,9 @@ public final class MainWindow {
     private static final double MIN_WINDOW_H   = 640;
     private static final double DEFAULT_WIDTH  = 1280;
     private static final double DEFAULT_HEIGHT = 820;
+    // Minimum width while the lead-context panel is docked beside a live call, so the
+    // ~380px panel never squeezes the call controls below their usable width.
+    private static final double LIVE_CALL_MIN_WINDOW_W = 1100;
 
     private final Stage              stage;
     private final LeadService        leadService;
@@ -247,6 +250,7 @@ public final class MainWindow {
             activeCallController.startConnecting(party, callerId);
             rememberReturnTarget();
             root.setCenter(activeCallView);
+            openNumberDetailForCall(number);
         });
     }
 
@@ -425,6 +429,7 @@ public final class MainWindow {
      */
     public void returnFromCall() {
         Platform.runLater(() -> {
+            closeNumberDetail();
             final Parent target = (callReturnView != null) ? callReturnView : dialerView;
             callReturnView = null;
             destinationFor(target).ifPresentOrElse(this::navigate, () -> root.setCenter(target));
@@ -540,13 +545,31 @@ public final class MainWindow {
 
     /** Open the number-detail panel (lead + call history + recordings). */
     private void openNumberDetail(String number) {
+        ensureNumberDetailPanel();
+        numberDetailPanel.show(number);
+        root.setRight(numberDetailPanel.getRoot());
+    }
+
+    /**
+     * Open the number-detail panel in read-only live-call mode beside the calling
+     * screen, and widen the window if needed so the call controls aren't squeezed.
+     */
+    private void openNumberDetailForCall(String number) {
+        ensureNumberDetailPanel();
+        numberDetailPanel.showForCall(number);
+        root.setRight(numberDetailPanel.getRoot());
+        stage.setMinWidth(LIVE_CALL_MIN_WINDOW_W);
+        if (stage.isShowing() && stage.getWidth() < LIVE_CALL_MIN_WINDOW_W) {
+            stage.setWidth(LIVE_CALL_MIN_WINDOW_W);
+        }
+    }
+
+    private void ensureNumberDetailPanel() {
         if (numberDetailPanel == null) {
             numberDetailPanel = new NumberDetailPanel(
                     callService, leadService, smsService, phoneNumberService, CountryCatalog.ALL,
                     onDial, this::openMessageThread, this::closeNumberDetail, this::refreshRecentCalls);
         }
-        numberDetailPanel.show(number);
-        root.setRight(numberDetailPanel.getRoot());
     }
 
     /** Hide and stop the number-detail panel. */
@@ -555,6 +578,9 @@ public final class MainWindow {
             numberDetailPanel.stopPlayback();
         }
         root.setRight(null);
+        if (stage.getMinWidth() != MIN_WINDOW_W) {
+            stage.setMinWidth(MIN_WINDOW_W);
+        }
     }
 
     /** Switch to the Messages screen and open the conversation for {@code number}. */

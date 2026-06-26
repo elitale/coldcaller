@@ -752,6 +752,55 @@
     -fx-background-color: #0A84FF;
 }
 
+/* Lead glance card — Tier 2 context badges */
+.detail-badge {
+    -fx-font-size: 11px;
+    -fx-font-weight: 600;
+    -fx-padding: 2px 9px;
+    -fx-background-radius: 11px;
+}
+
+.detail-badge-status {
+    -fx-background-color: #F0F0F3;
+    -fx-text-fill: #3A3A3C;
+}
+
+.detail-badge-dnc {
+    -fx-background-color: #FF3B30;
+    -fx-text-fill: #FFFFFF;
+}
+
+/* Lead glance card — Tier 3 progressive-disclosure expander + rows */
+.detail-expander {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #0A84FF;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+}
+
+.detail-expander:hover {
+    -fx-underline: true;
+}
+
+.detail-field-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #8A8A8E;
+}
+
+.detail-field-value {
+    -fx-font-size: 13px;
+    -fx-text-fill: #1D1D1F;
+}
+
+/* Read-only hint shown above the lead while a call is live */
+.detail-livehint {
+    -fx-font-size: 12px;
+    -fx-font-style: italic;
+    -fx-text-fill: #0A84FF;
+}
+
 .dialer-country {
     -fx-background-color: #F5F5F7;
     -fx-background-radius: 12px;
