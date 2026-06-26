@@ -146,6 +146,34 @@ class PowerDialerServiceTest {
     }
 
     @Test
+    void notifyCallAnswered_afterAnsweredCallEnds_doesNotExceedDialedCount() {
+        stubTwoLeadList();
+        service.start(LIST_ID);                 // dialedCount = 1
+        service.notifyCallAnswered("c1");       // connectedCount = 1
+        service.notifyCallEnded("c1", "bye");   // answered call ends; awaits manual advance
+        // A stray/duplicate "answered" arrives AFTER the call ended but BEFORE advancing.
+        // The call-end resets the active-call flag, so without a per-dial connect guard this
+        // pushes connectedCount (2) past dialedCount (1) and PowerDialerSession throws on
+        // every UI tick (the reported crash).
+        service.notifyCallAnswered("c1");
+        assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(1);
+        assertThatCode(service::getCurrentSession).doesNotThrowAnyException();
+        assertThat(service.getCurrentSession()).isPresent();
+    }
+
+    @Test
+    void notifyCallAnswered_onNextLeadAfterAdvance_countsAgain() {
+        stubTwoLeadList();
+        service.start(LIST_ID);                 // dial A, dialedCount = 1
+        service.notifyCallAnswered("c1");       // connectedCount = 1
+        service.notifyCallEnded("c1", "bye");
+        service.advance();                      // dial B, dialedCount = 2 — new dial cycle
+        service.notifyCallAnswered("c2");       // legitimately connects on B
+        assertThat(service.getStats()).map(PowerDialerService.SessionStats::connectedCount).hasValue(2);
+        assertThatCode(service::getCurrentSession).doesNotThrowAnyException();
+    }
+
+    @Test
     void notifyCallEnded_afterAnswered_doesNotAutoAdvance() {
         stubTwoLeadList();
         service.start(LIST_ID);

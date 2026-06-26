@@ -61,6 +61,7 @@ public final class PowerDialerService {
         int                    dialedCount;
         int                    connectedCount;
         boolean                currentCallAnswered;
+        boolean                currentCallConnected;
         ScheduledFuture<?>     pendingTimeout;
         PowerDialerState       state = new PowerDialerState.Running();
         final Instant          startedAt = Instant.now();
@@ -291,14 +292,16 @@ public final class PowerDialerService {
 
     public synchronized void notifyCallAnswered(String callId) {
         if (session == null) return;
-        // Only count a connect for the dialer's own in-flight call: ignore events while
-        // paused/stopped, and ignore duplicate "answered" notifications for the same call.
-        // Without this, connectedCount can exceed dialedCount and the PowerDialerSession
-        // record throws on every UI tick.
+        // Count one connect per dialed call, and never more connects than dials. The guard
+        // resets on the next dial (see dialCurrent), so a stray/duplicate "answered" — including
+        // one that lands after the call ended but before manual advance — can't push
+        // connectedCount past dialedCount, which would make PowerDialerSession throw every UI tick.
         if (!(session.state instanceof PowerDialerState.Running)) return;
-        if (session.currentCallAnswered) return;
+        if (session.currentCallConnected) return;
+        if (session.connectedCount >= session.dialedCount) return;
         cancelTimeout();
         session.currentCallAnswered = true;
+        session.currentCallConnected = true;
         session.connectedCount++;
         onStatsCb.accept(session.toStats());
         fireSessionChanged();
@@ -335,6 +338,9 @@ public final class PowerDialerService {
             final Optional<OwnedNumber> local = callerIdSelector.selectFor(lead.get().phone());
             if (local.isEmpty()) { LOG.error("No active calling number — stopping dialer"); stop(); return; }
             onLeadChangedCb.accept(Optional.of(lead.get()));
+            // New dial cycle: reset the per-call flags so the next connect is counted once.
+            session.currentCallAnswered = false;
+            session.currentCallConnected = false;
             session.dialedCount++;
             onStatsCb.accept(session.toStats());
             dialCommand.accept(lead.get().phone(), local.get().number());
