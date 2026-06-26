@@ -42,6 +42,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6.2.0
 
+      # Fail fast on formatting before the slower compile + test. `build` also runs
+      # spotlessCheck, but a dedicated step surfaces format violations clearly.
+      - name: Check formatting (Spotless)
+        run: ./gradlew spotlessCheck --stacktrace
+
       # `build` compiles every module and runs the full JUnit suite.
       - name: Build and test
         run: ./gradlew build --stacktrace
